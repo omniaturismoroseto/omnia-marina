@@ -1,7 +1,25 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // "standalone" produce un server autonomo in .next/standalone: è ciò che finisce nell'immagine Docker.
+  output: "standalone",
+  poweredByHeader: false,
+  // Intestazioni di sicurezza, solo in produzione: l'app non può essere incorniciata in altri siti
+  // e il browser non deve "indovinare" il tipo dei file.
+  async headers() {
+    if (process.env.NODE_ENV !== "production") return [];
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Strict-Transport-Security", value: "max-age=31536000" },
+        ],
+      },
+    ];
+  },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

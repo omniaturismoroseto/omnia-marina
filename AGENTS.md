@@ -21,5 +21,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Importi in centesimi, misure in centimetri, date di calendario come stringhe `AAAA-MM-GG` (`src/lib/dates.ts`).
 - Nelle select Drizzle su una sola tabella le colonne interpolate in `sql` escono senza nome di tabella: nelle
   sottoquery correlate scrivere il riferimento esterno per esteso (es. `"owners"."id"`).
+- Pianta dal vero: le coordinate dei posti (`berths.plan_x/plan_y/plan_angle`) sono in pixel della foto caricata;
+  la geometria sta in `src/lib/plan.ts`, la foto nel database (`marina_plans`) ed è servita da `/pianta/immagine`.
+- Produzione: `output: "standalone"` + `Dockerfile` (Cloud Run). Le migrazioni si applicano all'avvio con
+  `AUTO_MIGRATE=true`; ogni modifica allo schema richiede `pnpm db:generate` e la migrazione va committata.
 - Prima di consegnare: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
 

@@ -15,8 +15,9 @@ lavorare per più porti con ruoli diversi.
 
 ## Moduli
 
-- **Mappa dei posti barca** – pontili e posti in pianta, stato in tempo reale (libero, occupato, barca fuori,
-  in arrivo, in partenza, oltre scadenza, non disponibile), situazione a una data qualsiasi.
+- **Mappa dei posti barca** – stato di ogni posto in tempo reale (libero, occupato, barca fuori, in arrivo,
+  in partenza, oltre scadenza, non disponibile) e a una data qualsiasi. Due viste: lo **schema** pontile per
+  pontile e la **pianta dal vero**, con i posti disegnati nelle misure reali sopra una foto aerea del porto.
 - **Banchina** – pagina per telefono: arrivi attesi, partenze, barche fuori in mare, segnalazioni e movimenti del giorno.
 - **Clienti e barche** – anagrafica completa di proprietario e unità, assicurazione con scadenze.
 - **Privacy** – registro dei consensi con storico (chi, quando, quale versione dell'informativa), informativa
@@ -51,6 +52,21 @@ Accessi del porto demo (password `omnia-marina-demo` per tutti):
 Per partire da zero con un porto vero: apri `/registrazione`, crea il porto, poi configura pontili,
 posti e tariffe. Con `ALLOW_SIGNUP=false` la registrazione di nuovi porti è disattivata.
 
+### Pianta dal vero
+
+Da **Impostazioni → Pianta dal vero** la direzione:
+
+1. carica una foto del porto ripresa dall'alto e non inclinata (immagine salvata da Google Earth, ortofoto,
+   drone o planimetria; JPEG o PNG, ridotta in automatico se molto grande);
+2. imposta la scala cliccando i due estremi di una distanza nota (per esempio un pontile misurato con il righello
+   di Google Earth) e scrivendone i metri;
+3. traccia l'asse di ogni pontile con due clic, dalla radice alla testata: i suoi posti si dispongono da soli,
+   perpendicolari al pontile e nelle dimensioni reali;
+4. ritocca i singoli posti trascinandoli o ruotandoli, e salva.
+
+Da quel momento la Mappa si apre sulla pianta; lo schema resta disponibile. Il porto dimostrativo usa una veduta
+di fantasia (`scripts/demo/pianta-demo.jpg`).
+
 ## Comandi
 
 | Comando | Cosa fa |
@@ -64,6 +80,45 @@ posti e tariffe. Con `ALLOW_SIGNUP=false` la registrazione di nuovi porti è dis
 | `pnpm db:seed` | Ricrea il porto dimostrativo (gli altri porti non vengono toccati) |
 
 I test sul database usano `omnia_marina_test` (variabile `TEST_DATABASE_URL`); se non è raggiungibile vengono saltati.
+
+## Pubblicazione su Google Cloud
+
+L'app ha un server e un database PostgreSQL, quindi non può stare su GitHub Pages né su Firestore: su Google
+gira con **Cloud Run** (il server, dall'immagine Docker di questo repository) e **Cloud SQL** (il database).
+Si fa tutto dalla console di Google Cloud, nello stesso progetto e con la stessa fatturazione di Firebase.
+
+1. **Progetto** – usa un progetto Google esistente o creane uno, con la fatturazione attiva (piano Blaze).
+2. **Database** – Cloud SQL → crea un'istanza **PostgreSQL 16** nella regione più vicina (es. `europe-west8`,
+   Milano), nel taglio più piccolo. Crea il database `omnia_marina` e un utente `omnia_marina` con una password
+   robusta. Attiva i **backup automatici**.
+3. **Server** – Cloud Run → crea un servizio con *deploy continuo da repository*: collega GitHub, scegli
+   `omnia-marina`, ramo `main`, tipo di build **Dockerfile**. Stessa regione del database, accesso pubblico
+   consentito (l'app ha il proprio login), porta `8080`, al massimo 2 istanze.
+4. **Collegamento al database** – nel servizio Cloud Run aggiungi la connessione Cloud SQL all'istanza creata e
+   imposta la variabile `DATABASE_URL` (meglio come segreto di Secret Manager):
+
+   ```
+   postgres://omnia_marina:PASSWORD@localhost/omnia_marina?host=/cloudsql/PROGETTO:REGIONE:ISTANZA
+   ```
+
+   `PROGETTO:REGIONE:ISTANZA` è il «nome connessione» mostrato nella pagina dell'istanza Cloud SQL. Se nei log
+   compare un errore di permessi, assegna all'account di servizio del servizio il ruolo «Client Cloud SQL».
+5. **Primo accesso** – apri l'indirizzo del servizio, vai su `/registrazione` e crea il porto. Poi imposta
+   `ALLOW_SIGNUP=false` perché nessun altro possa registrare porti.
+
+Da lì in poi ogni modifica caricata sul ramo `main` viene pubblicata da sola, e il database si aggiorna
+all'avvio della nuova versione (`AUTO_MIGRATE=true`, già impostato nell'immagine). Per un indirizzo proprio
+(es. `marina.tuodominio.it`) si collega il dominio al servizio Cloud Run.
+
+Costi indicativi, da verificare sul listino Google: l'istanza Cloud SQL più piccola costa una decina di euro al
+mese; Cloud Run si paga a consumo e per un solo porto resta in genere nella fascia gratuita.
+
+L'immagine funziona anche fuori da Google, su qualsiasi server con Docker:
+
+```bash
+docker build -t omnia-marina .
+docker run -p 8080:8080 -e DATABASE_URL=postgres://utente:password@host:5432/omnia_marina omnia-marina
+```
 
 ## Com'è fatto
 
@@ -100,6 +155,7 @@ tests/               test automatici
 - Nessun invio di email o SMS (scadenze, solleciti) e nessun recupero password via email: la password la reimposta la direzione.
 - Nessuna fatturazione elettronica né pagamenti online.
 - Il diportista non ha ancora un proprio accesso (prenotazioni e area riservata sono un passo successivo).
-- La mappa è schematica (pontile per pontile), non una planimetria in scala.
+- La foto della pianta dal vero è una sola per porto e i posti si dispongono a mano: non c'è riconoscimento
+  automatico dei posti dall'immagine.
 - L'app è installabile ma non funziona senza connessione.
 - Il freno ai tentativi di accesso è in memoria: con più istanze del server va spostato su database o Redis.
