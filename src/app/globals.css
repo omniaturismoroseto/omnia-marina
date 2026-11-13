@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+
+  /* Carta nautica: fondo color carta, inchiostro blu notte, acqua azzurra, boa arancione. */
+  --color-paper: #f5f3ec;
+  --color-card: #fffefb;
+  --color-ink: #12283a;
+  --color-muted: #566876;
+  --color-faint: #8794a0;
+  --color-line: #dcd8cb;
+  --color-line-soft: #ebe8de;
+
+  --color-deep: #0c2130;
+  --color-deep-2: #173445;
+  --color-sea: #0f6480;
+  --color-sea-dark: #0b4d63;
+  --color-sea-soft: #dcebf0;
+  --color-buoy: #d4502a;
+  --color-buoy-dark: #a53a1a;
+  --color-buoy-soft: #fbe9e2;
+
+  --color-ok: #1b6b4f;
+  --color-ok-soft: #dff1e9;
+  --color-warn: #875400;
+  --color-warn-soft: #fbefd2;
+  --color-bad: #a93229;
+  --color-bad-soft: #f9e2df;
+
+  /* Serie dei grafici (entrate / uscite): coppia verificata per daltonismo e contrasto. */
+  --color-entrate: #0e7aa8;
+  --color-uscite: #d4502a;
+
+  --shadow-card: 0 1px 0 rgb(18 40 58 / 0.04), 0 1px 3px rgb(18 40 58 / 0.06);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "tnum" 0;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-sea);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--color-sea-soft);
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-md border border-transparent px-3.5 py-2 text-sm font-medium whitespace-nowrap transition-colors select-none disabled:cursor-not-allowed disabled:opacity-55;
+  }
+  .btn-primary {
+    @apply bg-sea text-white hover:bg-sea-dark;
+  }
+  .btn-secondary {
+    @apply border-line bg-card text-ink hover:border-faint hover:bg-white;
+  }
+  .btn-ghost {
+    @apply text-sea-dark hover:bg-sea-soft/60;
+  }
+  .btn-danger {
+    @apply border-bad/30 bg-card text-bad hover:bg-bad-soft;
+  }
+  .btn-accent {
+    @apply bg-buoy text-white hover:bg-buoy-dark;
+  }
+  .btn-sm {
+    @apply min-h-8 px-2.5 py-1 text-[13px];
+  }
+  /* Pulsanti grandi per chi lavora in banchina con il telefono in mano. */
+  .btn-lg {
+    @apply min-h-12 px-4 text-base;
+  }
+
+  .label {
+    @apply mb-1 block text-[13px] font-medium text-ink;
+  }
+  .input {
+    @apply block min-h-10 w-full rounded-md border border-line bg-white px-3 py-2 text-[15px] text-ink placeholder:text-faint focus:border-sea focus:ring-2 focus:ring-sea/20 focus:outline-none;
+  }
+  .input[aria-invalid="true"] {
+    @apply border-bad focus:ring-bad/20;
+  }
+  select.input {
+    @apply pr-8;
+  }
+  textarea.input {
+    @apply min-h-24;
+  }
+  .hint {
+    @apply mt-1 text-xs text-muted;
+  }
+  .field-error {
+    @apply mt-1 text-xs font-medium text-bad;
+  }
+
+  .card {
+    @apply rounded-lg border border-line bg-card shadow-card;
+  }
+
+  .tbl {
+    @apply w-full border-collapse text-sm;
+  }
+  .tbl thead th {
+    @apply border-b border-line px-3 py-2 text-left text-xs font-semibold tracking-wide whitespace-nowrap text-muted uppercase;
+  }
+  .tbl td {
+    @apply border-b border-line-soft px-3 py-2.5 align-middle;
+  }
+  .tbl tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .tbl tbody tr:hover td {
+    @apply bg-paper/60;
+  }
+  .tbl thead th.num,
+  .tbl .num {
+    @apply text-right whitespace-nowrap tabular-nums;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap;
+  }
+
+  .link {
+    @apply font-medium text-sea-dark underline decoration-sea/30 underline-offset-2 hover:decoration-sea;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+}
+
+/* Tratteggio per i posti assegnati con barca fuori in mare. */
+.hatch {
+  background-image: repeating-linear-gradient(135deg, transparent 0 5px, rgb(15 100 128 / 0.22) 5px 7px);
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Specchio d'acqua della mappa, con il reticolo di una carta nautica. */
+.chart-water {
+  background-color: var(--color-sea-soft);
+  background-image:
+    linear-gradient(rgb(15 100 128 / 0.07) 1px, transparent 1px), linear-gradient(90deg, rgb(15 100 128 / 0.07) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+.pier-deck {
+  background-color: #d5c9a8;
+  background-image: repeating-linear-gradient(90deg, transparent 0 13px, rgb(18 40 58 / 0.1) 13px 14px);
+  border: 1px solid #b7a981;
+}

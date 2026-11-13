@@ -1,0 +1,49 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { connection } from "next/server";
+import { Field, Form, FormMessage, Submit } from "@/components/form";
+import { currentUser } from "@/lib/context";
+import { login } from "@/server/auth-actions";
+
+export const metadata: Metadata = { title: "Accedi" };
+
+async function RedirectIfSignedIn() {
+  if (await currentUser()) redirect("/");
+  return null;
+}
+
+async function SignupLink() {
+  await connection();
+  if (process.env.ALLOW_SIGNUP === "false") return null;
+  return (
+    <p className="mt-6 text-sm text-muted">
+      Il tuo porto non è ancora su Omnia Marina?{" "}
+      <Link href="/registrazione" className="link">
+        Registralo
+      </Link>
+    </p>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <>
+      <Suspense fallback={null}>
+        <RedirectIfSignedIn />
+      </Suspense>
+      <h1 className="font-display text-3xl font-semibold text-ink">Accedi</h1>
+      <p className="mt-1 text-[15px] text-muted">Entra con le credenziali del tuo porto.</p>
+      <Form action={login} className="mt-6 space-y-4">
+        <Field name="email" label="Email" type="email" autoComplete="username" required />
+        <Field name="password" label="Password" type="password" autoComplete="current-password" required />
+        <FormMessage />
+        <Submit className="w-full">Accedi</Submit>
+      </Form>
+      <Suspense fallback={null}>
+        <SignupLink />
+      </Suspense>
+    </>
+  );
+}

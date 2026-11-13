@@ -1,0 +1,25 @@
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
+
+## Convenzioni del progetto
+
+- Lingua: interfaccia, messaggi e commenti in italiano; identificatori del codice in inglese.
+- Ogni pagina è `export default page(async function …)` (vedi `src/components/page.tsx`): il contenuto legge
+  sessione e dati dietro `<Suspense>`, come richiesto da Cache Components.
+- Ogni pagina e ogni azione server inizia con `requireMarina(ruoli)` e filtra **sempre** per `ctx.marinaId`.
+  Gli identificativi che arrivano dal browser vanno verificati contro il porto della sessione.
+- Le regole del porto stanno in `src/server/contracts.ts` e `src/server/accounting.ts` (funzioni che ricevono la
+  transazione); le azioni in `src/server/*-actions.ts` fanno solo permessi, validazione e `revalidatePath`.
+- Le azioni dei moduli hanno firma `(prev, formData) => Promise<FormState>` e validano con `parseForm` (`src/lib/forms.ts`).
+- Importi in centesimi, misure in centimetri, date di calendario come stringhe `AAAA-MM-GG` (`src/lib/dates.ts`).
+- Nelle select Drizzle su una sola tabella le colonne interpolate in `sql` escono senza nome di tabella: nelle
+  sottoquery correlate scrivere il riferimento esterno per esteso (es. `"owners"."id"`).
+- Prima di consegnare: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
+
