@@ -4,15 +4,17 @@ import { and, asc, eq, gt, inArray } from "drizzle-orm";
 import { ArrowDownToLine, ArrowUpFromLine, Clock, Droplets, Phone, Waves, Wrench, Zap } from "lucide-react";
 import { MovementButtons } from "@/components/movement-buttons";
 import { page } from "@/components/page";
-import { Badge, ButtonLink, Details, EmptyState, PageHeader } from "@/components/ui";
+import { Badge, ButtonLink, Details, EmptyState, FilterTabs, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { boats, contracts } from "@/db/schema";
+import { boats, contracts, marinas } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, formatDateLong, isValidISODate, todayRome } from "@/lib/dates";
 import { formatDimensions, formatMeters } from "@/lib/format";
 import { BERTH_STATUS_LABEL, CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { one, qs, uuidOrNull, type SearchParams } from "@/lib/params";
 import { countStates, getBoard, STATE_LABEL, type BerthState, type BoardBerth, type BoardPier } from "@/server/board";
+import { PlanView } from "./plan-view";
+import { PlanZoom } from "./plan-zoom";
 
 export const metadata: Metadata = { title: "Mappa dei posti barca" };
 
@@ -47,13 +49,13 @@ function StateGlyph({ state }: { state: BerthState }) {
   return null;
 }
 
-function BerthCell({ berth, date, selected }: { berth: BoardBerth; date: string; selected: boolean }) {
+function BerthCell({ berth, href, selected }: { berth: BoardBerth; href: string; selected: boolean }) {
   // L'altezza segue la lunghezza del posto: i posti grandi "sporgono" di più dal pontile.
   const height = 40 + Math.round(berth.lengthCm / 100) * 3;
   const label = `Posto ${berth.code}: ${STATE_LABEL[berth.state]}${berth.occupant ? `, ${berth.occupant.boatName}` : ""}`;
   return (
     <Link
-      href={`/mappa${qs({ data: date, posto: berth.id })}#dettaglio`}
+      href={href}
       aria-label={label}
       aria-current={selected ? "true" : undefined}
       title={label}
@@ -71,14 +73,14 @@ function BerthCell({ berth, date, selected }: { berth: BoardBerth; date: string;
   );
 }
 
-function Pier({ pier, date, selectedId }: { pier: BoardPier; date: string; selectedId: string | null }) {
+function Pier({ pier, hrefFor, selectedId }: { pier: BoardPier; hrefFor: (berthId: string) => string; selectedId: string | null }) {
   const columns = Math.max(1, ...pier.berths.map((b) => b.position + 1));
   const free = pier.berths.filter((b) => b.state === "libero").length;
   return (
     <div className="overflow-x-auto pb-1">
       <div className="inline-grid gap-x-1 gap-y-1" style={{ gridTemplateColumns: `repeat(${columns}, 4rem)` }}>
         {pier.berths.map((b) => (
-          <BerthCell key={b.id} berth={b} date={date} selected={b.id === selectedId} />
+          <BerthCell key={b.id} berth={b} href={hrefFor(b.id)} selected={b.id === selectedId} />
         ))}
         <div className="pier-deck flex h-6 items-center justify-between rounded-sm px-2 text-[11px] font-semibold tracking-wide whitespace-nowrap text-ink/75 uppercase" style={{ gridRow: 2, gridColumn: `1 / span ${columns}` }}>
           <span>{pier.name}</span>
@@ -230,10 +232,24 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
   const date = isValidISODate(one(sp.data)) ? one(sp.data) : today;
   const selectedId = uuidOrNull(sp.posto);
 
-  const board = await getBoard(ctx.marinaId, date, today);
+  const [board, [plan]] = await Promise.all([
+    getBoard(ctx.marinaId, date, today),
+    db
+      .select({ width: marinas.planWidth, height: marinas.planHeight, pxPerMeter: marinas.planPxPerMeter, version: marinas.planVersion })
+      .from(marinas)
+      .where(eq(marinas.id, ctx.marinaId)),
+  ]);
   const counts = countStates(board);
-  const selected = board.flatMap((p) => p.berths).find((b) => b.id === selectedId) ?? null;
+  const allBerths = board.flatMap((p) => p.berths);
+  const selected = allBerths.find((b) => b.id === selectedId) ?? null;
   const office = OFFICE.includes(ctx.role);
+
+  // La pianta dal vero è disponibile quando ci sono foto, scala e almeno un posto disposto.
+  const offPlan = allBerths.filter((b) => b.planX === null);
+  const hasPlan = plan.width !== null && plan.height !== null && plan.pxPerMeter !== null && offPlan.length < allBerths.length;
+  const view = hasPlan && one(sp.vista) !== "schema" ? "pianta" : "schema";
+  const vista = hasPlan && view === "schema" ? "schema" : null;
+  const hrefFor = (berthId: string) => `/mappa${qs({ data: date === today ? null : date, vista, posto: berthId })}#dettaglio`;
 
   return (
     <>
@@ -242,6 +258,7 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
         description={date === today ? `Situazione di oggi, ${formatDateLong(today)}.` : `Posti assegnati il ${formatDateLong(date)}.`}
         actions={
           <form action="/mappa" className="flex items-center gap-2">
+            {vista && <input type="hidden" name="vista" value={vista} />}
             <label htmlFor="data" className="text-sm text-muted">
               Data
             </label>
@@ -250,7 +267,7 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
               Mostra
             </button>
             {date !== today && (
-              <Link href="/mappa" className="btn btn-ghost">
+              <Link href={`/mappa${qs({ vista })}`} className="btn btn-ghost">
                 Oggi
               </Link>
             )}
@@ -268,6 +285,18 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
         </div>
       ) : (
         <>
+          {hasPlan && (
+            <div className="mb-4">
+              <FilterTabs
+                current={view}
+                items={[
+                  { value: "pianta", label: "Pianta dal vero", href: `/mappa${qs({ data: date === today ? null : date, posto: selectedId })}` },
+                  { value: "schema", label: "Schema", href: `/mappa${qs({ data: date === today ? null : date, vista: "schema", posto: selectedId })}` },
+                ]}
+              />
+            </div>
+          )}
+
           <ul className="mb-4 flex flex-wrap gap-x-4 gap-y-2 text-sm" aria-label="Legenda">
             {STATE_ORDER.filter((s) => counts[s] > 0 || s === "libero" || s === "occupato").map((s) => (
               <li key={s} className="inline-flex items-center gap-1.5">
@@ -279,11 +308,43 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
           </ul>
 
           <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
-            <div className="chart-water space-y-6 rounded-lg border border-sea/20 p-4">
-              {board.map((pier) =>
-                pier.berths.length > 0 ? <Pier key={pier.id} pier={pier} date={date} selectedId={selectedId} /> : null,
-              )}
-            </div>
+            {view === "pianta" ? (
+              <div className="min-w-0">
+                <PlanZoom>
+                  <PlanView
+                    berths={allBerths}
+                    width={plan.width!}
+                    height={plan.height!}
+                    pxPerMeter={plan.pxPerMeter!}
+                    imageUrl={`/pianta/immagine?v=${plan.version}`}
+                    selectedId={selectedId}
+                    hrefFor={hrefFor}
+                  />
+                </PlanZoom>
+                {offPlan.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-sm text-muted">Posti non ancora disposti sulla foto:</p>
+                    <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                      {offPlan.map((b) => (
+                        <li key={b.id}>
+                          <Link
+                            href={hrefFor(b.id)}
+                            title={`Posto ${b.code}: ${STATE_LABEL[b.state]}`}
+                            className={`inline-flex min-w-11 justify-center rounded border px-1.5 py-0.5 text-[13px] font-semibold ${CELL[b.state]} ${b.id === selectedId ? "ring-2 ring-ink ring-offset-1" : ""}`}
+                          >
+                            {b.code}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="chart-water space-y-6 rounded-lg border border-sea/20 p-4">
+                {board.map((pier) => (pier.berths.length > 0 ? <Pier key={pier.id} pier={pier} hrefFor={hrefFor} selectedId={selectedId} /> : null))}
+              </div>
+            )}
 
             <div id="dettaglio" className="scroll-mt-20 lg:sticky lg:top-6">
               {selected ? (

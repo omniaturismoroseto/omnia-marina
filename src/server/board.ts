@@ -45,6 +45,10 @@ export interface BoardBerth {
   status: BerthStatus;
   notes: string | null;
   categoryName: string | null;
+  // Posizione sulla foto aerea (null se il posto non è ancora stato disposto sulla pianta).
+  planX: number | null;
+  planY: number | null;
+  planAngle: number | null;
   state: BerthState;
   occupant: Occupant | null;
   // Barca in arrivo oggi su un posto che deve ancora liberarsi.
@@ -145,6 +149,9 @@ export async function getBoard(marinaId: string, date: string, today: string): P
       status: berth.status,
       notes: berth.notes,
       categoryName,
+      planX: berth.planX,
+      planY: berth.planY,
+      planAngle: berth.planAngle,
       state,
       occupant: current ?? null,
       incoming,

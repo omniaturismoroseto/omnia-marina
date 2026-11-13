@@ -1,5 +1,6 @@
 // Popola il database con un porto dimostrativo. Uso:  pnpm db:seed
 // Il porto demo viene cancellato e ricreato a ogni esecuzione; gli altri porti non vengono toccati.
+import { readFileSync } from "node:fs";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -8,6 +9,7 @@ import {
   boats,
   contracts,
   ledgerEntries,
+  marinaPlans,
   marinas,
   memberships,
   movements,
@@ -22,6 +24,7 @@ import {
 } from "@/db/schema";
 import { hashPassword } from "@/lib/auth/password";
 import { addDays, addMonths, todayRome, yearOf } from "@/lib/dates";
+import { imageInfo, layoutPier, type PlanBerth, type Point } from "@/lib/plan";
 import { quoteStay, type RateRow, type SeasonPeriod } from "@/lib/pricing";
 import { createCharge, registerPayment } from "@/server/accounting";
 import { createContract, recordMovement } from "@/server/contracts";
@@ -191,8 +194,10 @@ async function main() {
       ["T", "Banchina transiti", 8, 4, ["sx"]],
     ];
     const berthByCode = new Map<string, { id: string; categoryId: string | null; lengthCm: number; beamCm: number }>();
+    const berthsByPier = new Map<string, PlanBerth[]>();
     for (const [i, [code, name, perSide, catIndex, sides]] of PIERS.entries()) {
       const [pier] = await tx.insert(piers).values({ marinaId, code, name, sortOrder: i }).returning({ id: piers.id });
+      berthsByPier.set(code, []);
       let n = 1;
       for (let pos = 0; pos < perSide; pos++) {
         for (const side of sides) {
@@ -214,7 +219,30 @@ async function main() {
             })
             .returning({ id: berths.id, categoryId: berths.categoryId, lengthCm: berths.lengthCm, beamCm: berths.beamCm });
           berthByCode.set(berthCode, b);
+          berthsByPier.get(code)!.push({ id: b.id, side, position: pos, lengthCm: b.lengthCm, beamCm: b.beamCm });
         }
+      }
+    }
+
+    // ── Pianta dal vero ──
+    // Una veduta dall'alto di fantasia (scripts/demo/pianta-demo.jpg) con i posti già disposti:
+    // nel porto vero la si sostituisce con la propria foto aerea da Impostazioni → Pianta dal vero.
+    const photo = readFileSync(new URL("./demo/pianta-demo.jpg", import.meta.url));
+    const photoInfo = imageInfo(photo);
+    if (!photoInfo) throw new Error("Immagine demo non leggibile");
+    const PX_PER_METER = 12;
+    // Asse di ogni pontile sulla foto, dalla radice alla testata.
+    const AXES: Record<string, [Point, Point]> = {
+      A: [{ x: 220, y: 250 }, { x: 640, y: 250 }],
+      B: [{ x: 220, y: 610 }, { x: 600, y: 610 }],
+      C: [{ x: 220, y: 1040 }, { x: 610, y: 1040 }],
+      T: [{ x: 1512, y: 1000 }, { x: 1512, y: 250 }],
+    };
+    await tx.insert(marinaPlans).values({ marinaId, mime: photoInfo.mime, data: photo });
+    await tx.update(marinas).set({ planWidth: photoInfo.width, planHeight: photoInfo.height, planPxPerMeter: PX_PER_METER, planVersion: 1 }).where(eq(marinas.id, marinaId));
+    for (const [code, [from, to]] of Object.entries(AXES)) {
+      for (const p of layoutPier(berthsByPier.get(code)!, from, to, PX_PER_METER)) {
+        await tx.update(berths).set({ planX: p.x, planY: p.y, planAngle: p.angle }).where(eq(berths.id, p.id));
       }
     }
     await tx.update(berths).set({ status: "manutenzione", notes: "Sostituzione catenaria e trappe." }).where(eq(berths.id, berthByCode.get("C11")!.id));
