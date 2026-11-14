@@ -84,34 +84,67 @@ I test sul database usano `omnia_marina_test` (variabile `TEST_DATABASE_URL`); s
 ## Pubblicazione su Google Cloud
 
 L'app ha un server e un database PostgreSQL, quindi non può stare su GitHub Pages né su Firestore: su Google
-gira con **Cloud Run** (il server, dall'immagine Docker di questo repository) e **Cloud SQL** (il database).
-Si fa tutto dalla console di Google Cloud, nello stesso progetto e con la stessa fatturazione di Firebase.
+gira con **Cloud Run** (il server, dall'immagine Docker di questo repository) e **Cloud SQL** (il database),
+nello stesso account e con la stessa fatturazione di Firebase.
 
-1. **Progetto** – usa un progetto Google esistente o creane uno, con la fatturazione attiva (piano Blaze).
-2. **Database** – Cloud SQL → crea un'istanza **PostgreSQL 16** nella regione più vicina (es. `europe-west8`,
-   Milano), nel taglio più piccolo. Crea il database `omnia_marina` e un utente `omnia_marina` con una password
-   robusta. Attiva i **backup automatici**.
-3. **Server** – Cloud Run → crea un servizio con *deploy continuo da repository*: collega GitHub, scegli
+### Con lo script (consigliato)
+
+Serve un progetto Google con la fatturazione attiva (piano Blaze) di cui si è proprietari.
+
+1. Apri **Google Cloud Shell**: <https://shell.cloud.google.com>. È un terminale nel browser, già collegato
+   al tuo account Google.
+2. Carica lo zip del progetto: menu **⋮** in alto a destra del terminale → **Carica**.
+3. Incolla questo comando e premi Invio:
+
+   ```bash
+   unzip -o omnia-marina.zip && cd omnia-marina && bash scripts/pubblica-google.sh
+   ```
+
+4. Scegli il progetto, conferma con `si` e attendi una ventina di minuti. Lo script crea il database (con
+   backup giornalieri), genera una password che resta solo in Secret Manager, compila l'app e la pubblica;
+   alla fine stampa l'indirizzo.
+5. Apri l'indirizzo, vai su `/registrazione` e crea il porto. Subito dopo chiudi la registrazione:
+
+   ```bash
+   bash scripts/pubblica-google.sh chiudi-registrazione
+   ```
+
+Per **aggiornare** l'app a una nuova versione: carica il nuovo zip e rilancia lo stesso comando del punto 3.
+Il database non viene toccato, se non per applicare le eventuali migrazioni all'avvio (`AUTO_MIGRATE=true`).
+
+| Comando | Cosa fa |
+|---|---|
+| `bash scripts/pubblica-google.sh` | Pubblica, oppure aggiorna alla versione della cartella |
+| `bash scripts/pubblica-google.sh stato` | Indirizzo dell'app, stato del database e della registrazione |
+| `bash scripts/pubblica-google.sh registro` | Ultime righe del registro dell'app, utili se qualcosa non va |
+| `bash scripts/pubblica-google.sh elimina` | Cancella app, database e dati, e ferma ogni costo |
+
+La regione predefinita è `europe-west1` (Belgio); per un'altra: `REGIONE=europe-west8 bash scripts/pubblica-google.sh`.
+
+Costi indicativi, da verificare sul listino Google: l'istanza Cloud SQL più piccola (`db-f1-micro`) costa una
+decina di euro al mese finché esiste; Cloud Run si paga a consumo e per un solo porto resta in genere nella
+fascia gratuita.
+
+### A mano dalla console
+
+Gli stessi passi si possono fare dalla console di Google Cloud:
+
+1. **Database** – Cloud SQL → istanza **PostgreSQL 16**, edizione Enterprise, taglio più piccolo, backup
+   automatici attivi. Crea il database `omnia_marina` e un utente `omnia_marina` con una password robusta.
+2. **Server** – Cloud Run → nuovo servizio con *deploy continuo da repository*: collega GitHub, scegli
    `omnia-marina`, ramo `main`, tipo di build **Dockerfile**. Stessa regione del database, accesso pubblico
    consentito (l'app ha il proprio login), porta `8080`, al massimo 2 istanze.
-4. **Collegamento al database** – nel servizio Cloud Run aggiungi la connessione Cloud SQL all'istanza creata e
-   imposta la variabile `DATABASE_URL` (meglio come segreto di Secret Manager):
+3. **Collegamento** – nel servizio aggiungi la connessione Cloud SQL all'istanza e la variabile `DATABASE_URL`
+   (meglio come segreto di Secret Manager), dove `PROGETTO:REGIONE:ISTANZA` è il «nome connessione» dell'istanza:
 
    ```
    postgres://omnia_marina:PASSWORD@localhost/omnia_marina?host=/cloudsql/PROGETTO:REGIONE:ISTANZA
    ```
 
-   `PROGETTO:REGIONE:ISTANZA` è il «nome connessione» mostrato nella pagina dell'istanza Cloud SQL. Se nei log
-   compare un errore di permessi, assegna all'account di servizio del servizio il ruolo «Client Cloud SQL».
-5. **Primo accesso** – apri l'indirizzo del servizio, vai su `/registrazione` e crea il porto. Poi imposta
-   `ALLOW_SIGNUP=false` perché nessun altro possa registrare porti.
+   L'account di servizio dell'app deve avere il ruolo «Client Cloud SQL» e l'accesso al segreto.
+4. **Primo accesso** – `ALLOW_SIGNUP=true` per registrare il porto da `/registrazione`, poi `ALLOW_SIGNUP=false`.
 
-Da lì in poi ogni modifica caricata sul ramo `main` viene pubblicata da sola, e il database si aggiorna
-all'avvio della nuova versione (`AUTO_MIGRATE=true`, già impostato nell'immagine). Per un indirizzo proprio
-(es. `marina.tuodominio.it`) si collega il dominio al servizio Cloud Run.
-
-Costi indicativi, da verificare sul listino Google: l'istanza Cloud SQL più piccola costa una decina di euro al
-mese; Cloud Run si paga a consumo e per un solo porto resta in genere nella fascia gratuita.
+Con il deploy continuo ogni modifica caricata sul ramo `main` viene pubblicata da sola.
 
 L'immagine funziona anche fuori da Google, su qualsiasi server con Docker:
 
@@ -134,7 +167,7 @@ src/
   db/schema.ts       tutte le tabelle
   lib/               funzioni pure: date, importi, tariffe, validazione
   server/            regole del porto (contratti, incassi) e azioni server
-scripts/             migrazioni e dati dimostrativi
+scripts/             migrazioni, dati dimostrativi e pubblicazione su Google
 tests/               test automatici
 ```
 

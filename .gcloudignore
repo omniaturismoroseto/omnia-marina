@@ -1,0 +1,10 @@
+# File che non servono a Google Cloud Build per compilare l'immagine.
+.git
+.gitignore
+node_modules
+.next
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+tests
