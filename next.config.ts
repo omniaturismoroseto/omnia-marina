@@ -8,12 +8,14 @@ const nextConfig: NextConfig = {
   // e il browser non deve "indovinare" il tipo dei file.
   async headers() {
     if (process.env.NODE_ENV !== "production") return [];
+    // Con EMBEDDED_PREVIEW=true (solo anteprime, vedi .env.example) l'app può essere incorniciata.
+    const embedded = process.env.EMBEDDED_PREVIEW === "true";
     return [
       {
         source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          ...(embedded ? [] : [{ key: "X-Frame-Options", value: "SAMEORIGIN" }]),
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Strict-Transport-Security", value: "max-age=31536000" },
         ],

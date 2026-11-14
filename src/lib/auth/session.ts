@@ -21,10 +21,14 @@ export async function createSession(userId: string, marinaId: string | null): Pr
   // Pulizia opportunistica delle sessioni scadute dello stesso utente.
   await db.delete(sessions).where(and(eq(sessions.userId, userId), lt(sessions.expiresAt, new Date())));
 
+  // EMBEDDED_PREVIEW=true serve solo per le anteprime mostrate dentro un riquadro di un altro sito
+  // (iframe): lì il browser accetta il cookie soltanto se è SameSite=None. Mai in produzione.
+  const embedded = process.env.EMBEDDED_PREVIEW === "true";
   (await cookies()).set(COOKIE, token, {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: embedded ? "none" : "lax",
+    secure: embedded || process.env.NODE_ENV === "production",
+    partitioned: embedded,
     path: "/",
     maxAge: MAX_AGE_SECONDS,
   });
