@@ -116,14 +116,25 @@ export function DeletePierButton({ pierId, berthCount }: { pierId: string; berth
   );
 }
 
-export function GenerateBerthsForm({ pierId, prefix, categories }: { pierId: string; prefix: string; categories: { id: string; label: string }[] }) {
+export function GenerateBerthsForm({
+  pierId,
+  prefix,
+  nextNumber,
+  categories,
+}: {
+  pierId: string;
+  prefix: string;
+  // Primo numero libero dopo i posti già creati: la numerazione prosegue da lì.
+  nextNumber: number;
+  categories: { id: string; label: string }[];
+}) {
   return (
     <Form action={generateBerths} className="space-y-3">
       <input type="hidden" name="pierId" value={pierId} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Field name="prefix" label="Prefisso" defaultValue={prefix} maxLength={4} required />
-        <Field name="from" label="Dal numero" defaultValue="1" inputMode="numeric" required />
-        <Field name="to" label="Al numero" defaultValue="10" inputMode="numeric" required />
+        <Field name="from" label="Dal numero" defaultValue={String(nextNumber)} inputMode="numeric" required />
+        <Field name="to" label="Al numero" defaultValue={String(nextNumber + 9)} inputMode="numeric" required />
         <SelectField
           name="layout"
           label="Disposizione"

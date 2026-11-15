@@ -14,6 +14,12 @@ import { SettingsTabs } from "../tabs";
 
 export const metadata: Metadata = { title: "Pontili e posti barca" };
 
+// Numero successivo all'ultimo posto con la sigla del pontile (es. C25 → 26).
+function nextNumber(prefix: string, list: { code: string }[]): number {
+  const numbers = list.map((b) => (b.code.startsWith(prefix) ? Number.parseInt(b.code.slice(prefix.length), 10) : Number.NaN)).filter(Number.isFinite);
+  return numbers.length ? Math.max(...numbers) + 1 : 1;
+}
+
 export default page(async function PiersPage({ searchParams }: { searchParams: SearchParams }) {
   const ctx = await requireMarina(["admin"]);
   const welcome = one((await searchParams).benvenuto) === "1";
@@ -72,18 +78,24 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
               )}
               <p className="mb-3 text-sm text-muted">Tocca un posto per modificarne misure, categoria e stato.</p>
 
-              <details className="border-t border-line-soft pt-3" open={list.length === 0}>
-                <summary className="link cursor-pointer text-sm">Crea posti in blocco</summary>
+              {/* Sempre aperto: un pontile con numeri diversi di posti per lato si crea in due passaggi. */}
+              <section className="border-t border-line-soft pt-3" aria-label={`Aggiungi posti a ${pier.name}`}>
+                <h3 className="text-sm font-semibold text-ink">Aggiungi posti</h3>
+                <p className="mt-0.5 text-xs text-muted">
+                  Se i due lati hanno un numero diverso di posti, crea prima quelli di sinistra («Solo lato sinistro»), poi quelli di destra
+                  proseguendo con la numerazione: si dispongono comunque uno di fronte all&apos;altro a partire dalla radice.
+                </p>
                 <div className="mt-3">
                   {categoryOptions.length === 0 ? (
                     <p className="text-sm text-warn">
                       Servono prima le <Link href="/impostazioni/categorie" className="link">categorie</Link>.
                     </p>
                   ) : (
-                    <GenerateBerthsForm pierId={pier.id} prefix={pier.code} categories={categoryOptions} />
+                    // key: dopo ogni creazione il modulo riparte con il numero successivo già proposto.
+                    <GenerateBerthsForm key={list.length} pierId={pier.id} prefix={pier.code} nextNumber={nextNumber(pier.code, list)} categories={categoryOptions} />
                   )}
                 </div>
-              </details>
+              </section>
               <details className="mt-3 border-t border-line-soft pt-3">
                 <summary className="link cursor-pointer text-sm">Rinomina il pontile</summary>
                 <div className="mt-3">

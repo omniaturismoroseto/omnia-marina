@@ -63,40 +63,42 @@ export default page(async function PlanSettingsPage() {
           </div>
         </Card>
 
-        {hasPhoto &&
-          (berthRows.length === 0 ? (
-            <Notice>
-              Non ci sono ancora posti barca da disporre: creali in{" "}
-              <Link href="/impostazioni/pontili" className="link">
-                Pontili e posti
-              </Link>
-              , poi torna qui.
-            </Notice>
-          ) : (
-            <Card title="Disponi i posti sulla foto">
-              <ol className="mb-4 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
-                <li>
-                  <strong className="font-medium text-ink">1.</strong> Imposta la scala
-                </li>
-                <li>
-                  <strong className="font-medium text-ink">2.</strong> Traccia ogni pontile: i suoi posti si dispongono da soli
-                </li>
-                <li>
-                  <strong className="font-medium text-ink">3.</strong> Ritocca dove serve e salva
-                </li>
-              </ol>
-              {/* key: una nuova foto o un salvataggio da un'altra scheda fanno ripartire l'editor dai dati aggiornati */}
-              <PlanEditor
-                key={`${marina.version}`}
-                imageUrl={`/pianta/immagine?v=${marina.version}`}
-                width={marina.width!}
-                height={marina.height!}
-                initialPxPerMeter={marina.pxPerMeter}
-                piers={pierRows}
-                initialBerths={berthRows}
-              />
-            </Card>
-          ))}
+        {hasPhoto && (
+          <Card title="Disponi i posti sulla foto">
+            <ol className="mb-4 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
+              <li>
+                <strong className="font-medium text-ink">1.</strong> Imposta la scala
+              </li>
+              <li>
+                <strong className="font-medium text-ink">2.</strong> Traccia ogni pontile: i suoi posti si dispongono da soli
+              </li>
+              <li>
+                <strong className="font-medium text-ink">3.</strong> Ritocca dove serve e salva
+              </li>
+            </ol>
+            {berthRows.length === 0 && (
+              <div className="mb-4">
+                <Notice>
+                  Il porto non ha ancora posti barca: puoi già impostare la scala e salvarla. Per disporre i posti, creali prima in{" "}
+                  <Link href="/impostazioni/pontili" className="link">
+                    Pontili e posti
+                  </Link>
+                  .
+                </Notice>
+              </div>
+            )}
+            {/* key: una nuova foto o un salvataggio da un'altra scheda fanno ripartire l'editor dai dati aggiornati */}
+            <PlanEditor
+              key={`${marina.version}`}
+              imageUrl={`/pianta/immagine?v=${marina.version}`}
+              width={marina.width!}
+              height={marina.height!}
+              initialPxPerMeter={marina.pxPerMeter}
+              piers={pierRows}
+              initialBerths={berthRows}
+            />
+          </Card>
+        )}
       </div>
     </>
   );

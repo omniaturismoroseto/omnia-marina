@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { berthSizePx, imageInfo, layoutPier, normalizeAngle, type PlanBerth } from "../src/lib/plan";
+import { berthSizePx, berthSlots, imageInfo, layoutPier, normalizeAngle, type PlanBerth } from "../src/lib/plan";
 
 const berth = (id: string, side: "sx" | "dx", position: number, lengthCm = 1000, beamCm = 350): PlanBerth => ({ id, side, position, lengthCm, beamCm });
 
@@ -75,5 +75,51 @@ describe("riconoscimento dell'immagine caricata", () => {
     expect(imageInfo(new TextEncoder().encode("<svg onload=alert(1)></svg>"))).toBeNull();
     expect(imageInfo(new Uint8Array([0xff, 0xd8, 0x00, 0x00, 0, 0, 0, 0, 0, 0, 0, 0]))).toBeNull();
     expect(imageInfo(new Uint8Array(0))).toBeNull();
+  });
+});
+
+describe("lati invertiti", () => {
+  it("con flip i posti passano dall'altra parte della linea, nello stesso ordine", () => {
+    const berths = [berth("q1", "sx", 0), berth("q2", "sx", 1)];
+    const normal = layoutPier(berths, { x: 100, y: 500 }, { x: 300, y: 500 }, 10);
+    const flipped = layoutPier(berths, { x: 100, y: 500 }, { x: 300, y: 500 }, 10, 2, true);
+    expect(normal.map((p) => p.y)).toEqual([440, 440]);
+    expect(flipped.map((p) => p.y)).toEqual([560, 560]);
+    expect(flipped.map((p) => p.x)).toEqual(normal.map((p) => p.x));
+  });
+
+  it("una banchina con larghezza 0 mette la poppa sulla linea tracciata", () => {
+    const [q] = layoutPier([berth("q", "sx", 0, 800)], { x: 0, y: 500 }, { x: 100, y: 500 }, 10, 0);
+    expect(500 - q.y).toBe(40); // metà della lunghezza del posto: 4 m × 10 px
+  });
+});
+
+describe("posti creati in blocco", () => {
+  it("alternati: uno di fronte all'altro", () => {
+    expect(berthSlots("alternati", 4, 0, 0)).toEqual([
+      { side: "sx", position: 0 },
+      { side: "dx", position: 0 },
+      { side: "sx", position: 1 },
+      { side: "dx", position: 1 },
+    ]);
+  });
+
+  it("lati con numeri diversi di posti: ogni lato parte dalla radice", () => {
+    // 3 posti a sinistra, poi 2 a destra: quelli di destra stanno di fronte ai primi due, non dopo.
+    const sx = berthSlots("sx", 3, 0, 0);
+    const dx = berthSlots("dx", 2, 3, 0);
+    expect(sx.map((s) => s.position)).toEqual([0, 1, 2]);
+    expect(dx).toEqual([
+      { side: "dx", position: 0 },
+      { side: "dx", position: 1 },
+    ]);
+  });
+
+  it("aggiungendo posti a un lato si prosegue dopo gli ultimi di quel lato", () => {
+    expect(berthSlots("dx", 2, 7, 4).map((s) => s.position)).toEqual([4, 5]);
+    expect(berthSlots("alternati", 2, 7, 4)).toEqual([
+      { side: "sx", position: 7 },
+      { side: "dx", position: 7 },
+    ]);
   });
 });

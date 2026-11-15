@@ -45,7 +45,8 @@ export function PlanEditor({
   const [tool, setTool] = useState<Tool>(initialPxPerMeter ? "select" : "scale");
   const [points, setPoints] = useState<Point[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [pierId, setPierId] = useState(piers[0]?.id ?? "");
+  // Si propone il primo pontile che ha dei posti.
+  const [pierId, setPierId] = useState(piers.find((p) => initialBerths.some((b) => b.pierId === p.id))?.id ?? piers[0]?.id ?? "");
   const [pierWidth, setPierWidth] = useState("2,00");
   const [meters, setMeters] = useState("");
   const [zoom, setZoom] = useState(1);
@@ -55,6 +56,8 @@ export function PlanEditor({
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
   const lastAngle = useRef(0);
+  // Ultimo pontile tracciato: serve a rifarlo con i lati invertiti senza ricliccare sulla foto.
+  const [lastTrace, setLastTrace] = useState<{ pierId: string; a: Point; b: Point; widthM: number; flip: boolean } | null>(null);
 
   // Unità di disegno: spessori e testi restano proporzionati qualunque sia la dimensione della foto.
   const u = width / 1000;
@@ -62,6 +65,8 @@ export function PlanEditor({
   const unplaced = berths.filter((b) => b.x === null);
   const placedCount = berths.length - unplaced.length;
   const sizeOf = (b: EditorBerth) => (pxPerMeter ? berthSizePx(b, pxPerMeter) : { w: 14 * u, l: 36 * u });
+  const pierBerths = berths.filter((b) => b.pierId === pierId);
+  const hasBerths = berths.length > 0;
 
   // Avviso se si chiude la pagina con modifiche non salvate.
   useEffect(() => {
@@ -107,26 +112,38 @@ export function PlanEditor({
         return;
       }
       const width = parseMeters(pierWidth);
-      const placements = pxPerMeter
-        ? layoutPier(
-            berths.filter((b) => b.pierId === pierId),
-            points[0],
-            p,
-            pxPerMeter,
-            (width ?? 200) / 100,
-          )
-        : [];
-      if (placements.length === 0) {
-        setNotice({ ok: false, message: "Questo pontile non ha posti da disporre: creali prima in «Pontili e posti»." });
-      } else {
-        const byId = new Map(placements.map((pl) => [pl.id, pl]));
-        setBerths((list) => list.map((b) => (byId.has(b.id) ? { ...b, ...byId.get(b.id)! } : b)));
-        lastAngle.current = placements[0].angle;
-        setDirty(true);
-        setNotice({ ok: true, message: `${placements.length} posti disposti. Se serve, traccia di nuovo il pontile o ritocca i singoli posti con «Seleziona».` });
-      }
+      tracePier({ pierId, a: points[0], b: p, widthM: (width ?? 200) / 100, flip: false });
       setPoints([]);
     }
+  }
+
+  // Dispone i posti di un pontile lungo la linea a → b.
+  function tracePier(trace: { pierId: string; a: Point; b: Point; widthM: number; flip: boolean }) {
+    const placements = pxPerMeter
+      ? layoutPier(
+          berths.filter((b) => b.pierId === trace.pierId),
+          trace.a,
+          trace.b,
+          pxPerMeter,
+          trace.widthM,
+          trace.flip,
+        )
+      : [];
+    if (placements.length === 0) {
+      setNotice({ ok: false, message: "Questo pontile non ha posti da disporre: creali prima in «Pontili e posti»." });
+      return;
+    }
+    const byId = new Map(placements.map((pl) => [pl.id, pl]));
+    setBerths((list) => list.map((b) => (byId.has(b.id) ? { ...b, ...byId.get(b.id)! } : b)));
+    lastAngle.current = placements[0].angle;
+    setLastTrace(trace);
+    setDirty(true);
+    setNotice({
+      ok: true,
+      message: trace.flip
+        ? `Lati invertiti: ${placements.length} posti spostati dall'altra parte della linea.`
+        : `${placements.length} posti disposti. Se sono dalla parte sbagliata premi «Inverti i lati»; i singoli posti si ritoccano con «Seleziona».`,
+    });
   }
 
   function applyScale() {
@@ -221,7 +238,7 @@ export function PlanEditor({
         <div className="mb-2 flex flex-wrap items-center gap-2">
           {toolButton("select", "Seleziona", MousePointer2)}
           {toolButton("scale", "Imposta scala", Ruler)}
-          {toolButton("pier", "Disponi un pontile", Spline, !pxPerMeter)}
+          {toolButton("pier", "Disponi un pontile", Spline, !pxPerMeter || pierBerths.length === 0)}
           <span className="ml-auto flex items-center gap-1">
             <button type="button" className="btn btn-secondary btn-sm" aria-label="Riduci" disabled={zoom === ZOOMS[0]} onClick={() => setZoom(ZOOMS[Math.max(0, ZOOMS.indexOf(zoom) - 1)])}>
               <Minus size={15} aria-hidden="true" />
@@ -330,9 +347,17 @@ export function PlanEditor({
               </label>
               <input id="plan-pier-width" className="input" inputMode="decimal" value={pierWidth} onChange={(e) => setPierWidth(e.target.value)} />
             </div>
-            <button type="button" className="btn btn-secondary w-full" disabled={!pxPerMeter || !pierId} onClick={() => chooseTool("pier")}>
+            <button type="button" className="btn btn-secondary w-full" disabled={!pxPerMeter || pierBerths.length === 0} onClick={() => chooseTool("pier")}>
               Traccia il pontile sulla foto
             </button>
+            {!pxPerMeter && hasBerths && <p className="hint">Prima imposta la scala.</p>}
+            {pxPerMeter && pierId && pierBerths.length === 0 && hasBerths && <p className="hint">Questo pontile non ha ancora posti.</p>}
+            {lastTrace && lastTrace.pierId === pierId && (
+              <button type="button" className="btn btn-ghost w-full" onClick={() => tracePier({ ...lastTrace, flip: !lastTrace.flip })}>
+                Inverti i lati
+              </button>
+            )}
+            <p className="hint">Per una banchina, traccia la linea lungo il bordo del molo e metti larghezza 0.</p>
           </div>
         </section>
 
@@ -380,7 +405,15 @@ export function PlanEditor({
           <h3 className="text-[15px] font-semibold text-ink">
             Da disporre <span className="font-normal text-muted">({unplaced.length})</span>
           </h3>
-          {unplaced.length === 0 ? (
+          {!hasBerths ? (
+            <p className="mt-1 text-sm text-muted">
+              Non ci sono ancora posti barca. Intanto puoi impostare la scala; poi crea pontili e posti in{" "}
+              <a href="/impostazioni/pontili" className="link">
+                Pontili e posti
+              </a>{" "}
+              e torna qui per disporli.
+            </p>
+          ) : unplaced.length === 0 ? (
             <p className="mt-1 text-sm text-muted">Tutti i {berths.length} posti sono sulla pianta.</p>
           ) : (
             <>

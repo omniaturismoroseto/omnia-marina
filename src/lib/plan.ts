@@ -34,9 +34,9 @@ export function distance(a: Point, b: Point): number {
 /**
  * Dispone i posti di un pontile lungo la linea tracciata sulla foto, dalla radice (a) alla testata (b).
  * I posti si distribuiscono a intervalli regolari secondo la loro posizione, perpendicolari al pontile:
- * il lato "sx" a sinistra di chi cammina da a verso b, il lato "dx" a destra.
+ * il lato "sx" a sinistra di chi cammina da a verso b, il lato "dx" a destra (al contrario con `flip`).
  */
-export function layoutPier(berths: PlanBerth[], a: Point, b: Point, pxPerMeter: number, pierWidthM = 2): Placement[] {
+export function layoutPier(berths: PlanBerth[], a: Point, b: Point, pxPerMeter: number, pierWidthM = 2, flip = false): Placement[] {
   const length = distance(a, b);
   if (length < 1 || berths.length === 0 || pxPerMeter <= 0) return [];
   const d = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
@@ -48,7 +48,8 @@ export function layoutPier(berths: PlanBerth[], a: Point, b: Point, pxPerMeter: 
   return berths.map((berth) => {
     const along = ((berth.position + 0.5) / slots) * length;
     const offset = (pierWidthM / 2 + berth.lengthCm / 200) * pxPerMeter;
-    const sign = berth.side === "sx" ? 1 : -1;
+    // flip: i posti finiscono dall'altro lato della linea (es. banchina tracciata dalla parte "sbagliata").
+    const sign = (berth.side === "sx" ? 1 : -1) * (flip ? -1 : 1);
     return {
       id: berth.id,
       x: round(a.x + d.x * along + left.x * offset * sign, 1),
@@ -115,4 +116,20 @@ export function imageInfo(bytes: Uint8Array): ImageInfo | null {
     }
   }
   return null;
+}
+
+export type BerthLayout = "alternati" | "sx" | "dx";
+
+/**
+ * Lato e posizione lungo il pontile dei posti creati in blocco.
+ * Ogni lato ha la sua numerazione delle posizioni: così un pontile può avere 25 posti a sinistra e 22 a destra,
+ * uno di fronte all'altro a partire dalla radice. I nuovi posti proseguono dopo quelli già presenti su quel lato.
+ * nextSx / nextDx: prima posizione libera su ciascun lato.
+ */
+export function berthSlots(layout: BerthLayout, count: number, nextSx: number, nextDx: number): { side: "sx" | "dx"; position: number }[] {
+  if (layout === "sx") return Array.from({ length: count }, (_, i) => ({ side: "sx", position: nextSx + i }));
+  if (layout === "dx") return Array.from({ length: count }, (_, i) => ({ side: "dx", position: nextDx + i }));
+  // Alternati: si riparte dalla stessa posizione sui due lati, così i posti restano uno di fronte all'altro.
+  const start = Math.max(nextSx, nextDx);
+  return Array.from({ length: count }, (_, i) => ({ side: i % 2 === 0 ? "sx" : "dx", position: start + Math.floor(i / 2) }));
 }

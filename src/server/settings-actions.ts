@@ -11,6 +11,7 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { requireMarina, requireUser } from "@/lib/context";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
 import { ROLE_LABEL } from "@/lib/labels";
+import { berthSlots } from "@/lib/plan";
 import { toFormState } from "./errors";
 
 const ADMIN = ["admin" as const];
@@ -147,20 +148,24 @@ export async function generateBerths(_prev: FormState, formData: FormData): Prom
   if (!pier) return fail("Pontile non trovato.");
   if (!category) return fail("Controlla i campi evidenziati.", { categoryId: "Categoria non trovata." });
 
-  // I nuovi posti proseguono dopo quelli già presenti sullo stesso lato.
-  const [{ next }] = await db
-    .select({ next: sql<number>`coalesce(max(${berths.position}) + 1, 0)::int` })
+  // I nuovi posti proseguono dopo quelli già presenti sullo stesso lato (vedi berthSlots).
+  const [{ nextSx, nextDx }] = await db
+    .select({
+      nextSx: sql<number>`coalesce(max(${berths.position}) filter (where ${berths.side} = 'sx') + 1, 0)::int`,
+      nextDx: sql<number>`coalesce(max(${berths.position}) filter (where ${berths.side} = 'dx') + 1, 0)::int`,
+    })
     .from(berths)
     .where(eq(berths.pierId, pier.id));
 
   const prefix = d.prefix.toUpperCase();
-  const values = Array.from({ length: d.to - d.from + 1 }, (_, i) => ({
+  const slots = berthSlots(d.layout, d.to - d.from + 1, nextSx, nextDx);
+  const values = slots.map((slot, i) => ({
     marinaId: ctx.marinaId,
     pierId: pier.id,
     categoryId: category.id,
     code: `${prefix}${String(d.from + i).padStart(2, "0")}`,
-    side: d.layout === "alternati" ? (i % 2 === 0 ? ("sx" as const) : ("dx" as const)) : d.layout,
-    position: next + (d.layout === "alternati" ? Math.floor(i / 2) : i),
+    side: slot.side,
+    position: slot.position,
     lengthCm: category.maxLengthCm,
     beamCm: category.maxBeamCm,
     draftCm: d.draftCm,
