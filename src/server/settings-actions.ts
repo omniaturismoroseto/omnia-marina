@@ -32,6 +32,8 @@ const marinaSchema = z.object({
   email: f.optEmail(),
   vhfChannel: f.optText(),
   defaultVatRate: f.int(0, 30, "Aliquota non valida"),
+  serviceFeeCents: f.optMoney(),
+  wasteFeeCents: f.optMoney(),
 });
 
 export async function saveMarina(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -51,6 +53,7 @@ const textsSchema = z.object({
   privacyPolicyVersion: f.text("Indica la versione"),
   privacyPolicyText: f.optText(),
   contractTerms: f.optText(),
+  contractApprovalText: f.optText(),
 });
 
 export async function saveLegalTexts(_prev: FormState, formData: FormData): Promise<FormState> {

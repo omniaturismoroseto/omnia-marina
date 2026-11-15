@@ -11,8 +11,9 @@ import { OFFICE, requireMarina } from "@/lib/context";
 import { isValidISODate } from "@/lib/dates";
 import { formatDimensions } from "@/lib/format";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { FEE_ITEM_KINDS, ITEM_KINDS, SPACE_ITEM_KINDS, itemHasPeriod, itemTitle, type ContractItemInput } from "@/lib/contract-items";
 import { categoryForBoat, occupiedUntil, quoteStay, type QuoteLine } from "@/lib/pricing";
-import { activateContract, cancelContract, createContract } from "./contracts";
+import { activateContract, addContractItem, cancelContract, createContract, removeContractItem } from "./contracts";
 import { toFormState } from "./errors";
 
 export interface BerthOption {
@@ -142,10 +143,46 @@ const contractSchema = z.object({
   ...planFields,
 });
 
+// Voci aggiuntive del modulo "nuovo contratto": per ogni spazio una casella (<tipo>_on) con numero, periodo e importo;
+// per le spese fisse solo l'importo (vuoto = nessuna voce).
+const spaceSchema = z.object({ reference: f.optText(), startDate: f.date(), endDate: f.date(), amount: f.money() });
+const feeSchema = z.object({ amount: f.optMoney() });
+
+function parseItems(formData: FormData): { ok: true; items: ContractItemInput[] } | { ok: false; errors: Record<string, string> } {
+  const items: ContractItemInput[] = [];
+  const errors: Record<string, string> = {};
+  const read = (kind: string, field: string) => formData.get(`${kind}_${field}`) ?? "";
+
+  for (const kind of SPACE_ITEM_KINDS) {
+    if (read(kind, "on") !== "on") continue;
+    const r = spaceSchema.safeParse({ reference: read(kind, "ref"), startDate: read(kind, "from"), endDate: read(kind, "to"), amount: read(kind, "amount") });
+    if (!r.success) {
+      for (const issue of r.error.issues) {
+        const key = { reference: "ref", startDate: "from", endDate: "to", amount: "amount" }[String(issue.path[0])] ?? "amount";
+        errors[`${kind}_${key}`] ??= issue.message;
+      }
+      continue;
+    }
+    if (r.data.endDate < r.data.startDate) {
+      errors[`${kind}_to`] = "La fine precede l'inizio.";
+      continue;
+    }
+    items.push({ kind, reference: r.data.reference, startDate: r.data.startDate, endDate: r.data.endDate, amountCents: r.data.amount });
+  }
+  for (const kind of FEE_ITEM_KINDS) {
+    const r = feeSchema.safeParse({ amount: read(kind, "amount") });
+    if (!r.success) errors[`${kind}_amount`] = r.error.issues[0].message;
+    else if (r.data.amount !== null) items.push({ kind, reference: null, startDate: null, endDate: null, amountCents: r.data.amount });
+  }
+  return Object.keys(errors).length ? { ok: false, errors } : { ok: true, items };
+}
+
 export async function saveContract(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(OFFICE);
   const parsed = parseForm(contractSchema, formData);
-  if (!parsed.ok) return parsed.state;
+  const itemsParsed = parseItems(formData);
+  if (!parsed.ok) return { ...parsed.state, errors: { ...parsed.state.errors, ...(itemsParsed.ok ? {} : itemsParsed.errors) } };
+  if (!itemsParsed.ok) return fail("Controlla i campi evidenziati.", itemsParsed.errors);
   const d = parsed.data;
   if (d.endDate < d.startDate) return fail("Controlla i campi evidenziati.", { endDate: "La fine precede l'inizio." });
 
@@ -168,6 +205,7 @@ export async function saveContract(_prev: FormState, formData: FormData): Promis
           signedOn: d.signedOn,
           notes: d.notes,
           instalments: { count: d.instalments, firstDueDate: d.firstDueDate, everyMonths: d.everyMonths },
+          items: itemsParsed.items,
         },
       );
       await audit(ctx, "creazione", "contratto", result.id, `${result.number} (${d.intent})`, tx);
@@ -235,4 +273,57 @@ export async function updateContractMeta(_prev: FormState, formData: FormData): 
   if (updated.length === 0) return fail("Contratto non trovato.");
   revalidatePath("/", "layout");
   return { ok: true, message: "Salvato." };
+}
+
+const itemSchema = z.object({
+  contractId: f.id(),
+  kind: f.choice(ITEM_KINDS),
+  reference: f.optText(),
+  startDate: f.optDate(),
+  endDate: f.optDate(),
+  amount: f.money(),
+});
+
+export async function addContractItemAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(OFFICE);
+  const parsed = parseForm(itemSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const d = parsed.data;
+  const period = itemHasPeriod(d.kind);
+  if (period && (!d.startDate || !d.endDate)) {
+    return fail("Controlla i campi evidenziati.", { ...(d.startDate ? {} : { startDate: "Data obbligatoria" }), ...(d.endDate ? {} : { endDate: "Data obbligatoria" }) });
+  }
+  try {
+    await db.transaction(async (tx) => {
+      const item = {
+        kind: d.kind,
+        reference: period ? d.reference : null,
+        startDate: period ? d.startDate : null,
+        endDate: period ? d.endDate : null,
+        amountCents: d.amount,
+      };
+      await addContractItem(tx, { marinaId: ctx.marinaId, userId: ctx.user.id }, d.contractId, item);
+      await audit(ctx, "modifica", "contratto", d.contractId, `Aggiunta voce: ${itemTitle(item)}`, tx);
+    });
+  } catch (err) {
+    return toFormState(err);
+  }
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Voce aggiunta." };
+}
+
+export async function removeContractItemAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(OFFICE);
+  const itemId = String(formData.get("itemId") ?? "");
+  if (!UUID.test(itemId)) return fail("Voce non trovata.");
+  try {
+    await db.transaction(async (tx) => {
+      const removed = await removeContractItem(tx, { marinaId: ctx.marinaId, userId: ctx.user.id }, itemId);
+      await audit(ctx, "modifica", "contratto", removed.contractId, `Tolta voce: ${removed.title}`, tx);
+    });
+  } catch (err) {
+    return toFormState(err);
+  }
+  revalidatePath("/", "layout");
+  return { ok: true };
 }

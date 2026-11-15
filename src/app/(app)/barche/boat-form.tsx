@@ -18,6 +18,15 @@ export interface BoatFormValues {
   draft?: string;
   flag?: string | null;
   engine?: string | null;
+  declaredValue?: string;
+  engineCount?: number | null;
+  engineType?: string | null;
+  engineBrand?: string | null;
+  enginePowerHp?: number | null;
+  auxEngineCount?: number | null;
+  auxEngineType?: string | null;
+  auxEngineBrand?: string | null;
+  auxEnginePowerHp?: number | null;
   insuranceCompany?: string | null;
   insurancePolicy?: string | null;
   insuranceExpiry?: string | null;
@@ -66,7 +75,19 @@ export function BoatForm({ boat, owners }: { boat?: BoatFormValues; owners: { id
         <Field name="model" label="Modello" defaultValue={v.model ?? ""} />
         <Field name="year" label="Anno" defaultValue={v.year ?? ""} inputMode="numeric" />
         <Field name="flag" label="Bandiera" defaultValue={v.flag ?? "Italia"} />
-        <Field name="engine" label="Motorizzazione" defaultValue={v.engine ?? ""} />
+        <Field name="declaredValueCents" label="Valore dichiarato (€)" defaultValue={v.declaredValue ?? ""} inputMode="decimal" placeholder="Es. 6.000" hint="Compare nel contratto." />
+      </Group>
+
+      <Group title="Motorizzazione">
+        <Field name="engineCount" label="Numero di motori" defaultValue={v.engineCount ?? ""} inputMode="numeric" placeholder="1" />
+        <Field name="engineType" label="Tipo" defaultValue={v.engineType ?? ""} placeholder="Es. fuoribordo, entrobordo" />
+        <Field name="engineBrand" label="Marca" defaultValue={v.engineBrand ?? ""} />
+        <Field name="enginePowerHp" label="Potenza (HP)" defaultValue={v.enginePowerHp ?? ""} inputMode="numeric" />
+        <Field name="auxEngineCount" label="Motori ausiliari" defaultValue={v.auxEngineCount ?? ""} inputMode="numeric" placeholder="0" />
+        <Field name="auxEngineType" label="Tipo ausiliario" defaultValue={v.auxEngineType ?? ""} />
+        <Field name="auxEngineBrand" label="Marca ausiliario" defaultValue={v.auxEngineBrand ?? ""} />
+        <Field name="auxEnginePowerHp" label="Potenza ausiliario (HP)" defaultValue={v.auxEnginePowerHp ?? ""} inputMode="numeric" />
+        <Field name="engine" label="Altre note sul motore" defaultValue={v.engine ?? ""} />
       </Group>
 
       <Group title="Dimensioni">

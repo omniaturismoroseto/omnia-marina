@@ -154,6 +154,11 @@
   background-image: repeating-linear-gradient(135deg, transparent 0 5px, rgb(15 100 128 / 0.22) 5px 7px);
 }
 
+@page {
+  size: A4;
+  margin: 12mm 14mm;
+}
+
 @media print {
   body {
     background: #fff;

@@ -1,5 +1,5 @@
 {
-  "id": "7b203e0a-9757-4e48-aa82-627f5fe48d14",
+  "id": "2599efaa-af35-4124-ad53-070c7390fc94",
   "prevId": "45890eb2-7fde-4803-b100-d2b17d3dd371",
   "version": "7",
   "dialect": "postgresql",
@@ -488,6 +488,60 @@
           "primaryKey": false,
           "notNull": false
         },
+        "declared_value_cents": {
+          "name": "declared_value_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "engine_count": {
+          "name": "engine_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "engine_type": {
+          "name": "engine_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "engine_brand": {
+          "name": "engine_brand",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "engine_power_hp": {
+          "name": "engine_power_hp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aux_engine_count": {
+          "name": "aux_engine_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aux_engine_type": {
+          "name": "aux_engine_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aux_engine_brand": {
+          "name": "aux_engine_brand",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aux_engine_power_hp": {
+          "name": "aux_engine_power_hp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "insurance_company": {
           "name": "insurance_company",
           "type": "text",
@@ -803,6 +857,138 @@
           "tableTo": "users",
           "columnsFrom": [
             "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.contract_items": {
+      "name": "contract_items",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "marina_id": {
+          "name": "marina_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contract_id": {
+          "name": "contract_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "contract_item_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reference": {
+          "name": "reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "amount_cents": {
+          "name": "amount_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "charge_id": {
+          "name": "charge_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "contract_items_contract_idx": {
+          "name": "contract_items_contract_idx",
+          "columns": [
+            {
+              "expression": "contract_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "contract_items_marina_id_marinas_id_fk": {
+          "name": "contract_items_marina_id_marinas_id_fk",
+          "tableFrom": "contract_items",
+          "tableTo": "marinas",
+          "columnsFrom": [
+            "marina_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "contract_items_contract_id_contracts_id_fk": {
+          "name": "contract_items_contract_id_contracts_id_fk",
+          "tableFrom": "contract_items",
+          "tableTo": "contracts",
+          "columnsFrom": [
+            "contract_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "contract_items_charge_id_charges_id_fk": {
+          "name": "contract_items_charge_id_charges_id_fk",
+          "tableFrom": "contract_items",
+          "tableTo": "charges",
+          "columnsFrom": [
+            "charge_id"
           ],
           "columnsTo": [
             "id"
@@ -1196,12 +1382,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "import_id": {
-          "name": "import_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_by": {
           "name": "created_by",
           "type": "uuid",
@@ -1252,21 +1432,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "ledger_import_idx": {
-          "name": "ledger_import_idx",
-          "columns": [
-            {
-              "expression": "import_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -1296,152 +1461,9 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "ledger_entries_import_id_ledger_imports_id_fk": {
-          "name": "ledger_entries_import_id_ledger_imports_id_fk",
-          "tableFrom": "ledger_entries",
-          "tableTo": "ledger_imports",
-          "columnsFrom": [
-            "import_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
         "ledger_entries_created_by_users_id_fk": {
           "name": "ledger_entries_created_by_users_id_fk",
           "tableFrom": "ledger_entries",
-          "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.ledger_imports": {
-      "name": "ledger_imports",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "marina_id": {
-          "name": "marina_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "file_name": {
-          "name": "file_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "file_hash": {
-          "name": "file_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "sheet_name": {
-          "name": "sheet_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "rows_count": {
-          "name": "rows_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "entries_count": {
-          "name": "entries_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "first_date": {
-          "name": "first_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_date": {
-          "name": "last_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "ledger_imports_file_uq": {
-          "name": "ledger_imports_file_uq",
-          "columns": [
-            {
-              "expression": "marina_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "file_hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "ledger_imports_marina_id_marinas_id_fk": {
-          "name": "ledger_imports_marina_id_marinas_id_fk",
-          "tableFrom": "ledger_imports",
-          "tableTo": "marinas",
-          "columnsFrom": [
-            "marina_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "ledger_imports_created_by_users_id_fk": {
-          "name": "ledger_imports_created_by_users_id_fk",
-          "tableFrom": "ledger_imports",
           "tableTo": "users",
           "columnsFrom": [
             "created_by"
@@ -1623,6 +1645,24 @@
         "contract_terms": {
           "name": "contract_terms",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contract_approval_text": {
+          "name": "contract_approval_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "service_fee_cents": {
+          "name": "service_fee_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "waste_fee_cents": {
+          "name": "waste_fee_cents",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -3277,6 +3317,18 @@
         "cartaceo",
         "digitale",
         "verbale"
+      ]
+    },
+    "public.contract_item_kind": {
+      "name": "contract_item_kind",
+      "schema": "public",
+      "values": [
+        "secca",
+        "auto_coperto",
+        "auto_scoperto",
+        "carrello",
+        "gestione",
+        "rifiuti"
       ]
     },
     "public.contract_status": {

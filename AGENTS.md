@@ -25,6 +25,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   immagini di `src/assets/brand/` (già alla misura giusta, `unoptimized`); icone in `src/app` (favicon, icon, apple-icon) e `public/`.
 - Pianta dal vero: le coordinate dei posti (`berths.plan_x/plan_y/plan_angle`) sono in pixel della foto caricata;
   la geometria sta in `src/lib/plan.ts`, la foto nel database (`marina_plans`) ed è servita da `/pianta/immagine`.
+- Contratto stampato (`/contratti/[id]/stampa`): gli articoli 1-3 (oggetto, canone, spese) li compone la pagina con i dati
+  del contratto; dal 4 in poi stampa `marinas.contract_terms`, poi l'approvazione specifica `marinas.contract_approval_text`
+  (modelli in `src/lib/contract-texts.ts`). Spazi a terra, posti auto, carrello e spese fisse sono `contract_items`, ognuna con
+  il proprio addebito (`src/server/contracts.ts`).
 - Riconoscimento automatico: `src/server/plan-ai.ts` chiama Claude (`claude-opus-5-5`) su Vertex AI con `AnthropicVertex`;
   si accende con `ANTHROPIC_VERTEX_PROJECT_ID` (+ `CLOUD_ML_REGION`, predefinito `global`). La conversione della risposta
   in proposte è in `src/lib/plan-analysis.ts`. Per i collaudi locali `PLAN_ANALYSIS_FIXTURE` (percorso di un JSON) sostituisce

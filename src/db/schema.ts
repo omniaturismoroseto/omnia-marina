@@ -40,6 +40,8 @@ export const contractTypeEnum = pgEnum("contract_type", ["annuale", "stagionale"
 export const contractStatusEnum = pgEnum("contract_status", ["bozza", "attivo", "concluso", "annullato"]);
 export const presenceEnum = pgEnum("presence", ["atteso", "in_porto", "fuori", "partito"]);
 export const movementKindEnum = pgEnum("movement_kind", ["arrivo", "partenza", "uscita", "rientro"]);
+// Voci del contratto oltre al posto barca: spazi a terra, posti auto, carrello e spese fisse.
+export const contractItemKindEnum = pgEnum("contract_item_kind", ["secca", "auto_coperto", "auto_scoperto", "carrello", "gestione", "rifiuti"]);
 export const chargeKindEnum = pgEnum("charge_kind", ["ormeggio", "servizi", "utenze", "altro"]);
 export const paymentMethodEnum = pgEnum("payment_method", ["contanti", "bonifico", "pos", "assegno", "altro"]);
 export const ledgerDirectionEnum = pgEnum("ledger_direction", ["entrata", "uscita"]);
@@ -75,6 +77,11 @@ export const marinas = pgTable("marinas", {
   privacyPolicyVersion: text("privacy_policy_version").notNull().default("1.0"),
   privacyPolicyText: text("privacy_policy_text"),
   contractTerms: text("contract_terms"),
+  // Testo dell'approvazione specifica delle clausole (artt. 1341-1342 c.c.), stampato con una seconda firma.
+  contractApprovalText: text("contract_approval_text"),
+  // Spese di gestione comuni e quota rifiuti proposte nei nuovi contratti annuali.
+  serviceFeeCents: integer("service_fee_cents"),
+  wasteFeeCents: integer("waste_fee_cents"),
   // Pianta dal vero: dimensioni in pixel della foto aerea caricata e scala (pixel per metro).
   // planVersion cambia a ogni nuova foto, così il browser non mostra quella vecchia dalla cache.
   planWidth: integer("plan_width"),
@@ -211,7 +218,17 @@ export const boats = pgTable(
     beamCm: integer("beam_cm").notNull(),
     draftCm: integer("draft_cm"),
     flag: text("flag"),
+    // Descrizione libera, per quanto non sta nei campi del motore.
     engine: text("engine"),
+    declaredValueCents: integer("declared_value_cents"),
+    engineCount: integer("engine_count"),
+    engineType: text("engine_type"),
+    engineBrand: text("engine_brand"),
+    enginePowerHp: integer("engine_power_hp"),
+    auxEngineCount: integer("aux_engine_count"),
+    auxEngineType: text("aux_engine_type"),
+    auxEngineBrand: text("aux_engine_brand"),
+    auxEnginePowerHp: integer("aux_engine_power_hp"),
     insuranceCompany: text("insurance_company"),
     insurancePolicy: text("insurance_policy"),
     insuranceExpiry: date("insurance_expiry"),
@@ -390,6 +407,30 @@ export const contracts = pgTable(
   ],
 );
 
+// Voci aggiuntive del contratto. Ognuna ha il suo addebito, creato quando il contratto è attivo.
+export const contractItems = pgTable(
+  "contract_items",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    contractId: uuid("contract_id")
+      .notNull()
+      .references(() => contracts.id, { onDelete: "cascade" }),
+    kind: contractItemKindEnum("kind").notNull(),
+    // Numero del posto auto o altro riferimento.
+    reference: text("reference"),
+    // Periodo per gli spazi; vuoto per le spese fisse.
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    amountCents: integer("amount_cents").notNull(),
+    chargeId: uuid("charge_id").references(() => charges.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("contract_items_contract_idx").on(t.contractId)],
+);
+
 export const movements = pgTable(
   "movements",
   {
@@ -564,6 +605,7 @@ export const auditLog = pgTable(
 export type Role = (typeof roleEnum.enumValues)[number];
 export type Season = (typeof seasonEnum.enumValues)[number];
 export type ContractType = (typeof contractTypeEnum.enumValues)[number];
+export type ContractItemKind = (typeof contractItemKindEnum.enumValues)[number];
 export type ContractStatus = (typeof contractStatusEnum.enumValues)[number];
 export type Presence = (typeof presenceEnum.enumValues)[number];
 export type BerthStatus = (typeof berthStatusEnum.enumValues)[number];

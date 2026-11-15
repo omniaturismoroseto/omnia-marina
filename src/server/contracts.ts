@@ -1,7 +1,8 @@
 import "server-only";
 import { and, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import type { Tx } from "@/db";
-import { berths, boats, charges, contracts, movements, owners, type ContractType } from "@/db/schema";
+import { berths, boats, charges, contractItems, contracts, movements, owners, payments, type ContractType } from "@/db/schema";
+import { itemHasPeriod, itemTitle, type ContractItemInput } from "@/lib/contract-items";
 import { formatDate, todayRome, yearOf } from "@/lib/dates";
 import { splitVat } from "@/lib/format";
 import { CONTRACT_TYPE_LABEL } from "@/lib/labels";
@@ -97,6 +98,56 @@ async function createInstalmentCharges(
   );
 }
 
+// Controlla le voci aggiuntive: gli spazi vogliono un periodo coerente, le spese fisse compaiono una volta sola.
+export function validateItems(items: ContractItemInput[]) {
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (item.amountCents < 0) throw new DomainError("Importo non valido.", "amount");
+    if (itemHasPeriod(item.kind)) {
+      if (!item.startDate || !item.endDate) throw new DomainError("Indica inizio e fine del periodo.", "startDate");
+      if (item.endDate < item.startDate) throw new DomainError("La fine del periodo precede l'inizio.", "endDate");
+    } else {
+      if (seen.has(item.kind)) throw new DomainError(`${itemTitle(item)}: voce già presente nel contratto.`, "kind");
+      seen.add(item.kind);
+    }
+  }
+}
+
+type ChargeableContract = { id: string; number: string; ownerId: string; vatRate: number };
+
+// Addebito di una voce aggiuntiva, con la stessa aliquota del contratto. Le voci a importo zero non si addebitano.
+async function createItemCharge(tx: Tx, actor: Actor, contract: ChargeableContract, item: { id: string } & ContractItemInput, dueDate: string) {
+  if (item.amountCents <= 0) return;
+  const { netCents, vatCents } = splitVat(item.amountCents, contract.vatRate);
+  const [charge] = await tx
+    .insert(charges)
+    .values({
+      marinaId: actor.marinaId,
+      ownerId: contract.ownerId,
+      contractId: contract.id,
+      kind: "servizi",
+      description: `${itemTitle(item)} · contratto ${contract.number}`,
+      issueDate: todayRome(),
+      dueDate,
+      netCents,
+      vatRate: contract.vatRate,
+      vatCents,
+      grossCents: item.amountCents,
+      createdBy: actor.userId,
+    })
+    .returning({ id: charges.id });
+  await tx.update(contractItems).set({ chargeId: charge.id }).where(eq(contractItems.id, item.id));
+}
+
+// Addebita le voci del contratto che non hanno ancora un addebito (alla creazione o all'attivazione).
+async function chargePendingItems(tx: Tx, actor: Actor, contract: ChargeableContract, dueDate: string) {
+  const pending = await tx
+    .select()
+    .from(contractItems)
+    .where(and(eq(contractItems.contractId, contract.id), eq(contractItems.marinaId, actor.marinaId), sql`${contractItems.chargeId} is null`));
+  for (const item of pending) await createItemCharge(tx, actor, contract, item, dueDate);
+}
+
 export interface ContractInput {
   ownerId: string;
   boatId: string;
@@ -110,10 +161,13 @@ export interface ContractInput {
   signedOn: string | null;
   notes: string | null;
   instalments: InstalmentPlan;
+  items?: ContractItemInput[];
 }
 
 export async function createContract(tx: Tx, actor: Actor, input: ContractInput): Promise<{ id: string; number: string }> {
   if (input.endDate < input.startDate) throw new DomainError("La data di fine precede la data di inizio.", "endDate");
+  const items = input.items ?? [];
+  validateItems(items);
 
   const [owner] = await tx.select({ id: owners.id }).from(owners).where(and(eq(owners.id, input.ownerId), eq(owners.marinaId, actor.marinaId))).limit(1);
   if (!owner) throw new DomainError("Cliente non trovato.", "ownerId");
@@ -152,8 +206,13 @@ export async function createContract(tx: Tx, actor: Actor, input: ContractInput)
     })
     .returning({ id: contracts.id });
 
+  if (items.length > 0) {
+    await tx.insert(contractItems).values(items.map((item) => ({ marinaId: actor.marinaId, contractId: created.id, ...item })));
+  }
+
   if (input.status === "attivo") {
     await createInstalmentCharges(tx, actor, { id: created.id, number, ...input }, input.instalments, todayRome());
+    await chargePendingItems(tx, actor, { id: created.id, number, ownerId: input.ownerId, vatRate: input.vatRate }, input.instalments.firstDueDate);
   }
   return { id: created.id, number };
 }
@@ -178,6 +237,40 @@ export async function activateContract(tx: Tx, actor: Actor, contractId: string,
   await assertBerthUsable(tx, actor.marinaId, c.berthId, boat, c.startDate, c.occupiedUntil, c.id);
   await tx.update(contracts).set({ status: "attivo", updatedAt: new Date() }).where(eq(contracts.id, c.id));
   await createInstalmentCharges(tx, actor, c, plan, todayRome());
+  await chargePendingItems(tx, actor, c, plan.firstDueDate);
+}
+
+// Aggiunge una voce a un contratto in bozza o attivo. Se il contratto è attivo l'addebito nasce subito, con scadenza oggi.
+export async function addContractItem(tx: Tx, actor: Actor, contractId: string, item: ContractItemInput) {
+  const c = await loadContract(tx, actor.marinaId, contractId);
+  if (c.status !== "bozza" && c.status !== "attivo") throw new DomainError("Il contratto è chiuso: non si possono aggiungere voci.");
+  const existing = await tx.select().from(contractItems).where(eq(contractItems.contractId, c.id));
+  validateItems([...existing, item]);
+  const [created] = await tx
+    .insert(contractItems)
+    .values({ marinaId: actor.marinaId, contractId: c.id, ...item })
+    .returning({ id: contractItems.id });
+  if (c.status === "attivo") await createItemCharge(tx, actor, c, { id: created.id, ...item }, todayRome());
+  return created.id;
+}
+
+// Toglie una voce dal contratto e ne annulla l'addebito, se non è già stato incassato.
+export async function removeContractItem(tx: Tx, actor: Actor, itemId: string) {
+  const [item] = await tx
+    .select()
+    .from(contractItems)
+    .where(and(eq(contractItems.id, itemId), eq(contractItems.marinaId, actor.marinaId)))
+    .limit(1);
+  if (!item) throw new DomainError("Voce non trovata.");
+  const c = await loadContract(tx, actor.marinaId, item.contractId);
+  if (c.status !== "bozza" && c.status !== "attivo") throw new DomainError("Il contratto è chiuso: non si possono togliere voci.");
+  if (item.chargeId) {
+    const [paid] = await tx.select({ id: payments.id }).from(payments).where(eq(payments.chargeId, item.chargeId)).limit(1);
+    if (paid) throw new DomainError("La voce è già stata incassata: elimina prima l'incasso dalla contabilità.");
+    await tx.update(charges).set({ cancelledAt: new Date() }).where(and(eq(charges.id, item.chargeId), eq(charges.marinaId, actor.marinaId)));
+  }
+  await tx.delete(contractItems).where(eq(contractItems.id, item.id));
+  return { contractId: c.id, title: itemTitle(item) };
 }
 
 // Annulla il contratto e gli addebiti non ancora incassati. Gli addebiti con incassi restano.

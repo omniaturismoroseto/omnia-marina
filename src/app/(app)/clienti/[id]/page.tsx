@@ -211,7 +211,12 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
                         <Link href={`/contratti/${c.id}`} className="link">
                           {c.number}
                         </Link>
-                        <span className="block text-xs text-muted">{CONTRACT_TYPE_LABEL[c.type]}</span>
+                        <span className="block text-xs text-muted">
+                          {CONTRACT_TYPE_LABEL[c.type]} ·{" "}
+                          <Link href={`/contratti/${c.id}/stampa`} className="link">
+                            stampa
+                          </Link>
+                        </span>
                       </td>
                       <td>
                         {c.boatName}

@@ -28,7 +28,7 @@ export default page(async function NewContractPage({ searchParams }: { searchPar
       .from(boats)
       .where(eq(boats.marinaId, ctx.marinaId))
       .orderBy(asc(boats.name)),
-    db.select({ vat: marinas.defaultVatRate }).from(marinas).where(eq(marinas.id, ctx.marinaId)),
+    db.select({ vat: marinas.defaultVatRate, serviceFee: marinas.serviceFeeCents, wasteFee: marinas.wasteFeeCents }).from(marinas).where(eq(marinas.id, ctx.marinaId)),
   ]);
 
   // Il modulo può arrivare già compilato dalla mappa (posto, data), dalla scheda cliente o dalla scheda barca.
@@ -56,6 +56,7 @@ export default page(async function NewContractPage({ searchParams }: { searchPar
           boats={boatList.map((b) => ({ id: b.id, ownerId: b.ownerId, name: b.name, size: formatDimensions(b.lengthCm, b.beamCm) }))}
           today={today}
           defaultVatRate={marina.vat}
+          fees={{ gestione: marina.serviceFee, rifiuti: marina.wasteFee }}
           initial={{
             ownerId: ownerList.some((o) => o.id === ownerId) ? ownerId : "",
             boatId: boat?.id ?? (ownerBoats.length === 1 ? ownerBoats[0].id : ""),

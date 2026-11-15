@@ -28,7 +28,12 @@ export default page(async function SettingsPage() {
               I testi precompilati sono modelli di partenza: falli verificare dal tuo consulente legale o privacy prima di usarli con i clienti.
             </Notice>
           </div>
-          <LegalTextsForm version={marina.privacyPolicyVersion} privacyText={marina.privacyPolicyText ?? ""} contractTerms={marina.contractTerms ?? ""} />
+          <LegalTextsForm
+            version={marina.privacyPolicyVersion}
+            privacyText={marina.privacyPolicyText ?? ""}
+            contractTerms={marina.contractTerms ?? ""}
+            contractApprovalText={marina.contractApprovalText ?? ""}
+          />
         </Card>
       </div>
     </>

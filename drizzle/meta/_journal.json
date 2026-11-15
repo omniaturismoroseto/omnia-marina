@@ -33,8 +33,15 @@
     {
       "idx": 4,
       "version": "7",
-      "when": 1794765100745,
-      "tag": "0004_importa_prima_nota",
+      "when": 1794764370204,
+      "tag": "0004_contratto_completo",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794765829511,
+      "tag": "0005_importa_prima_nota",
       "breakpoints": true
     }
   ]

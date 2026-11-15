@@ -7,6 +7,7 @@ import { addDays, addMonths, formatDate, isValidISODate } from "@/lib/dates";
 import { formatMoney, moneyInput, parseMoney } from "@/lib/format";
 import { splitInstalments } from "@/lib/pricing";
 import { loadContractOptions, saveContract, type ContractOptions } from "@/server/contract-actions";
+import { ContractExtras, feeInput } from "./contract-extras";
 
 type ContractType = "annuale" | "stagionale" | "mensile" | "transito";
 
@@ -29,12 +30,15 @@ export function ContractForm({
   boats,
   today,
   defaultVatRate,
+  fees,
   initial,
 }: {
   owners: { id: string; name: string }[];
   boats: { id: string; ownerId: string; name: string; size: string }[];
   today: string;
   defaultVatRate: number;
+  // Spese di gestione e quota rifiuti predefinite del porto, proposte nei contratti annuali.
+  fees: { gestione: number | null; rifiuti: number | null };
   initial: { ownerId: string; boatId: string; berthId: string; startDate: string; type: ContractType };
 }) {
   const [ownerId, setOwnerId] = useState(initial.ownerId);
@@ -49,6 +53,11 @@ export function ContractForm({
   const [everyMonths, setEveryMonths] = useState(1);
   const [firstDue, setFirstDue] = useState(initial.startDate);
   const [firstDueEdited, setFirstDueEdited] = useState(false);
+  const annualFees = (t: ContractType) => (t === "annuale" ? { gestione: feeInput(fees.gestione), rifiuti: feeInput(fees.rifiuti) } : { gestione: "", rifiuti: "" });
+  const [gestione, setGestione] = useState(() => annualFees(initial.type).gestione);
+  const [rifiuti, setRifiuti] = useState(() => annualFees(initial.type).rifiuti);
+  const [feesEdited, setFeesEdited] = useState(false);
+  const [spacesCents, setSpacesCents] = useState(0);
   // Ultima risposta del server, con la richiesta a cui si riferisce.
   const [result, setResult] = useState<{ request: object; options: ContractOptions } | null>(null);
   // Serve dentro la risposta asincrona: un importo scritto a mano non va sovrascritto dal listino.
@@ -96,6 +105,11 @@ export function ContractForm({
 
   function changeType(next: ContractType) {
     setType(next);
+    if (!feesEdited) {
+      const proposed = annualFees(next);
+      setGestione(proposed.gestione);
+      setRifiuti(proposed.rifiuti);
+    }
     if (isValidISODate(startDate)) setEndDate(suggestedEnd(next, startDate));
     markAmountEdited(false);
   }
@@ -110,6 +124,7 @@ export function ContractForm({
   }
 
   const amountCents = parseMoney(amount);
+  const extrasCents = spacesCents + (parseMoney(gestione) ?? 0) + (parseMoney(rifiuti) ?? 0);
   const plan = amountCents && amountCents > 0 && isValidISODate(firstDue) ? splitInstalments(amountCents, instalments, firstDue, everyMonths) : [];
   const availableBerths = options?.berths.filter((b) => b.available) ?? [];
   const unavailableBerths = options?.berths.filter((b) => !b.available) ?? [];
@@ -206,7 +221,7 @@ export function ContractForm({
           <div className="clear-both grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field
               name="amount"
-              label="Importo totale (IVA inclusa)"
+              label="Canone posto barca (IVA inclusa)"
               value={amount}
               onChange={(e) => {
                 setAmount(e.target.value);
@@ -264,6 +279,28 @@ export function ContractForm({
             </ul>
           )}
         </fieldset>
+
+        <ContractExtras
+          startDate={startDate}
+          endDate={endDate}
+          gestione={gestione}
+          rifiuti={rifiuti}
+          onGestione={(v) => {
+            setGestione(v);
+            setFeesEdited(true);
+          }}
+          onRifiuti={(v) => {
+            setRifiuti(v);
+            setFeesEdited(true);
+          }}
+          onSpacesTotal={setSpacesCents}
+        />
+        {extrasCents > 0 && (
+          <p className="-mt-2 text-sm text-muted">
+            Totale del contratto: <strong className="text-ink tabular-nums">{formatMoney((amountCents ?? 0) + extrasCents)}</strong> (posto barca{" "}
+            {formatMoney(amountCents ?? 0)} + altre voci {formatMoney(extrasCents)}).
+          </p>
+        )}
 
         <fieldset className="card p-4">
           <legend className="float-left mb-3 w-full text-[15px] font-semibold text-ink">Note</legend>
