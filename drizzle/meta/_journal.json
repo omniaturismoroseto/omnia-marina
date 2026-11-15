@@ -43,6 +43,13 @@
       "when": 1794765829511,
       "tag": "0005_importa_prima_nota",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794766075551,
+      "tag": "0006_zone_tariffarie",
+      "breakpoints": true
     }
   ]
 }

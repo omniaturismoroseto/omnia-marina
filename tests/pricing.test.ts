@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryForBoat, occupiedUntil, quoteStay, seasonForDate, splitInstalments, type RateRow, type SeasonPeriod } from "../src/lib/pricing";
+import { categoryForBoat, occupiedUntil, quoteStay, seasonForDate, splitInstalments, zoneRate, type RateRow, type SeasonPeriod } from "../src/lib/pricing";
 import { addMonths, diffDays } from "../src/lib/dates";
 import { parseMeters, parseMoney, splitVat } from "../src/lib/format";
 
@@ -17,6 +17,8 @@ const rate: RateRow = {
   monthlyMid: 60000,
   monthlyHigh: 90000,
   annual: 350000,
+  seasonal: 0,
+  waste: 0,
 };
 
 describe("stagioni", () => {
@@ -69,9 +71,52 @@ describe("preventivo", () => {
     expect(q.totalCents).toBe(350000);
   });
 
+  it("la quota rifiuti non entra nel canone: è una voce a parte del contratto", () => {
+    const q = quoteStay({ type: "annuale", startDate: "2026-01-01", endDate: "2026-12-31", rate: { ...rate, waste: 4000 }, periods });
+    expect(q.lines.map((l) => l.label)).toEqual(["Canone annuale"]);
+    expect(q.totalCents).toBe(350000);
+  });
+
+  it("stagionale con canone fisso: il canone, qualunque sia il periodo", () => {
+    const q = quoteStay({ type: "stagionale", startDate: "2026-05-01", endDate: "2026-09-30", rate: { ...rate, seasonal: 90000 }, periods });
+    expect(q.lines).toEqual([{ label: "Canone stagionale", quantity: 1, unitCents: 90000, amountCents: 90000 }]);
+  });
+
   it("il totale è sempre la somma delle righe", () => {
     const q = quoteStay({ type: "mensile", startDate: "2026-01-31", endDate: "2026-04-15", rate, periods });
     expect(q.totalCents).toBe(q.lines.reduce((s, l) => s + l.amountCents, 0));
+  });
+});
+
+describe("zone tariffarie", () => {
+  const zero = { dailyLow: 0, dailyMid: 0, dailyHigh: 0, monthlyLow: 0, monthlyMid: 0, monthlyHigh: 0, annual: 0, seasonal: 0, waste: 0 };
+  const base = { ...rate, waste: 4000, zoneId: null };
+  // Come a Portorose: nella darsena C il canone annuale costa di più, transiti e mensili restano quelli base.
+  const darsenaC = { ...zero, annual: 171000, zoneId: "zona-c" };
+
+  it("senza zona vale la tariffa base", () => {
+    expect(zoneRate([base, darsenaC], null)).toEqual({ ...rate, waste: 4000 });
+  });
+
+  it("nella zona gli importi compilati sostituiscono quelli base, gli altri restano", () => {
+    const r = zoneRate([base, darsenaC], "zona-c")!;
+    expect(r.annual).toBe(171000);
+    expect(r.dailyHigh).toBe(rate.dailyHigh);
+    expect(r.waste).toBe(4000);
+    expect(quoteStay({ type: "annuale", startDate: "2026-01-01", endDate: "2026-12-31", rate: r, periods }).totalCents).toBe(171000);
+  });
+
+  it("una zona senza righe proprie usa la tariffa base", () => {
+    expect(zoneRate([base], "zona-c")?.annual).toBe(rate.annual);
+  });
+
+  it("solo la riga di zona: le caselle vuote restano a zero", () => {
+    expect(zoneRate([darsenaC], "zona-c")?.dailyLow).toBe(0);
+  });
+
+  it("nessuna riga: nessuna tariffa", () => {
+    expect(zoneRate([], "zona-c")).toBeNull();
+    expect(zoneRate([darsenaC], null)).toBeNull();
   });
 });
 

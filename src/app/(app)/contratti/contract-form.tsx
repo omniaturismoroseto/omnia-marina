@@ -57,6 +57,8 @@ export function ContractForm({
   const [gestione, setGestione] = useState(() => annualFees(initial.type).gestione);
   const [rifiuti, setRifiuti] = useState(() => annualFees(initial.type).rifiuti);
   const [feesEdited, setFeesEdited] = useState(false);
+  // Come per l'importo: una quota rifiuti scritta a mano non va sovrascritta da quella del listino.
+  const feesEditedRef = useRef(false);
   const [spacesCents, setSpacesCents] = useState(0);
   // Ultima risposta del server, con la richiesta a cui si riferisce.
   const [result, setResult] = useState<{ request: object; options: ContractOptions } | null>(null);
@@ -82,6 +84,8 @@ export function ContractForm({
         if (superseded) return; // risposta superata da una richiesta più recente
         setResult({ request, options: next });
         if (!amountEditedRef.current && next.quote) setAmount(moneyInput(next.quote.totalCents));
+        // La quota rifiuti del listino (per categoria e zona) prende il posto di quella generale del porto.
+        if (!feesEditedRef.current && next.quote?.wasteCents) setRifiuti(moneyInput(next.quote.wasteCents));
         if (request.berthId && !next.berths.some((b) => b.id === request.berthId && b.available)) setBerthId("");
       })
       .catch(() => {
@@ -288,10 +292,12 @@ export function ContractForm({
           onGestione={(v) => {
             setGestione(v);
             setFeesEdited(true);
+            feesEditedRef.current = true;
           }}
           onRifiuti={(v) => {
             setRifiuti(v);
             setFeesEdited(true);
+            feesEditedRef.current = true;
           }}
           onSpacesTotal={setSpacesCents}
         />
@@ -332,6 +338,7 @@ export function ContractForm({
           <>
             <p className="mt-1 text-xs text-muted">
               {options.quote.listName} · categoria {options.quote.categoryName}
+              {options.quote.zoneName ? ` · ${options.quote.zoneName}` : ""}
             </p>
             <table className="mt-3 w-full text-sm">
               <tbody>
@@ -352,6 +359,9 @@ export function ContractForm({
                 </tr>
               </tfoot>
             </table>
+            {options.quote.wasteCents > 0 && (
+              <p className="mt-2 text-xs text-muted">Quota rifiuti da listino: {formatMoney(options.quote.wasteCents)}, proposta tra le altre voci del contratto.</p>
+            )}
             {options.quoteNote && <p className="mt-2 rounded-md bg-warn-soft px-2 py-1.5 text-xs text-warn">{options.quoteNote}</p>}
             {amountEdited && amountCents !== options.quote.totalCents && (
               <button

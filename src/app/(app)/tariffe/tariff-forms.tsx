@@ -5,7 +5,18 @@ import { ActionButton, Field, Form, FormMessage, SelectField, Submit } from "@/c
 import { addDays, formatDate, isValidISODate } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import type { Quote } from "@/lib/pricing";
-import { addSeasonPeriod, deletePriceList, deleteSeasonPeriod, duplicatePriceList, savePriceList, saveRates, simulateQuote } from "@/server/tariff-actions";
+import {
+  addSeasonPeriod,
+  deletePriceList,
+  deleteSeasonPeriod,
+  deleteTariffZone,
+  duplicatePriceList,
+  savePierZones,
+  savePriceList,
+  saveRates,
+  saveTariffZone,
+  simulateQuote,
+} from "@/server/tariff-actions";
 
 const VAT_OPTIONS = [22, 10, 5, 4, 0].map((r) => ({ value: String(r), label: `${r}%` }));
 
@@ -48,20 +59,29 @@ const COLUMNS = [
   ["monthlyMid", "Mese", "media"],
   ["monthlyHigh", "Mese", "alta"],
   ["annual", "Anno", ""],
+  ["seasonal", "Stagionale", ""],
+  ["waste", "Rifiuti", ""],
 ] as const;
+
+type RateKey = (typeof COLUMNS)[number][0];
 
 export interface RateGridRow {
   categoryId: string;
   categoryName: string;
   size: string;
-  values: Record<(typeof COLUMNS)[number][0], string>;
+  values: Record<RateKey, string>;
+  /** Solo nelle zone: gli importi della tariffa base, mostrati nelle caselle vuote. */
+  fallback?: Record<RateKey, string>;
 }
 
-// Griglia tariffe: una riga per categoria, una colonna per periodo e stagione.
-export function RatesGrid({ listId, rows, editable }: { listId: string; rows: RateGridRow[]; editable: boolean }) {
+// In sola lettura l'importo si mostra con il separatore delle migliaia (1.900,00).
+const readable = (v: string) => v.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
+// Griglia tariffe di una zona (o della tariffa base): una riga per categoria, una colonna per periodo e stagione.
+export function RatesGrid({ listId, zoneId, rows, editable }: { listId: string; zoneId: string; rows: RateGridRow[]; editable: boolean }) {
   const table = (
     <div className="overflow-x-auto">
-      <table className="tbl min-w-[760px]">
+      <table className="tbl min-w-[920px]">
         <thead>
           <tr>
             <th rowSpan={2}>Categoria</th>
@@ -73,6 +93,14 @@ export function RatesGrid({ listId, rows, editable }: { listId: string; rows: Ra
             </th>
             <th rowSpan={2} className="num border-l border-line">
               Annuale
+            </th>
+            <th rowSpan={2} className="num border-l border-line">
+              Stagionale
+              <span className="block text-[11px] font-normal normal-case text-muted">canone fisso</span>
+            </th>
+            <th rowSpan={2} className="num border-l border-line">
+              Rifiuti
+              <span className="block text-[11px] font-normal normal-case text-muted">voce degli annuali</span>
             </th>
           </tr>
           <tr>
@@ -91,18 +119,24 @@ export function RatesGrid({ listId, rows, editable }: { listId: string; rows: Ra
                 <span className="block text-xs font-normal text-muted">{row.size}</span>
               </th>
               {COLUMNS.map(([key, period, season]) => (
-                <td key={key} className="num">
+                <td key={key} className={editable ? "num px-1! py-1.5!" : "num"}>
                   {editable ? (
                     <input
                       name={`${row.categoryId}:${key}`}
                       defaultValue={row.values[key]}
+                      placeholder={row.fallback?.[key] || undefined}
                       inputMode="decimal"
                       aria-label={`${row.categoryName}, ${period.toLowerCase()} ${season}`.trim()}
-                      className="input ml-auto w-24 px-2 py-1 text-right tabular-nums"
+                      className="input ml-auto w-[5.25rem] px-2 py-1 text-right tabular-nums placeholder:text-faint"
                     />
+                  ) : row.values[key] ? (
+                    readable(row.values[key])
+                  ) : row.fallback?.[key] ? (
+                    <span className="text-faint" title="Come la tariffa base">
+                      {readable(row.fallback[key])}
+                    </span>
                   ) : (
-                    // In sola lettura l'importo si mostra con il separatore delle migliaia (1.900,00).
-                    row.values[key].replace(/\B(?=(\d{3})+(?!\d))/g, ".") || "—"
+                    "—"
                   )}
                 </td>
               ))}
@@ -117,11 +151,75 @@ export function RatesGrid({ listId, rows, editable }: { listId: string; rows: Ra
   return (
     <Form action={saveRates}>
       <input type="hidden" name="listId" value={listId} />
+      <input type="hidden" name="zoneId" value={zoneId} />
       {table}
-      <div className="flex items-center gap-3 border-t border-line-soft p-4">
+      <div className="flex flex-wrap items-center gap-3 border-t border-line-soft p-4">
         <Submit>Salva tariffe</Submit>
         <FormMessage />
-        <span className="text-sm text-muted">Importi in euro, IVA inclusa.</span>
+        <span className="text-sm text-muted">
+          Importi in euro, IVA inclusa.{zoneId ? " Le caselle vuote usano la tariffa base, mostrata in grigio." : ""}
+        </span>
+      </div>
+    </Form>
+  );
+}
+
+// ───────────────────────── Zone tariffarie ─────────────────────────
+
+export function ZoneForm({ zone }: { zone?: { id: string; name: string } }) {
+  return (
+    <Form action={saveTariffZone} resetOnSuccess={!zone} className="flex flex-wrap items-end gap-3">
+      {zone && <input type="hidden" name="id" value={zone.id} />}
+      <Field name="name" label={zone ? "Nome" : "Nuova zona"} defaultValue={zone?.name} placeholder={zone ? undefined : "es. Darsena C"} required wrapperClassName="min-w-48 flex-1" />
+      <Submit variant="secondary" size="sm">
+        {zone ? "Rinomina" : "Crea zona"}
+      </Submit>
+      <div className="basis-full">
+        <FormMessage />
+      </div>
+    </Form>
+  );
+}
+
+export function DeleteZoneButton({ zoneId, name }: { zoneId: string; name: string }) {
+  return (
+    <ActionButton
+      action={deleteTariffZone}
+      fields={{ zoneId }}
+      size="sm"
+      variant="danger"
+      confirm={`Eliminare la zona «${name}»? I suoi pontili torneranno alla tariffa base e i prezzi della zona verranno cancellati da tutti i listini. I contratti già creati non cambiano.`}
+    >
+      Elimina
+    </ActionButton>
+  );
+}
+
+export function PierZonesForm({ piers, zones }: { piers: { id: string; name: string; zoneId: string | null }[]; zones: { id: string; name: string }[] }) {
+  const options = [{ value: "", label: "Tariffa base" }, ...zones.map((z) => ({ value: z.id, label: z.name }))];
+  return (
+    <Form action={savePierZones}>
+      <ul className="divide-y divide-line-soft">
+        {piers.map((p) => (
+          <li key={p.id} className="flex items-center justify-between gap-3 py-2">
+            <label htmlFor={`zone-${p.id}`} className="text-sm font-medium text-ink">
+              {p.name}
+            </label>
+            <select id={`zone-${p.id}`} name={`pier:${p.id}`} defaultValue={p.zoneId ?? ""} className="input w-auto min-w-44">
+              {options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex items-center gap-3">
+        <Submit variant="secondary" size="sm">
+          Salva zone dei pontili
+        </Submit>
+        <FormMessage />
       </div>
     </Form>
   );
@@ -160,18 +258,29 @@ export function DeletePeriodButton({ periodId }: { periodId: string }) {
   );
 }
 
-export function Simulator({ listId, categories, today }: { listId: string; categories: { id: string; name: string }[]; today: string }) {
+export function Simulator({
+  listId,
+  categories,
+  zones,
+  today,
+}: {
+  listId: string;
+  categories: { id: string; name: string }[];
+  zones: { id: string; name: string }[];
+  today: string;
+}) {
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
+  const [zoneId, setZoneId] = useState("");
   const [type, setType] = useState("transito");
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(addDays(today, 3));
-  const [quote, setQuote] = useState<Quote | null | "none">(null);
+  const [quote, setQuote] = useState<(Quote & { wasteCents: number }) | null | "none">(null);
   const [pending, startTransition] = useTransition();
   const valid = categoryId && isValidISODate(startDate) && isValidISODate(endDate) && endDate >= startDate;
 
   function calculate() {
     startTransition(async () => {
-      const result = await simulateQuote({ listId, categoryId, type, startDate, endDate });
+      const result = await simulateQuote({ listId, categoryId, zoneId, type, startDate, endDate });
       setQuote(result ?? "none");
     });
   }
@@ -191,6 +300,21 @@ export function Simulator({ listId, categories, today }: { listId: string; categ
             ))}
           </select>
         </div>
+        {zones.length > 0 && (
+          <div className="sm:col-span-2">
+            <label className="label" htmlFor="sim-zone">
+              Zona
+            </label>
+            <select id="sim-zone" className="input" value={zoneId} onChange={(e) => setZoneId(e.target.value)}>
+              <option value="">Tariffa base</option>
+              {zones.map((z) => (
+                <option key={z.id} value={z.id}>
+                  {z.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div>
           <label className="label" htmlFor="sim-type">
             Tipo
@@ -238,6 +362,7 @@ export function Simulator({ listId, categories, today }: { listId: string; categ
               </span>
               <span className="tabular-nums">{formatMoney(quote.totalCents)}</span>
             </p>
+            {quote.wasteCents > 0 && <p className="mt-1 text-xs text-muted">Più la quota rifiuti di {formatMoney(quote.wasteCents)}, voce a parte del contratto.</p>}
           </div>
         )}
       </div>

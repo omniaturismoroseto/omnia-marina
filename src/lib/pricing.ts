@@ -17,6 +17,26 @@ export interface RateRow {
   monthlyMid: number;
   monthlyHigh: number;
   annual: number;
+  /** Canone fisso dei contratti stagionali; 0 = si calcola dalle tariffe mensili. */
+  seasonal: number;
+  /** Quota rifiuti proposta nei contratti annuali come voce a parte (non entra nel canone). */
+  waste: number;
+}
+
+export const RATE_FIELDS = ["dailyLow", "dailyMid", "dailyHigh", "monthlyLow", "monthlyMid", "monthlyHigh", "annual", "seasonal", "waste"] as const;
+
+/**
+ * Tariffa di una categoria in una zona: ogni importo della zona, se compilato, prende il posto di quello della tariffa base.
+ * Così una zona può ritoccare solo gli annuali e continuare a usare i prezzi base per transiti e mensili.
+ * Restituisce null se non c'è nessuna delle due righe.
+ */
+export function zoneRate<T extends RateRow & { zoneId: string | null }>(rows: T[], zoneId: string | null): RateRow | null {
+  const base = rows.find((r) => r.zoneId === null) ?? null;
+  const zone = zoneId ? (rows.find((r) => r.zoneId === zoneId) ?? null) : null;
+  if (!base && !zone) return null;
+  const merged = {} as RateRow;
+  for (const field of RATE_FIELDS) merged[field] = zone?.[field] || base?.[field] || 0;
+  return merged;
 }
 
 export interface QuoteLine {
@@ -86,9 +106,11 @@ function countDays(periods: SeasonPeriod[], from: string, untilExclusive: string
 /**
  * Calcola l'importo di listino (IVA inclusa) per un periodo di ormeggio.
  * - transito: tariffa giornaliera per ogni notte, secondo la stagione di ciascun giorno;
- * - mensile e stagionale: tariffa mensile per ogni mese intero (stagione del primo giorno del mese),
- *   più tariffa giornaliera per i giorni che avanzano;
+ * - stagionale con canone fisso: il canone, qualunque sia il periodo;
+ * - mensile e stagionale senza canone fisso: tariffa mensile per ogni mese intero (stagione del primo giorno
+ *   del mese), più tariffa giornaliera per i giorni che avanzano;
  * - annuale: canone annuale fisso.
+ * La quota rifiuti del listino non entra nel canone: il contratto la propone come voce a parte.
  */
 export function quoteStay(input: {
   type: StayType;
@@ -103,6 +125,8 @@ export function quoteStay(input: {
 
   if (type === "annuale") {
     lines = [{ label: "Canone annuale", quantity: 1, unitCents: rate.annual, amountCents: rate.annual }];
+  } else if (type === "stagionale" && rate.seasonal > 0) {
+    lines = [{ label: "Canone stagionale", quantity: 1, unitCents: rate.seasonal, amountCents: rate.seasonal }];
   } else if (type === "transito") {
     lines = linesBySeason(
       countDays(periods, startDate, until),

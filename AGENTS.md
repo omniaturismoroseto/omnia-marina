@@ -21,6 +21,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Importi in centesimi, misure in centimetri, date di calendario come stringhe `AAAA-MM-GG` (`src/lib/dates.ts`).
 - Nelle select Drizzle su una sola tabella le colonne interpolate in `sql` escono senza nome di tabella: nelle
   sottoquery correlate scrivere il riferimento esterno per esteso (es. `"owners"."id"`).
+- Tariffe: una riga di `rates` per listino × categoria × zona (`zone_id` vuoto = tariffa base, vincolo unico NULLS NOT DISTINCT);
+  la zona sta sul pontile (`piers.tariff_zone_id`) e `zoneRate` (`src/lib/pricing.ts`) unisce zona e base campo per campo. `rates.waste` non entra nel canone: precompila la voce «rifiuti» degli annuali.
 - Marchio: originali (a colori e in negativo per sfondi scuri) in `marchio/`; per l'interfaccia `src/components/brand.tsx` con le
   immagini di `src/assets/brand/` (già alla misura giusta, `unoptimized`); icone in `src/app` (favicon, icon, apple-icon) e `public/`.
 - Pianta dal vero: le coordinate dei posti (`berths.plan_x/plan_y/plan_angle`) sono in pixel della foto caricata;

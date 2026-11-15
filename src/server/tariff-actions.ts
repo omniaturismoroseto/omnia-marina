@@ -2,19 +2,19 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { berthCategories, priceLists, rates, seasonPeriods } from "@/db/schema";
+import { berthCategories, piers, priceLists, rates, seasonPeriods, tariffZones } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { addMonths, isValidISODate } from "@/lib/dates";
 import { parseMoney } from "@/lib/format";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
-import { quoteStay, type Quote } from "@/lib/pricing";
+import { RATE_FIELDS, quoteStay, zoneRate, type Quote } from "@/lib/pricing";
+import { toFormState } from "./errors";
 
 const ADMIN = ["admin" as const];
-const RATE_FIELDS = ["dailyLow", "dailyMid", "dailyHigh", "monthlyLow", "monthlyMid", "monthlyHigh", "annual"] as const;
 
 async function ownList(marinaId: string, listId: string) {
   const [list] = await db
@@ -23,6 +23,17 @@ async function ownList(marinaId: string, listId: string) {
     .where(and(eq(priceLists.id, listId), eq(priceLists.marinaId, marinaId)))
     .limit(1);
   return list ?? null;
+}
+
+// Zona del porto: gli identificativi arrivano dal browser e vanno verificati contro il porto della sessione.
+async function ownZone(marinaId: string, zoneId: string) {
+  if (!z.uuid().safeParse(zoneId).success) return null;
+  const [zone] = await db
+    .select()
+    .from(tariffZones)
+    .where(and(eq(tariffZones.id, zoneId), eq(tariffZones.marinaId, marinaId)))
+    .limit(1);
+  return zone ?? null;
 }
 
 const listSchema = z.object({
@@ -110,11 +121,15 @@ export async function deletePriceList(_prev: FormState, formData: FormData): Pro
   redirect("/tariffe");
 }
 
-// Salva l'intera griglia delle tariffe: un campo per ogni categoria e colonna, chiamato "categoria:colonna".
+// Salva l'intera griglia delle tariffe di una zona (o della tariffa base): un campo per ogni categoria e colonna,
+// chiamato "categoria:colonna". Nelle zone le caselle vuote valgono zero, cioè «come la tariffa base».
 export async function saveRates(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
   const list = await ownList(ctx.marinaId, String(formData.get("listId") ?? ""));
   if (!list) return fail("Listino non trovato.");
+  const zoneField = String(formData.get("zoneId") ?? "");
+  const zone = zoneField ? await ownZone(ctx.marinaId, zoneField) : null;
+  if (zoneField && !zone) return fail("Zona non trovata.");
   const categories = await db.select({ id: berthCategories.id }).from(berthCategories).where(eq(berthCategories.marinaId, ctx.marinaId));
 
   const errors: Record<string, string> = {};
@@ -127,19 +142,19 @@ export async function saveRates(_prev: FormState, formData: FormData): Promise<F
       if (cents === null || cents < 0) errors[key] = "Importo non valido";
       values[field] = cents ?? 0;
     }
-    return { marinaId: ctx.marinaId, priceListId: list.id, categoryId: cat.id, ...values };
+    return { marinaId: ctx.marinaId, priceListId: list.id, categoryId: cat.id, zoneId: zone?.id ?? null, ...values };
   });
   if (Object.keys(errors).length > 0) return fail("Alcuni importi non sono validi: usa il formato 1234,50.", errors);
 
   await db.transaction(async (tx) => {
     for (const row of rows) {
-      const { marinaId: _m, priceListId: _l, categoryId: _c, ...values } = row;
+      const { marinaId: _m, priceListId: _l, categoryId: _c, zoneId: _z, ...values } = row;
       await tx
         .insert(rates)
         .values(row)
-        .onConflictDoUpdate({ target: [rates.priceListId, rates.categoryId], set: values });
+        .onConflictDoUpdate({ target: [rates.priceListId, rates.categoryId, rates.zoneId], set: values });
     }
-    await audit(ctx, "modifica", "tariffe", list.id, list.name, tx);
+    await audit(ctx, "modifica", "tariffe", list.id, zone ? `${list.name} · ${zone.name}` : list.name, tx);
   });
   revalidatePath("/", "layout");
   return { ok: true, message: "Tariffe salvate." };
@@ -177,8 +192,15 @@ export async function deleteSeasonPeriod(_prev: FormState, formData: FormData): 
   return { ok: true };
 }
 
-// Simulatore: quanto costa un periodo per una categoria, secondo il listino scelto.
-export async function simulateQuote(input: { listId: string; categoryId: string; type: string; startDate: string; endDate: string }): Promise<Quote | null> {
+// Simulatore: quanto costa un periodo per una categoria in una zona (vuota = tariffa base), secondo il listino scelto.
+export async function simulateQuote(input: {
+  listId: string;
+  categoryId: string;
+  zoneId: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+}): Promise<(Quote & { wasteCents: number }) | null> {
   const ctx = await requireMarina(OFFICE);
   const types = ["annuale", "stagionale", "mensile", "transito"] as const;
   if (!types.includes(input.type as (typeof types)[number])) return null;
@@ -187,14 +209,107 @@ export async function simulateQuote(input: { listId: string; categoryId: string;
 
   const list = await ownList(ctx.marinaId, input.listId);
   if (!list) return null;
-  const [[rate], periods] = await Promise.all([
+  const zone = input.zoneId ? await ownZone(ctx.marinaId, input.zoneId) : null;
+  if (input.zoneId && !zone) return null;
+  const [rateRows, periods] = await Promise.all([
     db
       .select()
       .from(rates)
-      .where(and(eq(rates.priceListId, list.id), eq(rates.categoryId, input.categoryId), eq(rates.marinaId, ctx.marinaId)))
-      .limit(1),
+      .where(
+        and(
+          eq(rates.priceListId, list.id),
+          eq(rates.categoryId, input.categoryId),
+          eq(rates.marinaId, ctx.marinaId),
+          zone ? or(isNull(rates.zoneId), eq(rates.zoneId, zone.id)) : isNull(rates.zoneId),
+        ),
+      ),
     db.select().from(seasonPeriods).where(eq(seasonPeriods.priceListId, list.id)),
   ]);
+  const rate = zoneRate(rateRows, zone?.id ?? null);
   if (!rate) return null;
-  return quoteStay({ type: input.type as (typeof types)[number], startDate: input.startDate, endDate: input.endDate, rate, periods });
+  const type = input.type as (typeof types)[number];
+  return { ...quoteStay({ type, startDate: input.startDate, endDate: input.endDate, rate, periods }), wasteCents: type === "annuale" ? rate.waste : 0 };
+}
+
+// ───────────────────────── Zone tariffarie ─────────────────────────
+
+const zoneSchema = z.object({
+  id: f.optId(),
+  name: f.text("Dai un nome alla zona"),
+});
+
+export async function saveTariffZone(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = parseForm(zoneSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const { id, name } = parsed.data;
+  const existing = await db.select({ id: tariffZones.id, name: tariffZones.name }).from(tariffZones).where(eq(tariffZones.marinaId, ctx.marinaId));
+  if (existing.some((z) => z.id !== id && z.name.toLowerCase() === name.toLowerCase())) {
+    return fail("Controlla i campi evidenziati.", { name: "Esiste già una zona con questo nome." });
+  }
+  try {
+    if (id) {
+      const updated = await db
+        .update(tariffZones)
+        .set({ name })
+        .where(and(eq(tariffZones.id, id), eq(tariffZones.marinaId, ctx.marinaId)))
+        .returning({ id: tariffZones.id });
+      if (updated.length === 0) return fail("Zona non trovata.");
+      await audit(ctx, "modifica", "zona tariffaria", id, name);
+    } else {
+      const [created] = await db
+        .insert(tariffZones)
+        .values({ marinaId: ctx.marinaId, name, sortOrder: existing.length })
+        .returning({ id: tariffZones.id });
+      await audit(ctx, "creazione", "zona tariffaria", created.id, name);
+    }
+  } catch (error) {
+    return toFormState(error);
+  }
+  revalidatePath("/", "layout");
+  return { ok: true, message: id ? "Salvato." : "Zona creata: ora assegnale i pontili e compila i suoi prezzi." };
+}
+
+export async function deleteTariffZone(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const zoneId = String(formData.get("zoneId") ?? "");
+  const zone = await ownZone(ctx.marinaId, zoneId);
+  if (!zone) return fail("Zona non trovata.");
+  // I pontili tornano alla tariffa base (vincolo «set null»), i prezzi della zona si cancellano con lei.
+  await db.delete(tariffZones).where(and(eq(tariffZones.id, zone.id), eq(tariffZones.marinaId, ctx.marinaId)));
+  await audit(ctx, "eliminazione", "zona tariffaria", zone.id, zone.name);
+  revalidatePath("/", "layout");
+  redirect("/tariffe");
+}
+
+// Assegna in un colpo solo la zona di ogni pontile: un campo "pier:<id>" con l'id della zona, vuoto per la tariffa base.
+export async function savePierZones(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const [pierRows, zoneRows] = await Promise.all([
+    db.select({ id: piers.id, name: piers.name, zoneId: piers.tariffZoneId }).from(piers).where(eq(piers.marinaId, ctx.marinaId)),
+    db.select({ id: tariffZones.id }).from(tariffZones).where(eq(tariffZones.marinaId, ctx.marinaId)),
+  ]);
+  const zoneIds = new Set(zoneRows.map((z) => z.id));
+  const changes = new Map<string | null, string[]>();
+  for (const pier of pierRows) {
+    const raw = formData.get(`pier:${pier.id}`);
+    if (raw === null) continue;
+    const zoneId = String(raw) || null;
+    if (zoneId && !zoneIds.has(zoneId)) return fail("Zona non valida.");
+    if (zoneId === pier.zoneId) continue;
+    changes.set(zoneId, [...(changes.get(zoneId) ?? []), pier.id]);
+  }
+  if (changes.size === 0) return { ok: true, message: "Nessuna modifica." };
+
+  await db.transaction(async (tx) => {
+    for (const [zoneId, pierIds] of changes) {
+      await tx
+        .update(piers)
+        .set({ tariffZoneId: zoneId })
+        .where(and(eq(piers.marinaId, ctx.marinaId), inArray(piers.id, pierIds)));
+    }
+    await audit(ctx, "modifica", "zona tariffaria", null, "Zone dei pontili", tx);
+  });
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Zone dei pontili salvate." };
 }

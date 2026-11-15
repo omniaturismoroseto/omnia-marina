@@ -3,28 +3,57 @@ import { asc, desc, eq } from "drizzle-orm";
 import { page } from "@/components/page";
 import { Badge, Card, EmptyState, FilterTabs, Notice, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { berthCategories, priceLists, rates, seasonPeriods } from "@/db/schema";
+import { berthCategories, piers, priceLists, rates, seasonPeriods, tariffZones } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, todayRome, yearOf } from "@/lib/dates";
 import { formatDimensions, moneyInput } from "@/lib/format";
 import { SEASON_LABEL } from "@/lib/labels";
+import { RATE_FIELDS } from "@/lib/pricing";
 import { uuidOrNull, type SearchParams } from "@/lib/params";
-import { DeletePeriodButton, ListActions, PriceListForm, RatesGrid, SeasonPeriodForm, Simulator, type RateGridRow } from "./tariff-forms";
+import {
+  DeletePeriodButton,
+  DeleteZoneButton,
+  ListActions,
+  PierZonesForm,
+  PriceListForm,
+  RatesGrid,
+  SeasonPeriodForm,
+  Simulator,
+  ZoneForm,
+  type RateGridRow,
+} from "./tariff-forms";
 
 export const metadata: Metadata = { title: "Tariffe" };
+
+// «i pontili A, B e D» oppure «nessun pontile».
+function listOrNone(names: string[]): string {
+  if (names.length === 0) return "nessun pontile";
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(", ")} e ${names[names.length - 1]}`;
+}
 
 export default page(async function TariffsPage({ searchParams }: { searchParams: SearchParams }) {
   const ctx = await requireMarina(OFFICE);
   const admin = ctx.role === "admin";
   const today = todayRome();
-  const selectedId = uuidOrNull((await searchParams).listino);
+  const params = await searchParams;
+  const selectedId = uuidOrNull(params.listino);
+  const selectedZoneId = uuidOrNull(params.zona);
 
-  const [lists, categories] = await Promise.all([
+  const [lists, categories, zones, pierRows] = await Promise.all([
     db.select().from(priceLists).where(eq(priceLists.marinaId, ctx.marinaId)).orderBy(desc(priceLists.validFrom)),
     db.select().from(berthCategories).where(eq(berthCategories.marinaId, ctx.marinaId)).orderBy(asc(berthCategories.sortOrder), asc(berthCategories.maxLengthCm)),
+    db.select().from(tariffZones).where(eq(tariffZones.marinaId, ctx.marinaId)).orderBy(asc(tariffZones.sortOrder), asc(tariffZones.name)),
+    db
+      .select({ id: piers.id, name: piers.name, zoneId: piers.tariffZoneId })
+      .from(piers)
+      .where(eq(piers.marinaId, ctx.marinaId))
+      .orderBy(asc(piers.sortOrder), asc(piers.code)),
   ]);
   // Senza scelta esplicita si apre il listino in vigore oggi, altrimenti il più recente.
   const list = lists.find((l) => l.id === selectedId) ?? lists.find((l) => l.validFrom <= today && today <= l.validTo) ?? lists[0];
+  const zone = zones.find((z) => z.id === selectedZoneId) ?? null;
+  const pierNames = (zoneId: string | null) => pierRows.filter((p) => p.zoneId === zoneId).map((p) => p.name);
 
   const [rateRows, periods] = list
     ? await Promise.all([
@@ -33,25 +62,21 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
       ])
     : [[], []];
 
+  const show = (cents: number | undefined) => (cents ? moneyInput(cents) : "");
+  const valuesOf = (r: (typeof rateRows)[number] | undefined) => Object.fromEntries(RATE_FIELDS.map((k) => [k, show(r?.[k])])) as RateGridRow["values"];
   const grid: RateGridRow[] = categories.map((c) => {
-    const r = rateRows.find((row) => row.categoryId === c.id);
-    const show = (cents: number | undefined) => (cents ? moneyInput(cents) : "");
+    const base = rateRows.find((row) => row.categoryId === c.id && row.zoneId === null);
+    const own = zone ? rateRows.find((row) => row.categoryId === c.id && row.zoneId === zone.id) : base;
     return {
       categoryId: c.id,
       categoryName: c.name,
       size: `fino a ${formatDimensions(c.maxLengthCm, c.maxBeamCm)}`,
-      values: {
-        dailyLow: show(r?.dailyLow),
-        dailyMid: show(r?.dailyMid),
-        dailyHigh: show(r?.dailyHigh),
-        monthlyLow: show(r?.monthlyLow),
-        monthlyMid: show(r?.monthlyMid),
-        monthlyHigh: show(r?.monthlyHigh),
-        annual: show(r?.annual),
-      },
+      values: valuesOf(own),
+      fallback: zone ? valuesOf(base) : undefined,
     };
   });
-  const empty = rateRows.every((r) => r.dailyLow + r.dailyMid + r.dailyHigh + r.monthlyLow + r.monthlyMid + r.monthlyHigh + r.annual === 0);
+  const empty = rateRows.filter((r) => r.zoneId === null).every((r) => RATE_FIELDS.every((k) => r[k] === 0));
+  const listHref = (zoneId: string | null) => `/tariffe?listino=${list?.id ?? ""}${zoneId ? `&zona=${zoneId}` : ""}`;
 
   return (
     <>
@@ -90,7 +115,24 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
             }
             flush
           >
-            {categories.length > 0 && <RatesGrid listId={list.id} rows={grid} editable={admin} />}
+            {categories.length > 0 && (
+              <>
+                {zones.length > 0 && (
+                  <div className="space-y-2 border-b border-line-soft p-4">
+                    <FilterTabs
+                      current={zone?.id ?? "base"}
+                      items={[{ value: "base", label: "Tariffa base", href: listHref(null) }, ...zones.map((z) => ({ value: z.id, label: z.name, href: listHref(z.id) }))]}
+                    />
+                    <p className="text-sm text-muted">
+                      {zone
+                        ? `Prezzi per ${listOrNone(pierNames(zone.id))}. Dove una casella è vuota vale la tariffa base.`
+                        : `Vale per ${listOrNone(pierNames(null))} e per le caselle lasciate vuote nelle zone.`}
+                    </p>
+                  </div>
+                )}
+                <RatesGrid key={`${list.id}:${zone?.id ?? ""}`} listId={list.id} zoneId={zone?.id ?? ""} rows={grid} editable={admin} />
+              </>
+            )}
           </Card>
 
           <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
@@ -120,7 +162,19 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
               )}
             </Card>
 
-            <Card title="Simulatore">{categories.length > 0 ? <Simulator key={list.id} listId={list.id} categories={categories.map((c) => ({ id: c.id, name: c.name }))} today={today} /> : <p className="text-sm text-muted">Servono le categorie.</p>}</Card>
+            <Card title="Simulatore">
+              {categories.length > 0 ? (
+                <Simulator
+                  key={list.id}
+                  listId={list.id}
+                  categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+                  zones={zones.map((z) => ({ id: z.id, name: z.name }))}
+                  today={today}
+                />
+              ) : (
+                <p className="text-sm text-muted">Servono le categorie.</p>
+              )}
+            </Card>
           </div>
 
           {admin && (
@@ -130,6 +184,56 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
           )}
         </div>
       )}
+
+      <div className="mt-5">
+        <Card title="Zone tariffarie">
+          <p className="mb-4 text-sm text-muted">
+            Una zona raggruppa i pontili che hanno prezzi diversi dal resto del porto, per esempio una darsena più cara. Ogni listino ha una griglia per
+            zona; i pontili senza zona usano la tariffa base.
+          </p>
+          {zones.length === 0 ? (
+            <p className="mb-4 text-sm text-muted">Nessuna zona: tutti i pontili usano la tariffa base.</p>
+          ) : admin ? (
+            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+              <section aria-label="Zone">
+                <h3 className="mb-2 text-sm font-semibold text-ink">Zone</h3>
+                <ul className="space-y-3">
+                  {zones.map((z) => (
+                    <li key={z.id} className="rounded-md border border-line-soft p-3">
+                      <ZoneForm zone={{ id: z.id, name: z.name }} />
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <span className="text-xs text-muted">{listOrNone(pierNames(z.id))}</span>
+                        <DeleteZoneButton zoneId={z.id} name={z.name} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              <section aria-label="Zona di ogni pontile">
+                <h3 className="mb-1 text-sm font-semibold text-ink">Zona di ogni pontile</h3>
+                {pierRows.length === 0 ? (
+                  <p className="text-sm text-muted">Non ci sono ancora pontili.</p>
+                ) : (
+                  <PierZonesForm piers={pierRows} zones={zones.map((z) => ({ id: z.id, name: z.name }))} />
+                )}
+              </section>
+            </div>
+          ) : (
+            <ul className="mb-2 space-y-1 text-sm">
+              {zones.map((z) => (
+                <li key={z.id}>
+                  <span className="font-medium text-ink">{z.name}</span>: <span className="text-muted">{listOrNone(pierNames(z.id))}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {admin && (
+            <div className={zones.length > 0 ? "mt-5 border-t border-line-soft pt-4" : ""}>
+              <ZoneForm />
+            </div>
+          )}
+        </Card>
+      </div>
 
       {admin && (
         <details className="card mt-5">
