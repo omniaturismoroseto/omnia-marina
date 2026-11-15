@@ -66,6 +66,12 @@ ${scale}`;
 
 export class PlanAnalysisError extends Error {}
 
+// Il motivo dato da Google, in breve: la pagina è riservata alla direzione, e così l'errore si capisce senza aprire i registri.
+function googleDetail(error: InstanceType<typeof Anthropic.APIError>): string {
+  const text = error.message.replace(/\s+/g, " ").trim();
+  return text ? ` Dettaglio di Google: ${text.slice(0, 220)}${text.length > 220 ? "…" : ""}` : "";
+}
+
 export function planAnalysisAvailable(): boolean {
   return Boolean(process.env.ANTHROPIC_VERTEX_PROJECT_ID || process.env.PLAN_ANALYSIS_FIXTURE);
 }
@@ -121,10 +127,18 @@ export async function analyzePlanPhoto(
     );
   } catch (error) {
     console.error("Analisi della foto non riuscita:", error);
-    if (error instanceof Anthropic.RateLimitError) throw new PlanAnalysisError("Il servizio di analisi è momentaneamente occupato: riprova tra un minuto.");
+    if (error instanceof Anthropic.RateLimitError) {
+      // Google risponde 429 sia per una quota del progetto esaurita (o mai assegnata) sia per capacità momentaneamente piena.
+      if (/quota/i.test(error.message)) {
+        throw new PlanAnalysisError(
+          `Google dice che la quota del progetto per Claude è esaurita o non ancora assegnata: va chiesto un aumento in Google Cloud → IAM e amministrazione → Quote (istruzioni in COME-LAVORIAMO.md).${googleDetail(error)}`,
+        );
+      }
+      throw new PlanAnalysisError(`Il servizio di analisi è momentaneamente occupato: riprova tra qualche minuto.${googleDetail(error)}`);
+    }
     if (error instanceof Anthropic.APIError && (error.status === 401 || error.status === 403 || error.status === 404)) {
       throw new PlanAnalysisError(
-        "Google ha rifiutato la richiesta: controlla che Claude sia abilitato in Vertex AI e che l'app abbia il permesso di usarlo (istruzioni in COME-LAVORIAMO.md).",
+        `Google ha rifiutato la richiesta: controlla che Claude sia abilitato in Vertex AI e che l'app abbia il permesso di usarlo (istruzioni in COME-LAVORIAMO.md).${googleDetail(error)}`,
       );
     }
     if (error instanceof Anthropic.APIConnectionTimeoutError) throw new PlanAnalysisError("L'analisi ha impiegato troppo tempo. Riprova.");

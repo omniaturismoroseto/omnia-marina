@@ -119,6 +119,10 @@ gcloud run services update omnia-marina --remove-env-vars ANTHROPIC_VERTEX_PROJE
 
 Se l'app dice che Google ha rifiutato la richiesta, quasi sempre manca il passo 2 o il passo 3.
 
+Se l'app dice che la **quota** è esaurita o non assegnata: nella console apri IAM e amministrazione → **Quote**, cerca
+«claude-opus-5-5», seleziona le righe della località `global` (richieste al minuto e token al minuto) e chiedi un
+aumento, per esempio 10 richieste e 100.000 token al minuto. Di solito Google risponde entro qualche giorno.
+
 ---
 
 ## Controllare

@@ -102,6 +102,21 @@ describe("analisi della foto con Claude su Vertex AI", () => {
     await expect(analyzePlanPhoto(photo, null, client())).rejects.toThrow(/abilitato in Vertex AI/);
   });
 
+  it("una quota esaurita su Google viene spiegata, con il motivo dato da Google", async () => {
+    reply = {
+      status: 429,
+      body: { error: { code: 429, status: "RESOURCE_EXHAUSTED", message: "Quota exceeded for aiplatform.googleapis.com/online_prediction_requests_per_base_model with base model: anthropic-claude-opus-5-5." } },
+    };
+    const call = analyzePlanPhoto(photo, null, client());
+    await expect(call).rejects.toThrow(PlanAnalysisError);
+    await expect(call).rejects.toThrow(/quota del progetto.*Dettaglio di Google: .*Quota exceeded/);
+  });
+
+  it("una capacità momentaneamente piena chiede di riprovare", async () => {
+    reply = { status: 429, body: { error: { code: 429, status: "RESOURCE_EXHAUSTED", message: "Resource exhausted. Please try again later." } } };
+    await expect(analyzePlanPhoto(photo, null, client())).rejects.toThrow(/momentaneamente occupato.*Resource exhausted/);
+  });
+
   it("una risposta che non rispetta lo schema non viene usata", async () => {
     reply = { status: 200, body: message("end_turn", JSON.stringify({ structures: [{ name: "x" }], notes: "" })) };
     await expect(analyzePlanPhoto(photo, null, client())).rejects.toThrow(/non è leggibile/);
