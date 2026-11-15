@@ -39,27 +39,28 @@ mandarli su `main`.
 
 ## Una volta sola
 
-### 1. Installa Google Cloud CLI
+Servono `git` e Google Cloud CLI (`gcloud`, l'equivalente di `firebase` per Google Cloud). Se `gcloud` mancasse:
+<https://cloud.google.com/sdk/docs/install>, installazione per Windows con le opzioni predefinite.
 
-È il programma `gcloud`, l'equivalente di `firebase` per Google Cloud. Scarica l'installazione per Windows da
-<https://cloud.google.com/sdk/docs/install> e lasciala con le opzioni predefinite. Alla fine chiudi e riapri
-PowerShell.
+### Scarica il progetto
 
-### 2. Accedi con il tuo account Google
+Il progetto sta nella cartella `App Porto` sul Desktop, nella sottocartella `omnia-marina`. Se lì c'è già una
+cartella `omnia-marina` estratta dallo zip, questo comando la rinomina in `omnia-marina-zip` (si può cancellare
+dopo) e scarica al suo posto quella collegata a GitHub:
+
+```powershell
+cd "C:\Users\roset\OneDrive\Desktop\App Porto"; if ((Test-Path omnia-marina) -and -not (Test-Path omnia-marina\.git)) { Rename-Item omnia-marina omnia-marina-zip }; git clone https://github.com/omniaturismoroseto/omnia-marina.git
+```
+
+Da qui in poi la cartella del progetto è `C:\Users\roset\OneDrive\Desktop\App Porto\omnia-marina`.
+
+### Accedi a Google, se `gcloud` lo chiede
 
 ```powershell
 gcloud auth login
 ```
 
 Si apre il browser: scegli lo stesso account con cui hai creato il progetto.
-
-### 3. Scarica il progetto
-
-```powershell
-cd "C:\Users\roset\Progetti"; git clone https://github.com/omniaturismoroseto/omnia-marina.git
-```
-
-Da qui in poi la cartella del progetto è `C:\Users\roset\Progetti\omnia-marina`.
 
 ---
 
@@ -68,7 +69,7 @@ Da qui in poi la cartella del progetto è `C:\Users\roset\Progetti\omnia-marina`
 Scarica le ultime modifiche e pubblica:
 
 ```powershell
-cd "C:\Users\roset\Progetti\omnia-marina"; git pull origin main; gcloud run deploy omnia-marina --source . --region europe-west1 --project omnia-marina --quiet
+cd "C:\Users\roset\OneDrive\Desktop\App Porto\omnia-marina"; git pull origin main; gcloud run deploy omnia-marina --source . --region europe-west1 --project omnia-marina --quiet
 ```
 
 Ci vogliono 5-10 minuti. Alla fine compare `Service URL: …`: la nuova versione è online.
@@ -109,6 +110,18 @@ git revert --no-edit <codice-del-commit>; git push origin main
 ```
 
 Poi il comando «Pubblicare».
+
+### `index.lock: File exists`, o file «in conflitto» creati da OneDrive
+
+La cartella sta dentro OneDrive, che a volte blocca o duplica i file di git mentre sincronizza. Aspetta che
+OneDrive abbia finito, controlla che non ci sia un altro git in corso, poi:
+
+```powershell
+Remove-Item "C:\Users\roset\OneDrive\Desktop\App Porto\omnia-marina\.git\index.lock" -Force
+```
+
+Se succede spesso, conviene spostare il progetto fuori da OneDrive (per esempio in `C:\Users\roset\Progetti`):
+è GitHub a conservare le copie, OneDrive non serve.
 
 ### PowerShell dice che l'esecuzione di script è disabilitata
 

@@ -25,7 +25,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   la geometria sta in `src/lib/plan.ts`, la foto nel database (`marina_plans`) ed è servita da `/pianta/immagine`.
 - Produzione: `output: "standalone"` + `Dockerfile` (Cloud Run). Le migrazioni si applicano all'avvio con
   `AUTO_MIGRATE=true`; ogni modifica allo schema richiede `pnpm db:generate` e la migrazione va committata.
-- Pubblicazione: `main` NON va online da solo. L'utente pubblica dal PC Windows (PowerShell) con
+- Pubblicazione: `main` NON va online da solo. L'utente pubblica dal PC Windows (PowerShell), dalla cartella
+  `C:\Users\roset\OneDrive\Desktop\App Porto\omnia-marina`, con
   `gcloud run deploy omnia-marina --source . --region europe-west1 --project omnia-marina` dopo un `git pull`;
   i comandi per l'utente stanno in `COME-LAVORIAMO.md`. Quando una modifica va online, ricordaglielo.
 - Prima di consegnare: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
