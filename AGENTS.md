@@ -21,6 +21,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Importi in centesimi, misure in centimetri, date di calendario come stringhe `AAAA-MM-GG` (`src/lib/dates.ts`).
 - Nelle select Drizzle su una sola tabella le colonne interpolate in `sql` escono senza nome di tabella: nelle
   sottoquery correlate scrivere il riferimento esterno per esteso (es. `"owners"."id"`).
+- Marchio: originali (a colori e in negativo per sfondi scuri) in `marchio/`; per l'interfaccia `src/components/brand.tsx` con le
+  immagini di `src/assets/brand/` (già alla misura giusta, `unoptimized`); icone in `src/app` (favicon, icon, apple-icon) e `public/`.
 - Pianta dal vero: le coordinate dei posti (`berths.plan_x/plan_y/plan_angle`) sono in pixel della foto caricata;
   la geometria sta in `src/lib/plan.ts`, la foto nel database (`marina_plans`) ed è servita da `/pianta/immagine`.
 - Riconoscimento automatico: `src/server/plan-ai.ts` chiama Claude (`claude-opus-5-5`) su Vertex AI con `AnthropicVertex`;

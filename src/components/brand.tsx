@@ -1,22 +1,38 @@
-// Marchio: rosa dei venti essenziale, con la punta del nord color boa.
-export function BrandMark({ size = 28, className }: { size?: number; className?: string }) {
+import Image from "next/image";
+import logo from "@/assets/brand/logo.png";
+import logoOnDark from "@/assets/brand/logo-on-dark.png";
+import mark from "@/assets/brand/mark.png";
+import markOnDark from "@/assets/brand/mark-on-dark.png";
+
+/*
+ * Marchio di Omnia Marina. Originali a piena risoluzione in /marchio.
+ * Sugli sfondi scuri si usa la versione in negativo (il blu scuro diventa bianco), altrimenti il simbolo sparirebbe.
+ * Le immagini sono già alla misura giusta: nessuna ottimizzazione al volo.
+ */
+
+/** Solo il simbolo (barche e onde nel cerchio). Decorativo: accanto c'è sempre un testo. */
+export function BrandMark({ size = 32, onDark = false, className }: { size?: number; onDark?: boolean; className?: string }) {
+  return <Image src={onDark ? markOnDark : mark} alt="" width={size} height={size} unoptimized className={className} />;
+}
+
+/** Simbolo e nome, in orizzontale: barra laterale e intestazioni. */
+export function Brand({ onDark = false, className }: { onDark?: boolean; className?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" className={className} aria-hidden="true">
-      <circle cx="16" cy="16" r="14.5" fill="none" stroke="currentColor" strokeOpacity="0.35" strokeWidth="1" />
-      <path d="M16 16 L13.2 13.2 L16 2.5 Z" fill="#d4502a" />
-      <path d="M16 16 L18.8 13.2 L16 2.5 Z" fill="#e8734f" />
-      <path d="M16 16 L18.8 18.8 L16 29.5 Z M16 16 L13.2 18.8 L16 29.5 Z" fill="currentColor" fillOpacity="0.85" />
-      <path d="M16 16 L18.8 13.2 L29.5 16 Z M16 16 L18.8 18.8 L29.5 16 Z" fill="currentColor" fillOpacity="0.6" />
-      <path d="M16 16 L13.2 13.2 L2.5 16 Z M16 16 L13.2 18.8 L2.5 16 Z" fill="currentColor" fillOpacity="0.6" />
-    </svg>
+    <span className={`inline-flex items-center gap-2.5 ${className ?? ""}`}>
+      <BrandMark size={36} onDark={onDark} />
+      <span className="font-display text-xl font-semibold">Omnia Marina</span>
+    </span>
   );
 }
 
-export function Brand({ className }: { className?: string }) {
+/** Logo completo, in verticale con la scritta: pagine di accesso. */
+export function BrandLogo({ onDark = false, className }: { onDark?: boolean; className?: string }) {
   return (
-    <span className={`inline-flex items-center gap-2 ${className ?? ""}`}>
-      <BrandMark />
-      <span className="font-display text-xl font-semibold">Omnia Marina</span>
-    </span>
+    <Image
+      src={onDark ? logoOnDark : logo}
+      alt="Omnia Marina — app di gestione portuale"
+      unoptimized
+      className={`h-auto ${className ?? ""}`}
+    />
   );
 }

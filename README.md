@@ -28,6 +28,9 @@ lavorare per più porti con ruoli diversi.
 - **Contabilità interna** – scadenziario, incassi anche parziali, prima nota di cassa e banca, riepilogo annuale,
   esportazione CSV per il commercialista. Non sostituisce la fatturazione elettronica.
 
+Il marchio (logo con la scritta e solo simbolo, a colori e in negativo per gli sfondi scuri) è nella cartella
+[`marchio/`](marchio/), a piena risoluzione.
+
 ## Avvio in locale
 
 Servono Node.js 22, pnpm e PostgreSQL 16 (oppure Docker).

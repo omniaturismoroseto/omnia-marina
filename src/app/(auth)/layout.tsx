@@ -1,4 +1,4 @@
-import { Brand } from "@/components/brand";
+import { BrandLogo } from "@/components/brand";
 
 // Cornice delle pagine di accesso: pannello blu con le linee di rotta di una carta nautica.
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -18,7 +18,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <path d="M430 560 L421 551 L430 470 L439 551 Z" fill="#d4502a" />
         </svg>
         <div className="relative flex h-full flex-col justify-between p-12">
-          <Brand />
+          <BrandLogo onDark className="w-44" />
           <div className="max-w-md">
             <p className="font-display text-4xl leading-[1.1] font-semibold">Il porto, dalla banchina alla prima nota.</p>
             <p className="mt-4 text-[15px] leading-relaxed text-white/70">
@@ -30,8 +30,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </div>
       <div className="flex flex-col justify-center px-5 py-10 sm:px-10">
         <div className="mx-auto w-full max-w-sm">
-          <div className="mb-8 text-ink lg:hidden">
-            <Brand />
+          <div className="mb-8 lg:hidden">
+            <BrandLogo className="mx-auto w-28" />
           </div>
           {children}
         </div>

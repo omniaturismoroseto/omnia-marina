@@ -42,7 +42,7 @@ async function Navigation() {
       <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-deep text-white lg:flex">
         <div className="px-5 pt-6 pb-5">
           <Link href="/" className="text-white">
-            <Brand />
+            <Brand onDark />
           </Link>
           <div className="mt-4 border-t border-white/10 pt-4">
             <p className="text-[11px] font-semibold tracking-widest text-white/45 uppercase">Porto</p>
@@ -68,7 +68,7 @@ async function Navigation() {
       </aside>
 
       <header className="no-print sticky top-0 z-30 flex items-center gap-2.5 bg-deep px-4 py-2.5 text-white lg:hidden">
-        <BrandMark size={24} />
+        <BrandMark size={28} onDark />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm leading-tight font-semibold">{ctx.marinaName}</p>
           <p className="truncate text-[11px] leading-tight text-white/60">
@@ -104,10 +104,10 @@ function NavigationFallback() {
   return (
     <>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 bg-deep px-5 pt-6 text-white lg:block">
-        <Brand />
+        <Brand onDark />
       </aside>
       <header className="sticky top-0 z-30 flex h-[52px] items-center bg-deep px-4 text-white lg:hidden">
-        <BrandMark size={24} />
+        <BrandMark size={28} onDark />
       </header>
     </>
   );
