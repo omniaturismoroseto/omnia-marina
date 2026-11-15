@@ -1,9 +1,11 @@
 import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import type { Tx } from "@/db";
-import { charges, ledgerEntries, owners, payments, type PaymentMethod } from "@/db/schema";
+import { charges, ledgerEntries, ledgerImports, owners, payments, type PaymentMethod } from "@/db/schema";
+import { formatDate, todayRome } from "@/lib/dates";
 import { formatMoney, splitVat } from "@/lib/format";
 import { CHARGE_TO_LEDGER_CATEGORY } from "@/lib/labels";
+import type { LedgerDraft } from "@/lib/ledger-import";
 import type { Actor } from "./contracts";
 import { DomainError } from "./errors";
 
@@ -107,4 +109,58 @@ export async function deletePayment(tx: Tx, actor: Actor, paymentId: string): Pr
     .where(and(eq(payments.id, paymentId), eq(payments.marinaId, actor.marinaId)))
     .returning({ id: payments.id });
   if (deleted.length === 0) throw new DomainError("Incasso non trovato.");
+}
+
+export interface LedgerImportInput {
+  fileName: string;
+  fileHash: string;
+  sheetName: string;
+  rowsCount: number;
+  entries: LedgerDraft[];
+}
+
+// Salva i movimenti di una prima nota importata da Excel, collegati all'importazione così da poterli
+// annullare tutti insieme. Lo stesso file non si importa due volte.
+export async function importLedger(tx: Tx, actor: Actor, input: LedgerImportInput): Promise<string> {
+  if (input.entries.length === 0) throw new DomainError("Non ci sono movimenti da importare.");
+  const [already] = await tx
+    .select({ createdAt: ledgerImports.createdAt })
+    .from(ledgerImports)
+    .where(and(eq(ledgerImports.marinaId, actor.marinaId), eq(ledgerImports.fileHash, input.fileHash)))
+    .limit(1);
+  if (already) {
+    const when = formatDate(todayRome(already.createdAt));
+    throw new DomainError(`Questo file è già stato importato il ${when}. Per importarlo di nuovo annulla prima quell'importazione.`);
+  }
+  const dates = input.entries.map((e) => e.entryDate).sort();
+  const [row] = await tx
+    .insert(ledgerImports)
+    .values({
+      marinaId: actor.marinaId,
+      fileName: input.fileName,
+      fileHash: input.fileHash,
+      sheetName: input.sheetName,
+      rowsCount: input.rowsCount,
+      entriesCount: input.entries.length,
+      firstDate: dates[0],
+      lastDate: dates[dates.length - 1],
+      createdBy: actor.userId,
+    })
+    .returning({ id: ledgerImports.id });
+  for (let i = 0; i < input.entries.length; i += 500) {
+    await tx.insert(ledgerEntries).values(
+      input.entries.slice(i, i + 500).map((e) => ({ ...e, marinaId: actor.marinaId, importId: row.id, createdBy: actor.userId })),
+    );
+  }
+  return row.id;
+}
+
+// Annulla un'importazione: spariscono tutti i movimenti che aveva creato.
+export async function undoLedgerImport(tx: Tx, actor: Actor, importId: string): Promise<{ fileName: string; entriesCount: number }> {
+  const deleted = await tx
+    .delete(ledgerImports)
+    .where(and(eq(ledgerImports.id, importId), eq(ledgerImports.marinaId, actor.marinaId)))
+    .returning({ fileName: ledgerImports.fileName, entriesCount: ledgerImports.entriesCount });
+  if (deleted.length === 0) throw new DomainError("Importazione non trovata.");
+  return deleted[0];
 }

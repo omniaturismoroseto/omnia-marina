@@ -5,9 +5,9 @@ import { and, eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { db } from "@/db";
-import { berthCategories, berths, boats, charges, contracts, ledgerEntries, movements, owners, piers, users } from "@/db/schema";
+import { berthCategories, berths, boats, charges, contracts, ledgerEntries, ledgerImports, movements, owners, piers, users } from "@/db/schema";
 import { addDays, todayRome } from "@/lib/dates";
-import { deletePayment, registerPayment } from "@/server/accounting";
+import { deletePayment, importLedger, registerPayment, undoLedgerImport } from "@/server/accounting";
 import { activateContract, cancelContract, createContract, recordMovement, type ContractInput } from "@/server/contracts";
 import { DomainError, toFormState } from "@/server/errors";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
@@ -231,5 +231,32 @@ describe.skipIf(!available)("regole del porto (database)", () => {
     await db.transaction((tx) => cancelContract(tx, actor(a), c.id));
     const rows = await db.select().from(charges).where(eq(charges.contractId, c.id)).orderBy(charges.dueDate);
     expect(rows.map((r) => r.cancelledAt !== null)).toEqual([false, true]);
+  });
+  it("una prima nota importata si salva una volta sola e si annulla tutta insieme", async () => {
+    const entry = (entryDate: string, amountCents: number) => ({
+      entryDate,
+      direction: "entrata" as const,
+      account: "cassa" as const,
+      amountCents,
+      category: "Ormeggi",
+      description: "Ormeggio, saldo 2026",
+      counterparty: "FRANCHI",
+      documentRef: null,
+    });
+    const file = { fileName: "PRIMANOTA2026.xlsx", fileHash: "a".repeat(64), sheetName: "primanota", rowsCount: 2 };
+    const before = (await db.select().from(ledgerEntries).where(eq(ledgerEntries.marinaId, a.marinaId))).length;
+    const id = await db.transaction((tx) => importLedger(tx, actor(a), { ...file, entries: [entry("2026-03-01", 1000), entry("2026-01-16", 2000)] }));
+
+    const [imp] = await db.select().from(ledgerImports).where(eq(ledgerImports.id, id));
+    expect(imp).toMatchObject({ entriesCount: 2, firstDate: "2026-01-16", lastDate: "2026-03-01" });
+    expect(await db.select().from(ledgerEntries).where(eq(ledgerEntries.importId, id))).toHaveLength(2);
+
+    // Lo stesso file non entra due volte; un altro porto può importarlo per sé ma non annullare quello altrui.
+    await expect(db.transaction((tx) => importLedger(tx, actor(a), { ...file, entries: [entry("2026-01-16", 2000)] }))).rejects.toThrow(/già stato importato/);
+    await expect(db.transaction((tx) => undoLedgerImport(tx, actor(b), id))).rejects.toThrow(/non trovata/);
+    await expect(db.transaction((tx) => importLedger(tx, actor(a), { ...file, fileHash: "b".repeat(64), entries: [] }))).rejects.toThrow(/Non ci sono movimenti/);
+
+    await db.transaction((tx) => undoLedgerImport(tx, actor(a), id));
+    expect(await db.select().from(ledgerEntries).where(eq(ledgerEntries.marinaId, a.marinaId))).toHaveLength(before);
   });
 });

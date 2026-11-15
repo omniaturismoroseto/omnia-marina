@@ -466,6 +466,28 @@ export const payments = pgTable(
   (t) => [index("payments_charge_idx").on(t.chargeId), index("payments_marina_date_idx").on(t.marinaId, t.paidOn)],
 );
 
+// Importazioni di una prima nota da Excel: i movimenti creati restano collegati e si possono annullare insieme.
+export const ledgerImports = pgTable(
+  "ledger_imports",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    // Impronta SHA-256 del file: lo stesso file non si importa due volte.
+    fileHash: text("file_hash").notNull(),
+    sheetName: text("sheet_name").notNull(),
+    rowsCount: integer("rows_count").notNull(),
+    entriesCount: integer("entries_count").notNull(),
+    firstDate: date("first_date").notNull(),
+    lastDate: date("last_date").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("ledger_imports_file_uq").on(t.marinaId, t.fileHash)],
+);
+
 // Prima nota: entrate e uscite di cassa e banca. Gli incassi vi finiscono in automatico.
 export const ledgerEntries = pgTable(
   "ledger_entries",
@@ -483,12 +505,14 @@ export const ledgerEntries = pgTable(
     counterparty: text("counterparty"),
     documentRef: text("document_ref"),
     paymentId: uuid("payment_id").references(() => payments.id, { onDelete: "cascade" }),
+    importId: uuid("import_id").references(() => ledgerImports.id, { onDelete: "cascade" }),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: createdAt(),
   },
   (t) => [
     index("ledger_marina_date_idx").on(t.marinaId, t.entryDate),
     uniqueIndex("ledger_payment_uq").on(t.paymentId),
+    index("ledger_import_idx").on(t.importId),
   ],
 );
 
