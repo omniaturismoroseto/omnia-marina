@@ -83,6 +83,10 @@ I test sul database usano `omnia_marina_test` (variabile `TEST_DATABASE_URL`); s
 
 ## Pubblicazione su Google Cloud
 
+L'app è pubblicata su <https://omnia-marina-ldymep2ulq-ew.a.run.app> (progetto Google `omnia-marina`,
+regione `europe-west1`). **Gli aggiornamenti si pubblicano dal PC: i comandi sono in
+[COME-LAVORIAMO.md](COME-LAVORIAMO.md).** Le istruzioni qui sotto servono solo per creare tutto da zero.
+
 L'app ha un server e un database PostgreSQL, quindi non può stare su GitHub Pages né su Firestore: su Google
 gira con **Cloud Run** (il server, dall'immagine Docker di questo repository) e **Cloud SQL** (il database),
 nello stesso account e con la stessa fatturazione di Firebase.

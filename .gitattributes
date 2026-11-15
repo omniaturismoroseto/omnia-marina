@@ -1,0 +1,8 @@
+# Fine riga sempre LF, anche su Windows: gli script (.sh) e il Dockerfile non funzionano con CRLF.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.webp binary
