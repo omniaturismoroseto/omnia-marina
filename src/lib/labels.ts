@@ -87,9 +87,13 @@ export const TASK_STATUS_LABEL = { aperta: "Aperta", in_corso: "In corso", chius
 export const MOVEMENT_LABEL = { arrivo: "Arrivo", partenza: "Partenza", uscita: "Uscita in mare", rientro: "Rientro" } as const;
 
 export const LEDGER_CATEGORIES = {
-  entrata: ["Ormeggi", "Servizi", "Utenze", "Altre entrate"],
+  entrata: ["Ormeggi", "Servizi", "Carburante", "Utenze", "Altre entrate"],
   uscita: ["Personale", "Manutenzioni", "Utenze", "Canoni e concessioni", "Forniture", "Imposte e tasse", "Altre uscite"],
 } as const;
+
+// Movimenti che spostano denaro senza essere ricavi o costi (versamenti dalla cassa alla banca, saldo
+// di partenza): contano nei saldi di cassa e banca ma non nei totali di entrate e uscite.
+export const LEDGER_TECHNICAL_CATEGORIES = ["Giroconto", "Saldo iniziale"] as const;
 
 export const CHARGE_TO_LEDGER_CATEGORY = { ormeggio: "Ormeggi", servizi: "Servizi", utenze: "Utenze", altro: "Altre entrate" } as const;
 

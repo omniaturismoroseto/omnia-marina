@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
-import { ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, FileSpreadsheet } from "lucide-react";
 import { page } from "@/components/page";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { db } from "@/db";
@@ -9,6 +9,7 @@ import { ledgerEntries, payments } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { addDays, addMonths, formatDate, formatMonth, monthKey, todayRome } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
+import { LEDGER_TECHNICAL_CATEGORIES } from "@/lib/labels";
 import { one, type SearchParams } from "@/lib/params";
 import { DeleteLedgerEntryButton, LedgerEntryForm } from "../accounting-forms";
 import { AccountingTabs } from "../tabs";
@@ -41,8 +42,11 @@ export default page(async function LedgerPage({ searchParams }: { searchParams: 
       .groupBy(ledgerEntries.account),
   ]);
 
-  const income = rows.filter((r) => r.entry.direction === "entrata").reduce((s, r) => s + r.entry.amountCents, 0);
-  const expense = rows.filter((r) => r.entry.direction === "uscita").reduce((s, r) => s + r.entry.amountCents, 0);
+  // Giroconti e saldo iniziale spostano denaro ma non sono entrate o uscite: restano fuori dai totali.
+  const technical = LEDGER_TECHNICAL_CATEGORIES as readonly string[];
+  const operating = rows.filter((r) => !technical.includes(r.entry.category));
+  const income = operating.filter((r) => r.entry.direction === "entrata").reduce((s, r) => s + r.entry.amountCents, 0);
+  const expense = operating.filter((r) => r.entry.direction === "uscita").reduce((s, r) => s + r.entry.amountCents, 0);
   const balanceOf = (account: "cassa" | "banca") => balances.find((b) => b.account === account)?.balance ?? 0;
 
   return (
@@ -51,10 +55,16 @@ export default page(async function LedgerPage({ searchParams }: { searchParams: 
         title="Contabilità"
         description="Prima nota: tutte le entrate e le uscite di cassa e banca, in ordine di data."
         actions={
-          <a href={`/contabilita/esporta/prima-nota?anno=${month.slice(0, 4)}`} className="btn btn-secondary" download>
-            <Download size={16} aria-hidden="true" />
-            Esporta l&apos;anno in CSV
-          </a>
+          <>
+            <Link href="/contabilita/importa" className="btn btn-secondary">
+              <FileSpreadsheet size={16} aria-hidden="true" />
+              Importa da Excel
+            </Link>
+            <a href={`/contabilita/esporta/prima-nota?anno=${month.slice(0, 4)}`} className="btn btn-secondary" download>
+              <Download size={16} aria-hidden="true" />
+              Esporta l&apos;anno in CSV
+            </a>
+          </>
         }
       />
       <AccountingTabs current="prima-nota" />

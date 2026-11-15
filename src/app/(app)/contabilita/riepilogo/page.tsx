@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, lte, notInArray, sql } from "drizzle-orm";
 import { Download } from "lucide-react";
 import { page } from "@/components/page";
 import { Card, EmptyState, FilterTabs, PageHeader, Stat } from "@/components/ui";
@@ -9,6 +9,7 @@ import { ledgerEntries } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { diffDays, formatMonth, todayRome, yearOf } from "@/lib/dates";
 import { formatMoney, formatPercent } from "@/lib/format";
+import { LEDGER_TECHNICAL_CATEGORIES } from "@/lib/labels";
 import { one, type SearchParams } from "@/lib/params";
 import { chargeTotals, listCharges } from "@/server/charges";
 import { AccountingTabs } from "../tabs";
@@ -78,7 +79,13 @@ export default page(async function SummaryPage({ searchParams }: { searchParams:
     .where(eq(ledgerEntries.marinaId, ctx.marinaId));
   const years = [...new Set([currentYear, ...yearRows.map((y) => y.year)])].sort((a, b) => b - a);
   const year = years.includes(param) ? param : currentYear;
-  const inYear = and(eq(ledgerEntries.marinaId, ctx.marinaId), gte(ledgerEntries.entryDate, `${year}-01-01`), lte(ledgerEntries.entryDate, `${year}-12-31`));
+  // Giroconti e saldo iniziale non sono né entrate né uscite: restano fuori dal riepilogo.
+  const inYear = and(
+    eq(ledgerEntries.marinaId, ctx.marinaId),
+    gte(ledgerEntries.entryDate, `${year}-01-01`),
+    lte(ledgerEntries.entryDate, `${year}-12-31`),
+    notInArray(ledgerEntries.category, [...LEDGER_TECHNICAL_CATEGORIES]),
+  );
   const total = sql<number>`sum(${ledgerEntries.amountCents})::int`;
 
   const [byMonth, byCategory, totals, openCharges] = await Promise.all([
