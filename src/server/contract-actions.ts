@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { berthCategories, berths, boats, contracts, piers, priceLists, rates, seasonPeriods, tariffZones, type ContractType } from "@/db/schema";
+import { berthCategories, berths, boats, contracts, piers, priceListExtras, priceLists, rates, seasonPeriods, tariffZones, type ContractType } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { isValidISODate } from "@/lib/dates";
@@ -30,6 +30,8 @@ export interface ContractOptions {
   // wasteCents: quota rifiuti del listino per i contratti annuali, da proporre come voce «rifiuti» (0 = usa quella del porto).
   quote: { listName: string; categoryName: string; zoneName: string | null; lines: QuoteLine[]; totalCents: number; vatRate: number; wasteCents: number } | null;
   quoteNote: string | null;
+  // Importi del listino per le voci del contratto (posti auto, carrello…), dai servizi collegati.
+  itemPrices: Partial<Record<(typeof SPACE_ITEM_KINDS)[number], number>>;
 }
 
 const TYPES = ["annuale", "stagionale", "mensile", "transito"] as const;
@@ -44,7 +46,7 @@ export async function loadContractOptions(input: {
   berthId: string | null;
 }): Promise<ContractOptions> {
   const ctx = await requireMarina(OFFICE);
-  const empty: ContractOptions = { berths: [], quote: null, quoteNote: null };
+  const empty: ContractOptions = { berths: [], quote: null, quoteNote: null, itemPrices: {} };
   if (!UUID.test(input.boatId) || !TYPES.includes(input.type as ContractType)) return empty;
   if (!isValidISODate(input.startDate) || !isValidISODate(input.endDate) || input.endDate < input.startDate) return empty;
   const type = input.type as ContractType;
@@ -105,8 +107,20 @@ export async function loadContractOptions(input: {
   const zoneId = chosenRow?.zoneId ?? null;
   const category = chosen?.categoryId ? categories.find((c) => c.id === chosen.categoryId) : categoryForBoat(categories, boat);
 
-  if (!list) return { berths: options, quote: null, quoteNote: "Nessun listino copre la data di inizio: inserisci l'importo a mano." };
-  if (!category) return { berths: options, quote: null, quoteNote: "Nessuna categoria tariffaria adatta: inserisci l'importo a mano." };
+  if (!list) return { berths: options, quote: null, quoteNote: "Nessun listino copre la data di inizio: inserisci l'importo a mano.", itemPrices: {} };
+
+  const extras = await db
+    .select({ kind: priceListExtras.itemKind, amountCents: priceListExtras.amountCents })
+    .from(priceListExtras)
+    .where(and(eq(priceListExtras.priceListId, list.id), eq(priceListExtras.marinaId, ctx.marinaId)))
+    .orderBy(asc(priceListExtras.sortOrder));
+  const itemPrices: ContractOptions["itemPrices"] = {};
+  for (const e of extras) {
+    const kind = SPACE_ITEM_KINDS.find((k) => k === e.kind);
+    if (kind && itemPrices[kind] === undefined) itemPrices[kind] = e.amountCents;
+  }
+
+  if (!category) return { berths: options, quote: null, quoteNote: "Nessuna categoria tariffaria adatta: inserisci l'importo a mano.", itemPrices };
 
   const [rateRows, periods, [zone]] = await Promise.all([
     db
@@ -129,7 +143,7 @@ export async function loadContractOptions(input: {
       : Promise.resolve([]),
   ]);
   const rate = zoneRate(rateRows, zoneId);
-  if (!rate) return { berths: options, quote: null, quoteNote: `Il ${list.name} non ha tariffe per la categoria ${category.name}.` };
+  if (!rate) return { berths: options, quote: null, quoteNote: `Il ${list.name} non ha tariffe per la categoria ${category.name}.`, itemPrices };
 
   const quote = quoteStay({ type, startDate: input.startDate, endDate: input.endDate, rate, periods });
   return {
@@ -144,6 +158,7 @@ export async function loadContractOptions(input: {
       wasteCents: type === "annuale" ? rate.waste : 0,
     },
     quoteNote: quote.totalCents === 0 ? "Le tariffe di questa categoria non sono ancora compilate." : null,
+    itemPrices,
   };
 }
 

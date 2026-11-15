@@ -5,13 +5,15 @@ import { and, eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { db } from "@/db";
-import { berthCategories, berths, boats, charges, contractItems, contracts, ledgerEntries, ledgerImports, marinas, movements, owners, piers, priceLists, rates, tariffZones, users } from "@/db/schema";
+import { berthCategories, berths, boats, charges, contractItems, contracts, ledgerEntries, ledgerImports, marinas, movements, owners, piers, priceListExtras, priceLists, rates, tariffZones, users } from "@/db/schema";
 import { addDays, todayRome } from "@/lib/dates";
 import { deletePayment, importLedger, registerPayment, undoLedgerImport } from "@/server/accounting";
 import { activateContract, addContractItem, cancelContract, createContract, recordMovement, removeContractItem, type ContractInput } from "@/server/contracts";
 import { DomainError, toFormState } from "@/server/errors";
 import { CONTRACT_APPROVAL_TEMPLATE, CONTRACT_TERMS_TEMPLATE } from "@/lib/contract-texts";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
+import { loadOfficialPriceList, OFFICIAL_CATEGORIES, OFFICIAL_EXTRAS } from "@/server/official-price-list";
+import { zoneRate } from "@/lib/pricing";
 
 async function databaseAvailable(): Promise<boolean> {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 2000 });
@@ -175,6 +177,42 @@ describe.skipIf(!available)("regole del porto (database)", () => {
     expect(rows.map((r) => r.grossCents)).toEqual([33333, 33333, 33334]);
     expect(rows.map((r) => r.dueDate)).toEqual(["2030-01-31", "2030-05-31", "2030-09-30"]);
     expect(rows.every((r) => r.netCents + r.vatCents === r.grossCents)).toBe(true);
+  });
+
+  it("il listino ufficiale 2026 si carica con la zona della darsena C e ricaricandolo non duplica nulla", async () => {
+    const first = await db.transaction((tx) => loadOfficialPriceList(tx, b.marinaId));
+    expect(first.createdCategories).toBe(OFFICIAL_CATEGORIES.length);
+    const again = await db.transaction((tx) => loadOfficialPriceList(tx, b.marinaId));
+    expect(again).toEqual({ ...first, createdCategories: 0 });
+
+    // Il porto aveva già il "Listino 2026": viene riempito, non duplicato.
+    expect(await db.select().from(priceLists).where(and(eq(priceLists.marinaId, b.marinaId), eq(priceLists.name, "Listino 2026")))).toHaveLength(1);
+    expect(await db.select().from(tariffZones).where(eq(tariffZones.marinaId, b.marinaId))).toHaveLength(1);
+    const extras = await db.select().from(priceListExtras).where(eq(priceListExtras.priceListId, first.listId));
+    expect(extras).toHaveLength(OFFICIAL_EXTRAS.length);
+    expect(extras.find((e) => e.name === "Posto auto coperto")?.itemKind).toBe("auto_coperto");
+
+    const rows = await db
+      .select({ name: berthCategories.name, rate: rates })
+      .from(rates)
+      .innerJoin(berthCategories, eq(berthCategories.id, rates.categoryId))
+      .where(eq(rates.priceListId, first.listId));
+    const priceOf = (name: string, zoneId: string | null) =>
+      zoneRate(
+        rows.filter((r) => r.name === name).map((r) => r.rate),
+        zoneId,
+      );
+    expect(priceOf("B · fino a 6 m", null)).toMatchObject({ annual: 131000, waste: 4000, seasonal: 90000, monthlyLow: 25000, monthlyHigh: 25000 });
+    expect(priceOf("B · fino a 6 m", first.zoneId)).toMatchObject({ annual: 146000, waste: 4000, seasonal: 90000, monthlyLow: 25000 });
+    expect(priceOf("H · fino a 12 m", null)).toBeNull(); // solo nella darsena C
+    expect(priceOf("I · oltre 12 m", first.zoneId)).toMatchObject({ annual: 350000, waste: 9000, seasonal: 0 });
+    // I totali del foglio (annuale + rifiuti) tornano per ogni riga.
+    const total = (name: string, zoneId: string | null) => {
+      const r = priceOf(name, zoneId)!;
+      return (r.annual + r.waste) / 100;
+    };
+    expect(OFFICIAL_CATEGORIES.filter((c) => c.base).map((c) => total(c.name, null))).toEqual([1350, 1660, 1820, 2070, 2190, 2390]);
+    expect(OFFICIAL_CATEGORIES.map((c) => total(c.name, first.zoneId))).toEqual([1500, 1760, 2020, 2270, 2540, 2890, 3290, 3590]);
   });
 
   it("arrivo, uscita, rientro e partenza anticipata liberano il posto", async () => {

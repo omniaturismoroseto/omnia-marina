@@ -385,6 +385,27 @@ export const rates = pgTable(
   (t) => [unique("rates_list_category_zone_uq").on(t.priceListId, t.categoryId, t.zoneId).nullsNotDistinct()],
 );
 
+// Servizi a prezzo fisso del listino (posti auto, carrelli, cauzioni…), da proporre negli addebiti.
+// Se collegati a un tipo di voce del contratto (es. posto auto coperto), ne propongono anche l'importo.
+export const priceListExtras = pgTable(
+  "price_list_extras",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    priceListId: uuid("price_list_id")
+      .notNull()
+      .references(() => priceLists.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    vatRate: integer("vat_rate").notNull().default(22),
+    itemKind: contractItemKindEnum("item_kind"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("price_list_extras_list_idx").on(t.priceListId)],
+);
+
 // ───────────────────────── Contratti e movimenti ─────────────────────────
 
 export const contracts = pgTable(

@@ -3,18 +3,21 @@ import { asc, desc, eq } from "drizzle-orm";
 import { page } from "@/components/page";
 import { Badge, Card, EmptyState, FilterTabs, Notice, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { berthCategories, piers, priceLists, rates, seasonPeriods, tariffZones } from "@/db/schema";
+import { berthCategories, piers, priceListExtras, priceLists, rates, seasonPeriods, tariffZones } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, todayRome, yearOf } from "@/lib/dates";
 import { formatDimensions, moneyInput } from "@/lib/format";
 import { SEASON_LABEL } from "@/lib/labels";
 import { RATE_FIELDS } from "@/lib/pricing";
 import { uuidOrNull, type SearchParams } from "@/lib/params";
+import { OFFICIAL_CATEGORIES, OFFICIAL_LIST, OFFICIAL_ZONE } from "@/server/official-price-list";
 import {
   DeletePeriodButton,
   DeleteZoneButton,
   ListActions,
+  LoadOfficialListButton,
   PierZonesForm,
+  PriceListExtras,
   PriceListForm,
   RatesGrid,
   SeasonPeriodForm,
@@ -55,12 +58,13 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
   const zone = zones.find((z) => z.id === selectedZoneId) ?? null;
   const pierNames = (zoneId: string | null) => pierRows.filter((p) => p.zoneId === zoneId).map((p) => p.name);
 
-  const [rateRows, periods] = list
+  const [rateRows, periods, extras] = list
     ? await Promise.all([
         db.select().from(rates).where(eq(rates.priceListId, list.id)),
         db.select().from(seasonPeriods).where(eq(seasonPeriods.priceListId, list.id)).orderBy(asc(seasonPeriods.startDate)),
+        db.select().from(priceListExtras).where(eq(priceListExtras.priceListId, list.id)).orderBy(asc(priceListExtras.sortOrder), asc(priceListExtras.name)),
       ])
-    : [[], []];
+    : [[], [], []];
 
   const show = (cents: number | undefined) => (cents ? moneyInput(cents) : "");
   const valuesOf = (r: (typeof rateRows)[number] | undefined) => Object.fromEntries(RATE_FIELDS.map((k) => [k, show(r?.[k])])) as RateGridRow["values"];
@@ -162,6 +166,11 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
               )}
             </Card>
 
+            <Card title="Servizi e cauzioni">
+              <p className="mb-3 text-sm text-muted">Posti auto, carrelli, cauzioni e altri servizi a prezzo fisso: si scelgono quando si crea un addebito.</p>
+              <PriceListExtras listId={list.id} extras={extras} editable={admin} />
+            </Card>
+
             <Card title="Simulatore">
               {categories.length > 0 ? (
                 <Simulator
@@ -234,6 +243,18 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
           )}
         </Card>
       </div>
+
+      {admin && (
+        <Card title="Listino ufficiale 2026" className="mt-5">
+          <p className="mb-3 text-sm text-muted">
+            Dal foglio delle tariffe ufficiali: {OFFICIAL_CATEGORIES.length} categorie per lunghezza, tariffa base per le darsene A, B e D e zona «{OFFICIAL_ZONE}»
+            con prezzi propri; canone annuale, quota rifiuti, stagionale maggio – settembre e mensile per le categorie B e C, posti auto, carrelli e cauzioni.
+            Dopo il caricamento: assegna la zona ai pontili della darsena C (qui sopra), le categorie ai posti e controlla le larghezze in Impostazioni →
+            Categorie, che sono indicative.
+          </p>
+          <LoadOfficialListButton hasList={lists.some((l) => l.name === OFFICIAL_LIST.name)} />
+        </Card>
+      )}
 
       {admin && (
         <details className="card mt-5">

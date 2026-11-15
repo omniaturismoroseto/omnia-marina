@@ -3,14 +3,19 @@
 import { useState, useTransition } from "react";
 import { ActionButton, Field, Form, FormMessage, SelectField, Submit } from "@/components/form";
 import { addDays, formatDate, isValidISODate } from "@/lib/dates";
+import { SPACE_ITEM_KINDS } from "@/lib/contract-items";
 import { formatMoney } from "@/lib/format";
+import { CONTRACT_ITEM_LABEL } from "@/lib/labels";
 import type { Quote } from "@/lib/pricing";
 import {
+  addPriceListExtra,
   addSeasonPeriod,
   deletePriceList,
+  deletePriceListExtra,
   deleteSeasonPeriod,
   deleteTariffZone,
   duplicatePriceList,
+  loadOfficialPriceListAction,
   savePierZones,
   savePriceList,
   saveRates,
@@ -367,5 +372,84 @@ export function Simulator({
         )}
       </div>
     </div>
+  );
+}
+
+export interface ExtraRow {
+  id: string;
+  name: string;
+  amountCents: number;
+  vatRate: number;
+  itemKind: keyof typeof CONTRACT_ITEM_LABEL | null;
+}
+
+// Servizi e cauzioni a prezzo fisso: si propongono quando si crea un addebito.
+export function PriceListExtras({ listId, extras, editable }: { listId: string; extras: ExtraRow[]; editable: boolean }) {
+  return (
+    <div className="space-y-4">
+      {extras.length === 0 ? (
+        <p className="text-sm text-muted">Nessun servizio a prezzo fisso in questo listino.</p>
+      ) : (
+        <ul className="divide-y divide-line-soft">
+          {extras.map((e) => (
+            <li key={e.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+              <span>
+                {e.name}
+                <span className="block text-xs text-muted">
+                  {e.vatRate === 0 ? "senza IVA" : `IVA ${e.vatRate}% inclusa`}
+                  {e.itemKind && ` · proposto nei contratti come «${CONTRACT_ITEM_LABEL[e.itemKind].toLowerCase()}»`}
+                </span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="font-medium tabular-nums">{formatMoney(e.amountCents)}</span>
+                {editable && (
+                  <ActionButton action={deletePriceListExtra} fields={{ extraId: e.id }} variant="ghost" size="sm">
+                    Rimuovi
+                  </ActionButton>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {editable && (
+        <Form action={addPriceListExtra} resetOnSuccess className="grid grid-cols-1 gap-3 border-t border-line-soft pt-4 sm:grid-cols-2">
+          <input type="hidden" name="listId" value={listId} />
+          <Field name="name" label="Servizio" placeholder="Es. Posto auto coperto" required />
+          <Field name="amount" label="Importo" inputMode="decimal" placeholder="0,00" required />
+          <SelectField name="vatRate" label="IVA" defaultValue="22" options={[...VAT_OPTIONS.slice(0, -1), { value: "0", label: "Senza IVA (cauzione)" }]} />
+          <SelectField
+            name="itemKind"
+            label="Voce del contratto"
+            defaultValue=""
+            placeholder="Nessuna"
+            options={SPACE_ITEM_KINDS.map((k) => ({ value: k, label: CONTRACT_ITEM_LABEL[k] }))}
+            hint="Facoltativo: l'importo si propone quando la voce si aggiunge a un contratto."
+          />
+          <div className="flex items-center gap-3 sm:col-span-2">
+            <Submit variant="secondary">Aggiungi</Submit>
+            <FormMessage />
+          </div>
+        </Form>
+      )}
+    </div>
+  );
+}
+
+export function LoadOfficialListButton({ hasList }: { hasList: boolean }) {
+  return (
+    <ActionButton
+      action={loadOfficialPriceListAction}
+      fields={{}}
+      variant={hasList ? "secondary" : "primary"}
+      size="sm"
+      confirm={
+        hasList
+          ? "Riscrivere le tariffe delle categorie del listino ufficiale nel Listino 2026? Le altre categorie e i posti barca non cambiano."
+          : "Creare il Listino 2026 con le categorie e le tariffe ufficiali? Le categorie esistenti e i posti barca non cambiano."
+      }
+    >
+      {hasList ? "Ricarica il listino ufficiale 2026" : "Carica il listino ufficiale 2026"}
+    </ActionButton>
   );
 }

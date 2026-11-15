@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ActionButton, Field, Form, FormMessage, SelectField, Submit, TextareaField } from "@/components/form";
+import { formatMoney, moneyInput } from "@/lib/format";
 import { LEDGER_CATEGORIES } from "@/lib/labels";
 import { addPayment, cancelCharge, deleteLedgerEntry, removePayment, saveCharge, saveLedgerEntry } from "@/server/accounting-actions";
 
@@ -20,18 +21,46 @@ export function ChargeForm({
   today,
   defaultVatRate,
   initialOwnerId,
+  extras,
 }: {
   owners: { id: string; name: string }[];
   contracts: { id: string; ownerId: string; label: string }[];
   today: string;
   defaultVatRate: number;
   initialOwnerId: string;
+  extras: { id: string; name: string; amountCents: number; vatRate: number }[];
 }) {
   const [ownerId, setOwnerId] = useState(initialOwnerId);
+  const [kind, setKind] = useState("servizi");
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [vatRate, setVatRate] = useState(String(defaultVatRate));
+
+  // Una voce del listino compila descrizione, importo e IVA; le cauzioni (senza IVA) vanno in "Altro".
+  function pickExtra(id: string) {
+    const extra = extras.find((e) => e.id === id);
+    if (!extra) return;
+    setDescription(extra.name);
+    setAmount(moneyInput(extra.amountCents));
+    setVatRate(String(extra.vatRate));
+    setKind(extra.vatRate === 0 ? "altro" : "servizi");
+  }
   const ownerContracts = contracts.filter((c) => c.ownerId === ownerId);
   return (
     <Form action={saveCharge} className="card max-w-3xl space-y-4 p-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {extras.length > 0 && (
+          <SelectField
+            name="extraId"
+            label="Voce del listino"
+            defaultValue=""
+            onChange={(e) => pickExtra(e.target.value)}
+            placeholder="Nessuna, compilo a mano"
+            options={extras.map((e) => ({ value: e.id, label: `${e.name} · ${formatMoney(e.amountCents)}` }))}
+            hint="Compila descrizione, importo e IVA; restano modificabili."
+            wrapperClassName="sm:col-span-2"
+          />
+        )}
         <SelectField
           name="ownerId"
           label="Cliente"
@@ -52,7 +81,8 @@ export function ChargeForm({
         <SelectField
           name="kind"
           label="Tipo"
-          defaultValue="servizi"
+          value={kind}
+          onChange={(e) => setKind(e.target.value)}
           options={[
             { value: "servizi", label: "Servizi (alaggio, varo, assistenza…)" },
             { value: "utenze", label: "Utenze (acqua, corrente)" },
@@ -60,11 +90,17 @@ export function ChargeForm({
             { value: "altro", label: "Altro" },
           ]}
         />
-        <Field name="description" label="Descrizione" placeholder="Es. Alaggio e varo con gru" required />
+        <Field name="description" label="Descrizione" placeholder="Es. Alaggio e varo con gru" value={description} onChange={(e) => setDescription(e.target.value)} required />
         <Field name="issueDate" label="Data dell'addebito" type="date" defaultValue={today} required />
         <Field name="dueDate" label="Scadenza del pagamento" type="date" defaultValue={today} required />
-        <Field name="amount" label="Importo (IVA inclusa)" inputMode="decimal" placeholder="0,00" required />
-        <SelectField name="vatRate" label="Aliquota IVA" defaultValue={String(defaultVatRate)} options={[22, 10, 5, 4, 0].map((r) => ({ value: String(r), label: `${r}%` }))} />
+        <Field name="amount" label="Importo (IVA inclusa)" inputMode="decimal" placeholder="0,00" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+        <SelectField
+          name="vatRate"
+          label="Aliquota IVA"
+          value={vatRate}
+          onChange={(e) => setVatRate(e.target.value)}
+          options={[22, 10, 5, 4, 0].map((r) => ({ value: String(r), label: `${r}%` }))}
+        />
       </div>
       <TextareaField name="notes" label="Note interne" rows={2} />
       <FormMessage />

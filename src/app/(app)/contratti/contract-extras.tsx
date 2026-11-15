@@ -23,6 +23,7 @@ export function ContractExtras({
   onGestione,
   onRifiuti,
   onSpacesTotal,
+  prices,
 }: {
   startDate: string;
   endDate: string;
@@ -31,6 +32,8 @@ export function ContractExtras({
   onGestione: (value: string) => void;
   onRifiuti: (value: string) => void;
   onSpacesTotal: (cents: number) => void;
+  // Importi del listino per le voci, proposti quando si spunta la casella.
+  prices: Partial<Record<SpaceKind, number>>;
 }) {
   const [spaces, setSpaces] = useState<Record<SpaceKind, SpaceState>>(
     () => Object.fromEntries(SPACE_ITEM_KINDS.map((k) => [k, { on: false, ref: "", from: "", to: "", amount: "" }])) as Record<SpaceKind, SpaceState>,
@@ -55,7 +58,14 @@ export function ContractExtras({
                   type="checkbox"
                   name={`${kind}_on`}
                   checked={s.on}
-                  onChange={(e) => update(kind, e.target.checked ? { on: true, from: s.from || startDate, to: s.to || endDate } : { on: false })}
+                  onChange={(e) =>
+                    update(
+                      kind,
+                      e.target.checked
+                        ? { on: true, from: s.from || startDate, to: s.to || endDate, amount: s.amount || (prices[kind] ? moneyInput(prices[kind]) : "") }
+                        : { on: false },
+                    )
+                  }
                 />
                 {CONTRACT_ITEM_LABEL[kind]}
               </label>
@@ -72,6 +82,7 @@ export function ContractExtras({
                     inputMode="decimal"
                     placeholder="0,00"
                     required
+                    hint={prices[kind] ? `Listino: ${moneyInput(prices[kind])} €` : undefined}
                   />
                 </div>
               )}

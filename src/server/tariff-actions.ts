@@ -5,13 +5,15 @@ import { redirect } from "next/navigation";
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { berthCategories, piers, priceLists, rates, seasonPeriods, tariffZones } from "@/db/schema";
+import { berthCategories, piers, priceListExtras, priceLists, rates, seasonPeriods, tariffZones } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
+import { ITEM_KINDS } from "@/lib/contract-items";
 import { addMonths, isValidISODate } from "@/lib/dates";
 import { parseMoney } from "@/lib/format";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
 import { RATE_FIELDS, quoteStay, zoneRate, type Quote } from "@/lib/pricing";
+import { loadOfficialPriceList, OFFICIAL_LIST } from "./official-price-list";
 import { toFormState } from "./errors";
 
 const ADMIN = ["admin" as const];
@@ -99,6 +101,10 @@ export async function duplicatePriceList(_prev: FormState, formData: FormData): 
     const rateRows = await tx.select().from(rates).where(eq(rates.priceListId, source.id));
     if (rateRows.length > 0) {
       await tx.insert(rates).values(rateRows.map(({ id: _id, priceListId: _list, ...r }) => ({ ...r, priceListId: created.id })));
+    }
+    const extras = await tx.select().from(priceListExtras).where(eq(priceListExtras.priceListId, source.id));
+    if (extras.length > 0) {
+      await tx.insert(priceListExtras).values(extras.map(({ id: _id, priceListId: _list, ...e }) => ({ ...e, priceListId: created.id })));
     }
     await audit(ctx, "creazione", "listino", created.id, `Copia di ${source.name}`, tx);
     return created.id;
@@ -188,6 +194,56 @@ export async function deleteSeasonPeriod(_prev: FormState, formData: FormData): 
     .where(and(eq(seasonPeriods.id, periodId), eq(seasonPeriods.marinaId, ctx.marinaId)))
     .returning({ id: seasonPeriods.id });
   if (deleted.length === 0) return fail("Periodo non trovato.");
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// Carica il listino ufficiale 2026 (categorie per darsena, tariffe, servizi). Si può ripetere senza duplicare.
+export async function loadOfficialPriceListAction(_prev: FormState, _formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const { listId } = await db.transaction(async (tx) => {
+    const result = await loadOfficialPriceList(tx, ctx.marinaId);
+    await audit(ctx, "modifica", "tariffe", result.listId, `${OFFICIAL_LIST.name}: caricato il listino ufficiale (${result.createdCategories} categorie nuove)`, tx);
+    return result;
+  });
+  revalidatePath("/", "layout");
+  redirect(`/tariffe?listino=${listId}`);
+}
+
+// ───────────── Servizi e cauzioni a prezzo fisso ─────────────
+
+const extraSchema = z.object({
+  listId: f.id(),
+  name: f.text("Scrivi il nome del servizio"),
+  amount: f.money(),
+  vatRate: f.int(0, 30, "Aliquota non valida"),
+  itemKind: z.preprocess((v) => (typeof v === "string" && v !== "" ? v : null), z.enum(ITEM_KINDS, "Voce non valida").nullable()),
+});
+
+export async function addPriceListExtra(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = parseForm(extraSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const { listId, name, amount, vatRate, itemKind } = parsed.data;
+  const list = await ownList(ctx.marinaId, listId);
+  if (!list) return fail("Listino non trovato.");
+  const existing = await db.select({ id: priceListExtras.id }).from(priceListExtras).where(eq(priceListExtras.priceListId, list.id));
+  await db.insert(priceListExtras).values({ marinaId: ctx.marinaId, priceListId: list.id, name, amountCents: amount, vatRate, itemKind, sortOrder: existing.length });
+  await audit(ctx, "modifica", "tariffe", list.id, `${list.name}: aggiunto ${name}`);
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function deletePriceListExtra(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const extraId = String(formData.get("extraId") ?? "");
+  if (!z.uuid().safeParse(extraId).success) return fail("Voce non trovata.");
+  const deleted = await db
+    .delete(priceListExtras)
+    .where(and(eq(priceListExtras.id, extraId), eq(priceListExtras.marinaId, ctx.marinaId)))
+    .returning({ name: priceListExtras.name, listId: priceListExtras.priceListId });
+  if (deleted.length === 0) return fail("Voce non trovata.");
+  await audit(ctx, "modifica", "tariffe", deleted[0].listId, `Tolto ${deleted[0].name}`);
   revalidatePath("/", "layout");
   return { ok: true };
 }

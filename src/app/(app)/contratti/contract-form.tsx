@@ -89,7 +89,7 @@ export function ContractForm({
         if (request.berthId && !next.berths.some((b) => b.id === request.berthId && b.available)) setBerthId("");
       })
       .catch(() => {
-        if (!superseded) setResult({ request, options: { berths: [], quote: null, quoteNote: "Impossibile verificare la disponibilità: riprova." } });
+        if (!superseded) setResult({ request, options: { berths: [], quote: null, quoteNote: "Impossibile verificare la disponibilità: riprova.", itemPrices: {} } });
       });
     return () => {
       superseded = true;
@@ -300,6 +300,7 @@ export function ContractForm({
             feesEditedRef.current = true;
           }}
           onSpacesTotal={setSpacesCents}
+          prices={options?.itemPrices ?? {}}
         />
         {extrasCents > 0 && (
           <p className="-mt-2 text-sm text-muted">
