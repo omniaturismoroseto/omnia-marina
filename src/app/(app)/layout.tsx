@@ -1,9 +1,14 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowLeftRight, LogOut } from "lucide-react";
+import { eq } from "drizzle-orm";
 import { Brand, BrandMark } from "@/components/brand";
 import { BottomBar, SidebarLinks, type NavItem } from "@/components/nav-links";
+import { PortLogoTile } from "@/components/port-logo";
+import { db } from "@/db";
+import { marinas } from "@/db/schema";
 import { requireMarina } from "@/lib/context";
+import { portLogo } from "@/lib/logo";
 import { ROLE_LABEL } from "@/lib/labels";
 import type { Role } from "@/db/schema";
 import { logout } from "@/server/auth-actions";
@@ -36,6 +41,12 @@ async function Navigation() {
   const ctx = await requireMarina();
   const items = NAV.filter((i) => i.roles.includes(ctx.role)).map(({ key, href, label }) => ({ key, href, label }));
   const canSwitch = ctx.memberships.length > 1;
+  const [marina] = await db
+    .select({ logoVersion: marinas.logoVersion, logoWidth: marinas.logoWidth, logoHeight: marinas.logoHeight })
+    .from(marinas)
+    .where(eq(marinas.id, ctx.marinaId));
+  // Il logo della società di gestione accompagna il nome del porto; il testo accanto lo rende già leggibile, quindi alt vuoto.
+  const logo = marina ? portLogo(marina) : null;
 
   return (
     <>
@@ -46,7 +57,8 @@ async function Navigation() {
           </Link>
           <div className="mt-4 border-t border-white/10 pt-4">
             <p className="text-[11px] font-semibold tracking-widest text-white/45 uppercase">Porto</p>
-            <p className="mt-0.5 leading-snug font-medium text-white">{ctx.marinaName}</p>
+            {logo && <PortLogoTile logo={logo} alt="" className="mt-2 max-w-full" imageClassName="h-12 w-auto max-w-[11.5rem]" />}
+            <p className={`${logo ? "mt-2" : "mt-0.5"} leading-snug font-medium text-white`}>{ctx.marinaName}</p>
             {canSwitch && (
               <Link href="/porti" className="mt-1 inline-flex items-center gap-1 text-xs text-white/60 hover:text-white">
                 <ArrowLeftRight size={12} aria-hidden="true" />
@@ -68,7 +80,11 @@ async function Navigation() {
       </aside>
 
       <header className="no-print sticky top-0 z-30 flex items-center gap-2.5 bg-deep px-4 py-2.5 text-white lg:hidden">
-        <BrandMark size={28} onDark />
+        {logo ? (
+          <PortLogoTile logo={logo} alt="" className="shrink-0 p-1" imageClassName="h-7 w-auto max-w-[6rem]" />
+        ) : (
+          <BrandMark size={28} onDark />
+        )}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm leading-tight font-semibold">{ctx.marinaName}</p>
           <p className="truncate text-[11px] leading-tight text-white/60">

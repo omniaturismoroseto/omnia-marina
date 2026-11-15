@@ -29,6 +29,9 @@ lavorare per più porti con ruoli diversi.
 - **Contabilità interna** – scadenziario, incassi anche parziali, prima nota di cassa e banca, riepilogo annuale,
   esportazione CSV per il commercialista. Non sostituisce la fatturazione elettronica.
 
+Ogni porto può caricare il **logo della propria società di gestione** (Impostazioni → Porto): compare nel menu accanto al
+nome del porto e in testa al contratto e all'informativa privacy stampati.
+
 Il marchio (logo con la scritta e solo simbolo, a colori e in negativo per gli sfondi scuri) è nella cartella
 [`marchio/`](marchio/), a piena risoluzione.
 

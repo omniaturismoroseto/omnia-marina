@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { DocumentTitle } from "@/components/document-title";
 import { page } from "@/components/page";
+import { PortLogo } from "@/components/port-logo";
 import { PrintButton } from "@/components/print-button";
 import { PageHeader } from "@/components/ui";
 import { db } from "@/db";
@@ -12,6 +13,7 @@ import { itemHasPeriod, sortItems } from "@/lib/contract-items";
 import { formatDate, todayRome } from "@/lib/dates";
 import { auxEngine, describeEngine, mainEngine } from "@/lib/engines";
 import { formatMoney } from "@/lib/format";
+import { portLogo } from "@/lib/logo";
 import { CONTRACT_ITEM_LABEL } from "@/lib/labels";
 import { uuidOrNull } from "@/lib/params";
 import { marinaAddress } from "@/lib/templates";
@@ -113,6 +115,7 @@ export default page(async function ContractPrintPage({ params }: { params: Promi
   const aux = describeEngine(auxEngine(boat));
   const titleExtras = [...new Set(spaces.map((it) => TITLE_PART[it.kind]))];
   const lessor = marina.legalName || marina.name;
+  const logo = portLogo(marina);
   const place = marina.city || "________________";
 
   return (
@@ -129,11 +132,14 @@ export default page(async function ContractPrintPage({ params }: { params: Promi
 
       <article className="card mx-auto max-w-3xl p-8 text-[12.5px] leading-snug text-justify print:max-w-none print:border-0 print:p-0 print:text-[10px] print:shadow-none">
         <header className="flex items-start justify-between gap-6 border-b-2 border-ink pb-3 text-left">
-          <div>
-            <p className="font-display text-xl leading-tight font-semibold">{lessor}</p>
-            <p className="mt-1 text-xs text-muted">
-              {[marinaAddress(marina), marina.vatNumber ? `P. IVA ${marina.vatNumber}` : null, marina.phone, marina.email].filter(Boolean).join(" · ")}
-            </p>
+          <div className="flex items-center gap-4">
+            {logo && <PortLogo logo={logo} alt="" className="h-16 w-auto max-w-[10rem] shrink-0 print:h-14" />}
+            <div>
+              <p className="font-display text-xl leading-tight font-semibold">{lessor}</p>
+              <p className="mt-1 text-xs text-muted">
+                {[marinaAddress(marina), marina.vatNumber ? `P. IVA ${marina.vatNumber}` : null, marina.phone, marina.email].filter(Boolean).join(" · ")}
+              </p>
+            </div>
           </div>
           <div className="shrink-0 text-right">
             <p className="text-xs tracking-widest text-muted uppercase">Contratto n.</p>

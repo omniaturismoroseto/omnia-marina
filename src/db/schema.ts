@@ -89,6 +89,11 @@ export const marinas = pgTable("marinas", {
   planHeight: integer("plan_height"),
   planPxPerMeter: real("plan_px_per_meter"),
   planVersion: integer("plan_version").notNull().default(0),
+  // Logo della società di gestione (menu dell'app e documenti stampati): dimensioni in pixel dell'immagine
+  // salvata in marina_logos; vuote se non c'è. logoVersion cambia a ogni caricamento, per la cache del browser.
+  logoWidth: integer("logo_width"),
+  logoHeight: integer("logo_height"),
+  logoVersion: integer("logo_version").notNull().default(0),
   createdAt: createdAt(),
 });
 
@@ -103,6 +108,16 @@ export const marinaPlans = pgTable("marina_plans", {
   // Si azzera quando cambia la foto o quando le proposte vengono confermate o scartate.
   analysis: jsonb("analysis"),
   analyzedAt: timestamp("analyzed_at", { withTimezone: true }),
+  updatedAt: updatedAt(),
+});
+
+// L'immagine del logo, a parte: le letture di marinas restano leggere.
+export const marinaLogos = pgTable("marina_logos", {
+  marinaId: uuid("marina_id")
+    .primaryKey()
+    .references(() => marinas.id, { onDelete: "cascade" }),
+  mime: text("mime").notNull(),
+  data: bytea("data").notNull(),
   updatedAt: updatedAt(),
 });
 

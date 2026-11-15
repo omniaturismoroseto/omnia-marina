@@ -25,6 +25,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   la zona sta sul pontile (`piers.tariff_zone_id`) e `zoneRate` (`src/lib/pricing.ts`) unisce zona e base campo per campo. `rates.waste` non entra nel canone: precompila la voce «rifiuti» degli annuali.
 - Marchio: originali (a colori e in negativo per sfondi scuri) in `marchio/`; per l'interfaccia `src/components/brand.tsx` con le
   immagini di `src/assets/brand/` (già alla misura giusta, `unoptimized`); icone in `src/app` (favicon, icon, apple-icon) e `public/`.
+- Logo della società di gestione: caricato da Impostazioni → Porto, salvato in `marina_logos` (PNG/JPEG, mai SVG) e servito da
+  `/logo?v=<marinas.logo_version>`; `portLogo` (`src/lib/logo.ts`) e `PortLogo`/`PortLogoTile` (`src/components/port-logo.tsx`) lo mostrano
+  nel menu (su riquadro bianco) e nelle intestazioni di contratto e informativa. Il logo di Omnia Marina resta quello dell'app.
 - Pianta dal vero: le coordinate dei posti (`berths.plan_x/plan_y/plan_angle`) sono in pixel della foto caricata;
   la geometria sta in `src/lib/plan.ts`, la foto nel database (`marina_plans`) ed è servita da `/pianta/immagine`.
 - Contratto stampato (`/contratti/[id]/stampa`): gli articoli 1-3 (oggetto, canone, spese) li compone la pagina con i dati

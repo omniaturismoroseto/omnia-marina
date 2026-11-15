@@ -5,6 +5,7 @@ import { berths, marinaPlans, marinas } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { requireMarina } from "@/lib/context";
 import { imageInfo } from "@/lib/plan";
+import { sameOrigin } from "@/lib/same-origin";
 
 // La foto aerea del porto: la vedono tutti i ruoli, la carica e la rimuove solo la direzione.
 
@@ -13,18 +14,6 @@ const MIN_SIDE = 300;
 const MAX_SIDE = 6000;
 
 const fail = (status: number, message: string) => Response.json({ ok: false, message }, { status });
-
-// Le modifiche sono accettate solo dalle pagine dell'app stessa, non da altri siti.
-function sameOrigin(request: Request): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) return true;
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  try {
-    return new URL(origin).host === host;
-  } catch {
-    return false;
-  }
-}
 
 export async function GET() {
   const ctx = await requireMarina();

@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { page } from "@/components/page";
+import { PortLogo } from "@/components/port-logo";
 import { PrintButton } from "@/components/print-button";
 import { PageHeader } from "@/components/ui";
 import { db } from "@/db";
 import { marinas, owners } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, todayRome } from "@/lib/dates";
+import { portLogo } from "@/lib/logo";
 import { uuidOrNull } from "@/lib/params";
 import { fillTemplate } from "@/lib/templates";
 
@@ -36,6 +38,7 @@ export default page(async function PrivacyNoticePage({ params }: { params: Promi
     .limit(1);
   if (!owner) notFound();
   const [marina] = await db.select().from(marinas).where(eq(marinas.id, ctx.marinaId));
+  const logo = portLogo(marina);
   const text = marina.privacyPolicyText ? fillTemplate(marina.privacyPolicyText, marina) : null;
 
   return (
@@ -50,8 +53,11 @@ export default page(async function PrivacyNoticePage({ params }: { params: Promi
       </div>
 
       <article className="card mx-auto max-w-3xl p-8 text-[13.5px] leading-relaxed print:max-w-none print:border-0 print:p-0 print:shadow-none">
-        <header className="mb-5 flex items-baseline justify-between border-b border-line pb-3">
-          <p className="font-display text-xl font-semibold">{marina.legalName || marina.name}</p>
+        <header className="mb-5 flex items-center justify-between gap-4 border-b border-line pb-3">
+          <div className="flex items-center gap-4">
+            {logo && <PortLogo logo={logo} alt="" className="h-14 w-auto max-w-[9rem] shrink-0" />}
+            <p className="font-display text-xl font-semibold">{marina.legalName || marina.name}</p>
+          </div>
           <p className="text-xs text-muted">Informativa v. {marina.privacyPolicyVersion}</p>
         </header>
 

@@ -9,6 +9,7 @@ import {
   boats,
   contracts,
   ledgerEntries,
+  marinaLogos,
   marinaPlans,
   marinas,
   memberships,
@@ -259,6 +260,13 @@ async function main() {
       }
     }
     await tx.update(berths).set({ status: "manutenzione", notes: "Sostituzione catenaria e trappe." }).where(eq(berths.id, berthByCode.get("C11")!.id));
+
+    // ── Logo della società di gestione ── (di fantasia, scripts/demo/logo-demo.png)
+    const logo = readFileSync(new URL("./demo/logo-demo.png", import.meta.url));
+    const logoInfo = imageInfo(logo);
+    if (!logoInfo) throw new Error("Logo demo non leggibile");
+    await tx.insert(marinaLogos).values({ marinaId, mime: logoInfo.mime, data: logo });
+    await tx.update(marinas).set({ logoWidth: logoInfo.width, logoHeight: logoInfo.height, logoVersion: 1 }).where(eq(marinas.id, marinaId));
 
     // ── Clienti ──
     const ownerIds: string[] = [];
