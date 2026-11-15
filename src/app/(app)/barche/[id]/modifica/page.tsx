@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui";
 import { db } from "@/db";
 import { boats, owners } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
-import { metersInput } from "@/lib/format";
+import { metersInput, moneyInput } from "@/lib/format";
 import { uuidOrNull } from "@/lib/params";
 import { BoatForm } from "../../boat-form";
 
@@ -33,7 +33,7 @@ export default page(async function EditBoatPage({ params }: { params: Promise<{ 
       <PageHeader title={`Modifica ${boat.name}`} back={{ href: `/barche/${boat.id}`, label: boat.name }} />
       <BoatForm
         owners={ownerList}
-        boat={{ ...boat, length: metersInput(boat.lengthCm), beam: metersInput(boat.beamCm), draft: metersInput(boat.draftCm) }}
+        boat={{ ...boat, length: metersInput(boat.lengthCm), beam: metersInput(boat.beamCm), draft: metersInput(boat.draftCm), declaredValue: moneyInput(boat.declaredValueCents) }}
       />
     </>
   );

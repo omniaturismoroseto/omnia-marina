@@ -1,6 +1,7 @@
 import "server-only";
 import type { Tx } from "@/db";
 import { berthCategories, marinas, memberships, priceLists, seasonPeriods } from "@/db/schema";
+import { CONTRACT_APPROVAL_TEMPLATE, CONTRACT_TERMS_TEMPLATE } from "@/lib/contract-texts";
 
 export const PRIVACY_TEMPLATE = `INFORMATIVA SUL TRATTAMENTO DEI DATI PERSONALI
 ai sensi degli artt. 13 e 14 del Regolamento (UE) 2016/679 (GDPR)
@@ -24,20 +25,14 @@ I dati contrattuali e contabili sono conservati per dieci anni dalla cessazione 
 5. Destinatari
 I dati possono essere comunicati ad autorità marittime e di pubblica sicurezza, consulenti fiscali e fornitori di servizi informatici nominati responsabili del trattamento. I dati non sono diffusi.
 
-6. Diritti dell'interessato
+6. Videosorveglianza
+Le aree portuali sono videosorvegliate, come indicato dagli appositi cartelli, per la sicurezza delle persone, delle unità da diporto e della struttura (art. 6.1.f GDPR). Le immagini sono accessibili alla direzione del porto e al personale autorizzato, alle forze dell'ordine e all'autorità giudiziaria su loro richiesta e, tramite l'applicazione riservata del porto con credenziali personali, ai diportisti titolari di contratto al solo fine di controllare la propria unità. Le immagini non sono diffuse né pubblicate.
+
+7. Diritti dell'interessato
 L'interessato può chiedere in ogni momento l'accesso ai propri dati, la rettifica, la cancellazione, la limitazione, la portabilità, opporsi al trattamento e revocare i consensi prestati, scrivendo al Titolare. Ha inoltre diritto di proporre reclamo al Garante per la protezione dei dati personali.
 
-7. Natura del conferimento
+8. Natura del conferimento
 Il conferimento dei dati per le finalità a), b) e c) è necessario per la conclusione del contratto. Il consenso per le finalità d) ed e) è facoltativo.`;
-
-export const CONTRACT_TERMS_TEMPLATE = `1. Oggetto. Il Porto concede all'Utente l'uso del posto barca indicato, per l'unità e per il periodo riportati nel presente contratto.
-2. Corrispettivo. L'Utente si impegna a versare il corrispettivo pattuito alle scadenze indicate. Il mancato pagamento alle scadenze autorizza il Porto a sospendere i servizi.
-3. Assicurazione. L'unità deve essere coperta da polizza di responsabilità civile in corso di validità per tutta la durata del contratto.
-4. Uso del posto barca. Il posto barca è destinato esclusivamente all'unità indicata. È vietata la cessione o il subaffitto senza il consenso scritto del Porto.
-5. Ormeggio e custodia. L'Utente provvede a ormeggiare l'unità con cime e parabordi adeguati e resta custode dell'unità e di quanto in essa contenuto.
-6. Regolamento. L'Utente dichiara di conoscere e accettare il regolamento interno del Porto e le disposizioni dell'Autorità marittima.
-7. Assenze. L'Utente comunica al Porto le assenze superiori a un giorno; durante l'assenza il Porto può utilizzare il posto per unità in transito.
-8. Cessazione. Alla scadenza il posto barca deve essere lasciato libero, salvo rinnovo concordato per iscritto.`;
 
 const DEFAULT_CATEGORIES: [name: string, lengthCm: number, beamCm: number][] = [
   ["I · fino a 6,00 m", 600, 250],
@@ -53,7 +48,7 @@ const DEFAULT_CATEGORIES: [name: string, lengthCm: number, beamCm: number][] = [
 export async function createMarinaWithDefaults(tx: Tx, input: { name: string; userId: string; year: number }): Promise<string> {
   const [marina] = await tx
     .insert(marinas)
-    .values({ name: input.name, privacyPolicyText: PRIVACY_TEMPLATE, contractTerms: CONTRACT_TERMS_TEMPLATE })
+    .values({ name: input.name, privacyPolicyText: PRIVACY_TEMPLATE, contractTerms: CONTRACT_TERMS_TEMPLATE, contractApprovalText: CONTRACT_APPROVAL_TEMPLATE })
     .returning({ id: marinas.id });
 
   await tx.insert(memberships).values({ userId: input.userId, marinaId: marina.id, role: "admin" });

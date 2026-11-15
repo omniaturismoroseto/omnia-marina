@@ -12,7 +12,8 @@ import { db } from "@/db";
 import { berths, boats, contracts, movements, owners, users } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, formatDateTime, todayRome } from "@/lib/dates";
-import { formatDimensions, formatMeters } from "@/lib/format";
+import { auxEngine, describeEngine, mainEngine } from "@/lib/engines";
+import { formatDimensions, formatMeters, formatMoney } from "@/lib/format";
 import { BOAT_TYPE_LABEL, CONTRACT_TYPE_LABEL, MOVEMENT_LABEL } from "@/lib/labels";
 import { uuidOrNull } from "@/lib/params";
 import { deleteBoat } from "@/server/boat-actions";
@@ -108,7 +109,9 @@ export default page(async function BoatPage({ params }: { params: Promise<{ id: 
                 ["Cantiere e modello", [boat.builder, boat.model].filter(Boolean).join(" ") || null],
                 ["Anno", boat.year],
                 ["Bandiera", boat.flag],
-                ["Motorizzazione", boat.engine],
+                ["Motorizzazione", [describeEngine(mainEngine(boat)), boat.engine].filter(Boolean).join(" · ") || null],
+                ["Motore ausiliario", describeEngine(auxEngine(boat)) || null],
+                ["Valore dichiarato", boat.declaredValueCents !== null ? formatMoney(boat.declaredValueCents) : null],
                 ["Note", boat.notes],
               ]}
             />

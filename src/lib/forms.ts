@@ -24,6 +24,11 @@ export const f = {
   // Importo in euro scritto dall'utente, convertito in centesimi.
   money: (message = "Importo non valido") =>
     z.preprocess((v) => (typeof v === "string" ? parseMoney(v) : null), z.number({ error: message }).int().min(0, message).max(100_000_000, message)),
+  optMoney: (message = "Importo non valido") =>
+    z.preprocess(
+      (v) => (typeof v === "string" && v.trim() !== "" ? (parseMoney(v) ?? Number.NaN) : null),
+      z.number({ error: message }).int().min(0, message).max(100_000_000, message).nullable(),
+    ),
   // Misura in metri scritta dall'utente, convertita in centimetri.
   meters: (message = "Misura non valida (es. 9,50)") =>
     z.preprocess((v) => (typeof v === "string" ? parseMeters(v) : null), z.number({ error: message }).int().min(1, message).max(20_000, message)),

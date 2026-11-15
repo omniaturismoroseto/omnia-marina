@@ -5,11 +5,12 @@ import { and, eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { db } from "@/db";
-import { berthCategories, berths, boats, charges, contracts, ledgerEntries, movements, owners, piers, users } from "@/db/schema";
+import { berthCategories, berths, boats, charges, contractItems, contracts, ledgerEntries, marinas, movements, owners, piers, users } from "@/db/schema";
 import { addDays, todayRome } from "@/lib/dates";
 import { deletePayment, registerPayment } from "@/server/accounting";
-import { activateContract, cancelContract, createContract, recordMovement, type ContractInput } from "@/server/contracts";
+import { activateContract, addContractItem, cancelContract, createContract, recordMovement, removeContractItem, type ContractInput } from "@/server/contracts";
 import { DomainError, toFormState } from "@/server/errors";
+import { CONTRACT_APPROVAL_TEMPLATE, CONTRACT_TERMS_TEMPLATE } from "@/lib/contract-texts";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
 
 async function databaseAvailable(): Promise<boolean> {
@@ -231,5 +232,73 @@ describe.skipIf(!available)("regole del porto (database)", () => {
     await db.transaction((tx) => cancelContract(tx, actor(a), c.id));
     const rows = await db.select().from(charges).where(eq(charges.contractId, c.id)).orderBy(charges.dueDate);
     expect(rows.map((r) => r.cancelledAt !== null)).toEqual([false, true]);
+  });
+
+  it("un nuovo porto nasce con le condizioni del contratto dall'articolo 4 e l'approvazione specifica", async () => {
+    const [m] = await db.select().from(marinas).where(eq(marinas.id, a.marinaId));
+    expect(m.contractTerms).toBe(CONTRACT_TERMS_TEMPLATE);
+    expect(m.contractTerms?.startsWith("4)")).toBe(true);
+    expect(m.contractApprovalText).toBe(CONTRACT_APPROVAL_TEMPLATE);
+  });
+
+  it("le voci aggiuntive nascono con il contratto e diventano addebiti solo all'attivazione", async () => {
+    const draft = await create(a, {
+      type: "annuale",
+      status: "bozza",
+      startDate: "2031-01-01",
+      endDate: "2031-12-31",
+      amountCents: 116000,
+      instalments: { count: 1, firstDueDate: "2031-01-01", everyMonths: 1 },
+      items: [
+        { kind: "auto_coperto", reference: "12", startDate: "2031-01-01", endDate: "2031-12-31", amountCents: 30000 },
+        { kind: "gestione", reference: null, startDate: null, endDate: null, amountCents: 15000 },
+        { kind: "rifiuti", reference: null, startDate: null, endDate: null, amountCents: 4000 },
+      ],
+    });
+    expect(await db.select().from(contractItems).where(eq(contractItems.contractId, draft.id))).toHaveLength(3);
+    expect(await db.select().from(charges).where(eq(charges.contractId, draft.id))).toHaveLength(0);
+
+    await db.transaction((tx) => activateContract(tx, actor(a), draft.id, { count: 1, firstDueDate: "2031-01-01", everyMonths: 1 }));
+    const rows = await db.select().from(charges).where(eq(charges.contractId, draft.id));
+    expect(rows.map((r) => r.grossCents).sort((x, y) => x - y)).toEqual([4000, 15000, 30000, 116000]);
+    expect(rows.every((r) => r.dueDate === "2031-01-01" && r.netCents + r.vatCents === r.grossCents)).toBe(true);
+    expect(rows.find((r) => r.grossCents === 30000)?.description).toMatch(/Posto auto coperto n\. 12/);
+    const items = await db.select().from(contractItems).where(eq(contractItems.contractId, draft.id));
+    expect(items.every((it) => it.chargeId !== null)).toBe(true);
+  });
+
+  it("le spese fisse compaiono una volta sola e gli spazi vogliono un periodo coerente", async () => {
+    const fee = { kind: "gestione" as const, reference: null, startDate: null, endDate: null, amountCents: 100 };
+    await expect(create(a, { status: "bozza", items: [fee, fee] })).rejects.toThrow(/già presente/);
+    await expect(
+      create(a, { status: "bozza", items: [{ kind: "carrello", reference: null, startDate: "2031-05-01", endDate: "2031-04-01", amountCents: 100 }] }),
+    ).rejects.toThrow(/precede/);
+    await expect(create(a, { status: "bozza", items: [{ kind: "secca", reference: null, startDate: null, endDate: null, amountCents: 100 }] })).rejects.toThrow(
+      /periodo/,
+    );
+  });
+
+  it("una voce aggiunta a un contratto attivo si addebita subito e si toglie solo se non incassata", async () => {
+    const c = await create(a, { boatId: a.otherBoatId, startDate: addDays(today, 60), endDate: addDays(today, 62) });
+    await db.transaction((tx) =>
+      addContractItem(tx, actor(a), c.id, { kind: "carrello", reference: null, startDate: addDays(today, 60), endDate: addDays(today, 62), amountCents: 2500 }),
+    );
+    await db.transaction((tx) => addContractItem(tx, actor(a), c.id, { kind: "rifiuti", reference: null, startDate: null, endDate: null, amountCents: 4000 }));
+    const items = await db.select().from(contractItems).where(eq(contractItems.contractId, c.id));
+    const carrello = items.find((it) => it.kind === "carrello")!;
+    const quota = items.find((it) => it.kind === "rifiuti")!;
+    const [carrelloCharge] = await db.select().from(charges).where(eq(charges.id, carrello.chargeId!));
+    expect(carrelloCharge).toMatchObject({ grossCents: 2500, dueDate: today, kind: "servizi" });
+
+    // Un altro porto non vede la voce.
+    await expect(db.transaction((tx) => removeContractItem(tx, actor(b), carrello.id))).rejects.toThrow(/non trovata/);
+
+    await db.transaction((tx) => registerPayment(tx, actor(a), { chargeId: quota.chargeId!, paidOn: today, amountCents: 4000, method: "contanti", reference: null }));
+    await expect(db.transaction((tx) => removeContractItem(tx, actor(a), quota.id))).rejects.toThrow(/già stata incassata/);
+
+    await db.transaction((tx) => removeContractItem(tx, actor(a), carrello.id));
+    const [cancelled] = await db.select().from(charges).where(eq(charges.id, carrello.chargeId!));
+    expect(cancelled.cancelledAt).not.toBeNull();
+    expect(await db.select().from(contractItems).where(eq(contractItems.contractId, c.id))).toHaveLength(1);
   });
 });

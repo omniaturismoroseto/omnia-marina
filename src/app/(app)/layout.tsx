@@ -119,7 +119,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Suspense fallback={<NavigationFallback />}>
         <Navigation />
       </Suspense>
-      <main className="mx-auto w-full max-w-6xl px-4 pt-5 pb-28 lg:px-8 lg:pt-8 lg:pb-16">{children}</main>
+      <main className="mx-auto w-full max-w-6xl px-4 pt-5 pb-28 lg:px-8 lg:pt-8 lg:pb-16 print:max-w-none print:p-0">{children}</main>
     </div>
   );
 }

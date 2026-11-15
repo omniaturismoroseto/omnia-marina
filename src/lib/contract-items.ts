@@ -1,0 +1,31 @@
+import type { ContractItemKind } from "@/db/schema";
+import { CONTRACT_ITEM_LABEL } from "./labels";
+
+// Voci del contratto oltre al posto barca, nell'ordine in cui compaiono nel contratto stampato.
+export const SPACE_ITEM_KINDS = ["secca", "auto_coperto", "auto_scoperto", "carrello"] as const satisfies readonly ContractItemKind[];
+export const FEE_ITEM_KINDS = ["gestione", "rifiuti"] as const satisfies readonly ContractItemKind[];
+export const ITEM_KINDS = [...SPACE_ITEM_KINDS, ...FEE_ITEM_KINDS] as const;
+
+export interface ContractItemInput {
+  kind: ContractItemKind;
+  reference: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  amountCents: number;
+}
+
+/** Gli spazi (a terra, posti auto, carrello) hanno un periodo; le spese fisse no. */
+export function itemHasPeriod(kind: ContractItemKind): boolean {
+  return (SPACE_ITEM_KINDS as readonly string[]).includes(kind);
+}
+
+/** Descrizione breve della voce, con il numero del posto auto se indicato. */
+export function itemTitle(item: { kind: ContractItemKind; reference: string | null }): string {
+  const label = CONTRACT_ITEM_LABEL[item.kind];
+  return item.reference ? `${label} n. ${item.reference}` : label;
+}
+
+/** Ordina le voci come nel contratto: prima gli spazi, poi le spese. */
+export function sortItems<T extends { kind: ContractItemKind }>(items: T[]): T[] {
+  return [...items].sort((a, b) => ITEM_KINDS.indexOf(a.kind) - ITEM_KINDS.indexOf(b.kind));
+}

@@ -92,3 +92,12 @@ export const LEDGER_CATEGORIES = {
 } as const;
 
 export const CHARGE_TO_LEDGER_CATEGORY = { ormeggio: "Ormeggi", servizi: "Servizi", utenze: "Utenze", altro: "Altre entrate" } as const;
+
+export const CONTRACT_ITEM_LABEL = {
+  secca: "Spazio a terra per la sosta dell'unità",
+  auto_coperto: "Posto auto coperto",
+  auto_scoperto: "Posto auto scoperto",
+  carrello: "Spazio per carrello o invasatura",
+  gestione: "Spese di gestione comuni",
+  rifiuti: "Quota rifiuti",
+} as const;

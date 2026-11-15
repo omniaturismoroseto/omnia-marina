@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { ActionButton, CheckboxField, Field, Form, FormMessage, SelectField, Submit, TextareaField } from "@/components/form";
+import { moneyInput } from "@/lib/format";
+import { CONTRACT_APPROVAL_TEMPLATE, CONTRACT_TERMS_TEMPLATE } from "@/lib/contract-texts";
 import {
   addMember,
   changeMemberRole,
@@ -29,7 +31,7 @@ const ROLE_OPTIONS = [
 type Marina = Record<
   "name" | "legalName" | "vatNumber" | "fiscalCode" | "address" | "zip" | "city" | "province" | "phone" | "email" | "vhfChannel",
   string | null
-> & { defaultVatRate: number };
+> & { defaultVatRate: number; serviceFeeCents: number | null; wasteFeeCents: number | null };
 
 export function MarinaForm({ marina }: { marina: Marina }) {
   return (
@@ -47,6 +49,22 @@ export function MarinaForm({ marina }: { marina: Marina }) {
         <Field name="email" label="Email" type="email" defaultValue={marina.email ?? ""} />
         <Field name="vhfChannel" label="Canale VHF" defaultValue={marina.vhfChannel ?? ""} placeholder="Es. 09" />
         <SelectField name="defaultVatRate" label="Aliquota IVA abituale" defaultValue={String(marina.defaultVatRate)} options={VAT_OPTIONS} />
+        <Field
+          name="serviceFeeCents"
+          label="Spese di gestione comuni (€)"
+          defaultValue={moneyInput(marina.serviceFeeCents)}
+          inputMode="decimal"
+          placeholder="Es. 150,00"
+          hint="Proposte nei nuovi contratti annuali (art. 3)."
+        />
+        <Field
+          name="wasteFeeCents"
+          label="Quota rifiuti (€)"
+          defaultValue={moneyInput(marina.wasteFeeCents)}
+          inputMode="decimal"
+          placeholder="Es. 40,00"
+          hint="Proposta nei nuovi contratti annuali (art. 3)."
+        />
       </div>
       <div className="flex items-center gap-3">
         <Submit>Salva</Submit>
@@ -56,7 +74,33 @@ export function MarinaForm({ marina }: { marina: Marina }) {
   );
 }
 
-export function LegalTextsForm({ version, privacyText, contractTerms }: { version: string; privacyText: string; contractTerms: string }) {
+// Rimette nel campo il testo modello; si salva solo premendo "Salva i testi".
+function RestoreTemplate({ field, text }: { field: string; text: string }) {
+  return (
+    <button
+      type="button"
+      className="link text-sm"
+      onClick={(e) => {
+        const el = e.currentTarget.form?.elements.namedItem(field);
+        if (el instanceof HTMLTextAreaElement && (el.value.trim() === "" || window.confirm("Sostituire il testo attuale con il modello?"))) el.value = text;
+      }}
+    >
+      Usa il testo modello
+    </button>
+  );
+}
+
+export function LegalTextsForm({
+  version,
+  privacyText,
+  contractTerms,
+  contractApprovalText,
+}: {
+  version: string;
+  privacyText: string;
+  contractTerms: string;
+  contractApprovalText: string;
+}) {
   return (
     <Form action={saveLegalTexts} className="space-y-4">
       <Field
@@ -78,7 +122,26 @@ export function LegalTextsForm({ version, privacyText, contractTerms }: { versio
           </>
         }
       />
-      <TextareaField name="contractTerms" label="Condizioni del contratto di ormeggio" defaultValue={contractTerms} rows={10} hint="Stampate in fondo a ogni contratto." />
+      <div>
+        <TextareaField
+          name="contractTerms"
+          label="Condizioni del contratto (dall'articolo 4)"
+          defaultValue={contractTerms}
+          rows={14}
+          hint="Gli articoli 1-3 (oggetto, canone, spese) li compone l'app con i dati del contratto. Ogni articolo inizia a capo con il suo numero, es. «5)»."
+        />
+        <RestoreTemplate field="contractTerms" text={CONTRACT_TERMS_TEMPLATE} />
+      </div>
+      <div>
+        <TextareaField
+          name="contractApprovalText"
+          label="Approvazione specifica delle clausole (artt. 1341-1342 c.c.)"
+          defaultValue={contractApprovalText}
+          rows={5}
+          hint="Stampata dopo le firme, con una seconda firma del cliente. Se cambi la numerazione degli articoli, aggiornala anche qui."
+        />
+        <RestoreTemplate field="contractApprovalText" text={CONTRACT_APPROVAL_TEMPLATE} />
+      </div>
       <div className="flex items-center gap-3">
         <Submit>Salva i testi</Submit>
         <FormMessage />

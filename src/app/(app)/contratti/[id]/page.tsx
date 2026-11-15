@@ -8,7 +8,8 @@ import { page } from "@/components/page";
 import { ChargeStatusBadge, ContractStatusBadge, PresenceBadge } from "@/components/status";
 import { Badge, ButtonLink, Card, Details, EmptyState, Notice, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { berths, boats, contracts, movements, owners, users } from "@/db/schema";
+import { berths, boats, contractItems, contracts, movements, owners, users } from "@/db/schema";
+import { itemTitle, sortItems } from "@/lib/contract-items";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, formatDateTime, todayRome } from "@/lib/dates";
 import { formatDimensions, formatMoney, splitVat } from "@/lib/format";
@@ -16,7 +17,7 @@ import { CONTRACT_TYPE_LABEL, MOVEMENT_LABEL } from "@/lib/labels";
 import { uuidOrNull } from "@/lib/params";
 import { listCharges } from "@/server/charges";
 import { latestConsents } from "@/server/owners";
-import { ActivateForm, CancelContractButton, ContractMetaForm } from "./contract-forms";
+import { ActivateForm, AddContractItemForm, CancelContractButton, ContractMetaForm, RemoveContractItemButton } from "./contract-forms";
 
 export const metadata: Metadata = { title: "Contratto" };
 
@@ -37,7 +38,7 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
   const { contract: c, boat } = row;
   const today = todayRome();
 
-  const [chargeRows, moveRows, consents] = await Promise.all([
+  const [chargeRows, moveRows, consents, itemRows] = await Promise.all([
     listCharges(ctx.marinaId, today, { contractId: id }),
     db
       .select({ id: movements.id, kind: movements.kind, at: movements.at, note: movements.note, userName: users.name })
@@ -46,7 +47,10 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
       .where(eq(movements.contractId, id))
       .orderBy(desc(movements.at)),
     latestConsents(ctx.marinaId, c.ownerId),
+    db.select().from(contractItems).where(and(eq(contractItems.contractId, id), eq(contractItems.marinaId, ctx.marinaId))),
   ]);
+  const items = sortItems(itemRows);
+  const itemsTotal = items.reduce((sum, it) => sum + it.amountCents, 0);
 
   const { netCents, vatCents } = splitVat(c.amountCents, c.vatRate);
   const live = chargeRows.filter((ch) => ch.status !== "annullato");
@@ -112,7 +116,7 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
                 ],
                 [c.type === "transito" ? "Arrivo" : "Inizio", formatDate(c.startDate)],
                 [c.type === "transito" ? "Partenza" : "Fine", formatDate(c.endDate)],
-                ["Importo (IVA inclusa)", <strong key="a">{formatMoney(c.amountCents)}</strong>],
+                ["Canone posto barca (IVA incl.)", <strong key="a">{formatMoney(c.amountCents)}</strong>],
                 ["Imponibile e IVA", `${formatMoney(netCents)} + ${formatMoney(vatCents)} (${c.vatRate}%)`],
                 ["Firmato il", c.signedOn ? formatDate(c.signedOn) : null],
                 ["Arrivo registrato", c.checkedInAt ? formatDateTime(c.checkedInAt) : null],
@@ -120,6 +124,46 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
                 ["Note", c.notes],
               ]}
             />
+          </Card>
+
+          <Card title="Altri spazi e spese" flush>
+            {items.length === 0 ? (
+              <EmptyState title="Nessuna voce aggiuntiva" description={open ? "Posti auto, sosta a terra, carrello, spese di gestione e rifiuti si aggiungono dal riquadro a lato." : undefined} />
+            ) : (
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Voce</th>
+                    <th>Periodo</th>
+                    <th className="num">Importo</th>
+                    {open && <th aria-label="Azioni" />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((it) => (
+                    <tr key={it.id}>
+                      <td>{itemTitle(it)}</td>
+                      <td className="whitespace-nowrap text-muted tabular-nums">{it.startDate ? `${formatDate(it.startDate)} – ${formatDate(it.endDate)}` : "—"}</td>
+                      <td className="num">{formatMoney(it.amountCents)}</td>
+                      {open && (
+                        <td className="text-right">
+                          <RemoveContractItemButton itemId={it.id} />
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={2} className="px-3 py-2.5 text-right text-sm font-medium">
+                      Totale contratto (posto barca + altre voci)
+                    </td>
+                    <td className="num px-3 py-2.5 font-semibold">{formatMoney(c.amountCents + itemsTotal)}</td>
+                    {open && <td />}
+                  </tr>
+                </tfoot>
+              </table>
+            )}
           </Card>
 
           <Card title="Addebiti e incassi" flush>
@@ -217,6 +261,12 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
               ) : (
                 <MovementButtons contractId={id} presence={c.presence} canArrive departing={c.endDate <= today} earlyDeparture />
               )}
+            </Card>
+          )}
+
+          {open && (
+            <Card title="Aggiungi spazio o spesa">
+              <AddContractItemForm contractId={id} startDate={c.startDate} endDate={c.endDate} active={c.status === "attivo"} />
             </Card>
           )}
 
