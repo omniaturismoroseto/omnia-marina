@@ -4,9 +4,12 @@ import { asc, eq } from "drizzle-orm";
 import { page } from "@/components/page";
 import { Card, Notice, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { berths, marinas, piers } from "@/db/schema";
+import { berthCategories, berths, marinaPlans, marinas, piers } from "@/db/schema";
 import { requireMarina } from "@/lib/context";
 import { SettingsTabs } from "../tabs";
+import type { StoredAnalysis } from "@/lib/plan-analysis";
+import { planAnalysisAvailable } from "@/server/plan-ai";
+import { AutoDetect } from "./auto-detect";
 import { PhotoUploader } from "./photo-uploader";
 import { PlanEditor } from "./plan-editor";
 
@@ -19,7 +22,7 @@ export default page(async function PlanSettingsPage() {
       .select({ width: marinas.planWidth, height: marinas.planHeight, pxPerMeter: marinas.planPxPerMeter, version: marinas.planVersion })
       .from(marinas)
       .where(eq(marinas.id, ctx.marinaId)),
-    db.select({ id: piers.id, name: piers.name }).from(piers).where(eq(piers.marinaId, ctx.marinaId)).orderBy(asc(piers.sortOrder), asc(piers.code)),
+    db.select({ id: piers.id, name: piers.name, code: piers.code }).from(piers).where(eq(piers.marinaId, ctx.marinaId)).orderBy(asc(piers.sortOrder), asc(piers.code)),
     db
       .select({
         id: berths.id,
@@ -37,7 +40,21 @@ export default page(async function PlanSettingsPage() {
       .where(eq(berths.marinaId, ctx.marinaId))
       .orderBy(asc(berths.code)),
   ]);
+  const [[plan], categories] = await Promise.all([
+    db.select({ analysis: marinaPlans.analysis }).from(marinaPlans).where(eq(marinaPlans.marinaId, ctx.marinaId)),
+    db
+      .select({ id: berthCategories.id, name: berthCategories.name, maxLengthCm: berthCategories.maxLengthCm, maxBeamCm: berthCategories.maxBeamCm })
+      .from(berthCategories)
+      .where(eq(berthCategories.marinaId, ctx.marinaId))
+      .orderBy(asc(berthCategories.sortOrder), asc(berthCategories.maxLengthCm)),
+  ]);
   const hasPhoto = marina.width !== null && marina.height !== null;
+  // Le proposte valgono solo per la foto su cui sono state calcolate.
+  const stored = (plan?.analysis ?? null) as StoredAnalysis | null;
+  const analysis = stored && stored.photoVersion === marina.version && Array.isArray(stored.proposals) ? stored : null;
+  const placedBerths = berthRows.flatMap((b) =>
+    b.x !== null && b.y !== null ? [{ x: b.x, y: b.y, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm }] : [],
+  );
   const placedCount = berthRows.filter((b) => b.x !== null).length;
 
   return (
@@ -64,6 +81,22 @@ export default page(async function PlanSettingsPage() {
         </Card>
 
         {hasPhoto && (
+          <Card title={analysis ? "Proposte dalla foto" : "Riconoscimento automatico"}>
+            <AutoDetect
+              available={planAnalysisAvailable()}
+              analysis={analysis}
+              imageUrl={`/pianta/immagine?v=${marina.version}`}
+              width={marina.width!}
+              height={marina.height!}
+              pxPerMeter={marina.pxPerMeter}
+              categories={categories}
+              usedCodes={pierRows.map((p) => p.code)}
+              placed={placedBerths}
+            />
+          </Card>
+        )}
+
+        {hasPhoto && (
           <Card title="Disponi i posti sulla foto">
             <ol className="mb-4 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
               <li>
@@ -87,9 +120,10 @@ export default page(async function PlanSettingsPage() {
                 </Notice>
               </div>
             )}
-            {/* key: una nuova foto o un salvataggio da un'altra scheda fanno ripartire l'editor dai dati aggiornati */}
+            {/* key: una nuova foto o posti nuovi (per esempio creati dalle proposte, che fissano anche la scala) fanno ripartire
+                l'editor dai dati aggiornati; i salvataggi fatti dall'editor stesso no, così il suo messaggio resta visibile. */}
             <PlanEditor
-              key={`${marina.version}`}
+              key={`${marina.version}:${berthRows.length}`}
               imageUrl={`/pianta/immagine?v=${marina.version}`}
               width={marina.width!}
               height={marina.height!}

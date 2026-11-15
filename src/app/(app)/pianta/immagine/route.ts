@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     await tx
       .insert(marinaPlans)
       .values({ marinaId: ctx.marinaId, mime: info.mime, data })
-      .onConflictDoUpdate({ target: marinaPlans.marinaId, set: { mime: info.mime, data, updatedAt: new Date() } });
+      .onConflictDoUpdate({ target: marinaPlans.marinaId, set: { mime: info.mime, data, analysis: null, analyzedAt: null, updatedAt: new Date() } });
     await tx
       .update(marinas)
       .set({

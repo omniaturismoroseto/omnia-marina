@@ -4,6 +4,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   real,
@@ -90,6 +91,10 @@ export const marinaPlans = pgTable("marina_plans", {
     .references(() => marinas.id, { onDelete: "cascade" }),
   mime: text("mime").notNull(),
   data: bytea("data").notNull(),
+  // Ultima analisi automatica della foto: pontili e banchine proposti, in attesa di conferma.
+  // Si azzera quando cambia la foto o quando le proposte vengono confermate o scartate.
+  analysis: jsonb("analysis"),
+  analyzedAt: timestamp("analyzed_at", { withTimezone: true }),
   updatedAt: updatedAt(),
 });
 

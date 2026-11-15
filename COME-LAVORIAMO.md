@@ -81,6 +81,46 @@ Ci vogliono 5-10 minuti. Alla fine compare `Service URL: …`: la nuova versione
 
 ---
 
+## Riconoscimento automatico dei pontili (una volta sola)
+
+In Impostazioni → Pianta dal vero, il pulsante «Riconosci pontili e banchine» fa guardare la foto a Claude (Anthropic),
+attraverso Vertex AI di Google: tutto resta nel progetto `omnia-marina` e si paga sulla fatturazione Google, senza
+account o chiavi in più. Va acceso una volta, dopo aver pubblicato una versione che lo contiene.
+
+1. Attiva il servizio Vertex AI nel progetto:
+
+   ```powershell
+   gcloud services enable aiplatform.googleapis.com --project omnia-marina
+   ```
+
+2. Abilita il modello **Claude Opus 5.5**: apri
+   <https://console.cloud.google.com/agent-platform/publishers/anthropic/model-garden/claude-opus-5-5?project=omnia-marina>
+   (oppure cerca «Model Garden» nella console e poi «Claude Opus 5.5»), premi **Abilita** e accetta le condizioni.
+   Facoltativo: fai lo stesso con **Claude Opus 4.8**, che l'app usa solo nel caso raro in cui Opus 5.5 rifiuti una foto.
+
+3. Dai all'app il permesso di usarlo:
+
+   ```powershell
+   gcloud projects add-iam-policy-binding omnia-marina --member "serviceAccount:omnia-marina-run@omnia-marina.iam.gserviceaccount.com" --role roles/aiplatform.user --condition=None
+   ```
+
+4. Accendilo nell'app:
+
+   ```powershell
+   gcloud run services update omnia-marina --update-env-vars "ANTHROPIC_VERTEX_PROJECT_ID=omnia-marina,CLOUD_ML_REGION=global" --region europe-west1 --project omnia-marina
+   ```
+
+Da quel momento il pulsante è attivo. Ogni analisi costa indicativamente tra 10 e 30 centesimi (una foto e la
+risposta), con un limite di 20 analisi al giorno per porto. Per spegnerlo:
+
+```powershell
+gcloud run services update omnia-marina --remove-env-vars ANTHROPIC_VERTEX_PROJECT_ID --region europe-west1 --project omnia-marina
+```
+
+Se l'app dice che Google ha rifiutato la richiesta, quasi sempre manca il passo 2 o il passo 3.
+
+---
+
 ## Controllare
 
 ### Che versione è online, e quando è stata pubblicata

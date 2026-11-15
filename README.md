@@ -64,6 +64,11 @@ Da **Impostazioni → Pianta dal vero** la direzione:
    perpendicolari al pontile e nelle dimensioni reali;
 4. ritocca i singoli posti trascinandoli o ruotandoli, e salva.
 
+In alternativa ai passi 3 e 4, **«Riconosci pontili e banchine»** fa analizzare la foto a Claude (su Vertex AI di Google):
+propone ogni pontile e banchina con nome, posti per lato e misura delle barche; si correggono i dati, si spostano le
+estremità sulla foto e con un clic nascono pontili e posti già disposti. Si attiva una volta con i passi in
+[COME-LAVORIAMO.md](COME-LAVORIAMO.md); senza attivazione il resto della pianta funziona comunque.
+
 Da quel momento la Mappa si apre sulla pianta; lo schema resta disponibile. Il porto dimostrativo usa una veduta
 di fantasia (`scripts/demo/pianta-demo.jpg`).
 
