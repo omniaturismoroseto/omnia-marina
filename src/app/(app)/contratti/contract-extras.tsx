@@ -1,19 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
+import { Plus, X } from "lucide-react";
 import { Field } from "@/components/form";
-import { moneyInput, parseMoney } from "@/lib/format";
+import { formatMoney, moneyInput, parseMoney } from "@/lib/format";
 import { CONTRACT_ITEM_LABEL } from "@/lib/labels";
 import { SPACE_ITEM_KINDS } from "@/lib/contract-items";
+import type { ListExtra } from "@/server/list-extras";
 
 type SpaceKind = (typeof SPACE_ITEM_KINDS)[number];
-type SpaceState = { on: boolean; ref: string; from: string; to: string; amount: string };
+// fromList: nome della voce del listino scelta, mostrato sotto l'importo al posto del prezzo generico.
+type SpaceState = { on: boolean; ref: string; from: string; to: string; amount: string; fromList?: string };
+type ServiceLine = { key: number; desc: string; amount: string; vatRate: number };
+
+const vatLabel = (rate: number) => (rate === 0 ? "senza IVA" : `IVA ${rate}% inclusa`);
 
 const HAS_REFERENCE: Record<SpaceKind, boolean> = { secca: false, auto_coperto: true, auto_scoperto: true, carrello: false };
 
 /**
  * Voci del contratto oltre al posto barca: spazi a terra, posti auto e carrello (con periodo e importo)
  * e le spese fisse di gestione e rifiuti. I campi si chiamano <tipo>_on, _ref, _from, _to, _amount.
+ * Dal listino si aggiungono anche cauzioni e altri servizi, con il loro prezzo e la loro IVA: campi ripetuti
+ * servizio_desc, servizio_amount, servizio_vat.
  */
 export function ContractExtras({
   startDate,
@@ -24,6 +32,8 @@ export function ContractExtras({
   onRifiuti,
   onSpacesTotal,
   prices,
+  listExtras,
+  listReady,
 }: {
   startDate: string;
   endDate: string;
@@ -34,21 +44,110 @@ export function ContractExtras({
   onSpacesTotal: (cents: number) => void;
   // Importi del listino per le voci, proposti quando si spunta la casella.
   prices: Partial<Record<SpaceKind, number>>;
+  // Servizi e cauzioni del listino in vigore alla data di inizio; listReady: barca e date scelte, listino letto.
+  listExtras: ListExtra[];
+  listReady: boolean;
 }) {
   const [spaces, setSpaces] = useState<Record<SpaceKind, SpaceState>>(
     () => Object.fromEntries(SPACE_ITEM_KINDS.map((k) => [k, { on: false, ref: "", from: "", to: "", amount: "" }])) as Record<SpaceKind, SpaceState>,
   );
+  const [services, setServices] = useState<ServiceLine[]>([]);
+  const [picked, setPicked] = useState("");
+  const pickerId = useId();
+
+  function changed(nextSpaces: Record<SpaceKind, SpaceState>, nextServices: ServiceLine[]) {
+    onSpacesTotal(spacesTotal(nextSpaces) + nextServices.reduce((sum, l) => sum + (parseMoney(l.amount) ?? 0), 0));
+  }
+
+  function setServiceLines(next: ServiceLine[]) {
+    setServices(next);
+    changed(spaces, next);
+  }
+
+  // Una voce del listino: un posto auto, il carrello o lo spazio a terra compilano la loro casella con quel prezzo;
+  // cauzioni e altri servizi diventano una riga di servizio.
+  function addFromList(extraId: string) {
+    const extra = listExtras.find((e) => e.id === extraId);
+    if (!extra) return;
+    if (extra.itemKind) {
+      const kind = extra.itemKind;
+      const s = spaces[kind];
+      update(kind, { on: true, from: s.from || startDate, to: s.to || endDate, amount: moneyInput(extra.amountCents), fromList: extra.name });
+    } else {
+      setServiceLines([...services, { key: Date.now(), desc: extra.name, amount: moneyInput(extra.amountCents), vatRate: extra.vatRate }]);
+    }
+    setPicked("");
+  }
 
   function update(kind: SpaceKind, patch: Partial<SpaceState>) {
     const next = { ...spaces, [kind]: { ...spaces[kind], ...patch } };
     setSpaces(next);
-    onSpacesTotal(spacesTotal(next));
+    changed(next, services);
   }
 
   return (
     <fieldset className="card p-4">
       <legend className="float-left mb-3 w-full text-[15px] font-semibold text-ink">Altri spazi e spese</legend>
       <div className="clear-both space-y-3">
+        <div className="rounded-md bg-paper p-3">
+          <label htmlFor={pickerId} className="label">
+            Dal listino
+          </label>
+          {!listReady ? (
+            <p className="text-sm text-muted">Scegli barca e date: qui compaiono servizi e cauzioni del listino in vigore.</p>
+          ) : listExtras.length === 0 ? (
+            <p className="text-sm text-muted">Il listino non ha servizi né cauzioni: si aggiungono in Tariffe → Servizi e cauzioni.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <select id={pickerId} className="input min-w-0 flex-1" value={picked} onChange={(e) => setPicked(e.target.value)}>
+                <option value="">Scegli un servizio o una cauzione…</option>
+                {listExtras.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name} · {formatMoney(e.amountCents)} ({vatLabel(e.vatRate)})
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="btn btn-secondary" disabled={!picked} onClick={() => addFromList(picked)}>
+                <Plus size={16} aria-hidden="true" />
+                Aggiungi
+              </button>
+            </div>
+          )}
+        </div>
+
+        {services.length > 0 && (
+          <ul className="space-y-2" aria-label="Servizi e cauzioni del contratto">
+            {services.map((line, i) => (
+              <li key={line.key} className="grid grid-cols-[minmax(0,1fr)_10.5rem_auto] items-end gap-2 rounded-md border border-line-soft p-3">
+                <Field
+                  name="servizio_desc"
+                  label={i === 0 ? "Servizio" : `Servizio ${i + 1}`}
+                  value={line.desc}
+                  onChange={(e) => setServiceLines(services.map((l) => (l.key === line.key ? { ...l, desc: e.target.value } : l)))}
+                  required
+                />
+                <Field
+                  name="servizio_amount"
+                  label={line.vatRate === 0 ? "Importo (senza IVA)" : `Importo (IVA ${line.vatRate}% incl.)`}
+                  value={line.amount}
+                  onChange={(e) => setServiceLines(services.map((l) => (l.key === line.key ? { ...l, amount: e.target.value } : l)))}
+                  inputMode="decimal"
+                  required
+                />
+                <input type="hidden" name="servizio_vat" value={line.vatRate} />
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm mb-1"
+                  aria-label={`Togli ${line.desc || "servizio"}`}
+                  onClick={() => setServiceLines(services.filter((l) => l.key !== line.key))}
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
         {SPACE_ITEM_KINDS.map((kind) => {
           const s = spaces[kind];
           return (
@@ -82,7 +181,7 @@ export function ContractExtras({
                     inputMode="decimal"
                     placeholder="0,00"
                     required
-                    hint={prices[kind] ? `Listino: ${moneyInput(prices[kind])} €` : undefined}
+                    hint={s.fromList ? `Dal listino: ${s.fromList}` : prices[kind] ? `Listino: ${moneyInput(prices[kind])} €` : undefined}
                   />
                 </div>
               )}

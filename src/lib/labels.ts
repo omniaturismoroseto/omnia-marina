@@ -104,4 +104,5 @@ export const CONTRACT_ITEM_LABEL = {
   carrello: "Spazio per carrello o invasatura",
   gestione: "Spese di gestione comuni",
   rifiuti: "Quota rifiuti",
+  servizio: "Servizio",
 } as const;

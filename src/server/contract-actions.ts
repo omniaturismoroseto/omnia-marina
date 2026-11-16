@@ -5,16 +5,26 @@ import { redirect } from "next/navigation";
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { berthCategories, berths, boats, contracts, piers, priceListExtras, priceLists, rates, seasonPeriods, tariffZones, type ContractType } from "@/db/schema";
+import { berthCategories, berths, boats, contracts, piers, priceLists, rates, seasonPeriods, tariffZones, type ContractType } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { isValidISODate } from "@/lib/dates";
 import { formatDimensions } from "@/lib/format";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
-import { FEE_ITEM_KINDS, ITEM_KINDS, SPACE_ITEM_KINDS, itemHasPeriod, itemTitle, type ContractItemInput } from "@/lib/contract-items";
+import {
+  FEE_ITEM_KINDS,
+  ITEM_KINDS,
+  SERVICE_ITEM_KIND,
+  SERVICE_VAT_RATES,
+  SPACE_ITEM_KINDS,
+  itemHasPeriod,
+  itemTitle,
+  type ContractItemInput,
+} from "@/lib/contract-items";
 import { categoryForBoat, occupiedUntil, quoteStay, zoneRate, type QuoteLine } from "@/lib/pricing";
 import { activateContract, addContractItem, cancelContract, createContract, removeContractItem } from "./contracts";
 import { toFormState } from "./errors";
+import { extrasOfList, type ListExtra } from "./list-extras";
 
 export interface BerthOption {
   id: string;
@@ -32,6 +42,8 @@ export interface ContractOptions {
   quoteNote: string | null;
   // Importi del listino per le voci del contratto (posti auto, carrello…), dai servizi collegati.
   itemPrices: Partial<Record<(typeof SPACE_ITEM_KINDS)[number], number>>;
+  // Servizi e cauzioni del listino in vigore alla data di inizio, da scegliere nel modulo.
+  listExtras: ListExtra[];
 }
 
 const TYPES = ["annuale", "stagionale", "mensile", "transito"] as const;
@@ -46,7 +58,7 @@ export async function loadContractOptions(input: {
   berthId: string | null;
 }): Promise<ContractOptions> {
   const ctx = await requireMarina(OFFICE);
-  const empty: ContractOptions = { berths: [], quote: null, quoteNote: null, itemPrices: {} };
+  const empty: ContractOptions = { berths: [], quote: null, quoteNote: null, itemPrices: {}, listExtras: [] };
   if (!UUID.test(input.boatId) || !TYPES.includes(input.type as ContractType)) return empty;
   if (!isValidISODate(input.startDate) || !isValidISODate(input.endDate) || input.endDate < input.startDate) return empty;
   const type = input.type as ContractType;
@@ -107,20 +119,13 @@ export async function loadContractOptions(input: {
   const zoneId = chosenRow?.zoneId ?? null;
   const category = chosen?.categoryId ? categories.find((c) => c.id === chosen.categoryId) : categoryForBoat(categories, boat);
 
-  if (!list) return { berths: options, quote: null, quoteNote: "Nessun listino copre la data di inizio: inserisci l'importo a mano.", itemPrices: {} };
+  if (!list) return { berths: options, quote: null, quoteNote: "Nessun listino copre la data di inizio: inserisci l'importo a mano.", itemPrices: {}, listExtras: [] };
 
-  const extras = await db
-    .select({ kind: priceListExtras.itemKind, amountCents: priceListExtras.amountCents })
-    .from(priceListExtras)
-    .where(and(eq(priceListExtras.priceListId, list.id), eq(priceListExtras.marinaId, ctx.marinaId)))
-    .orderBy(asc(priceListExtras.sortOrder));
+  const listExtras = await extrasOfList(ctx.marinaId, list.id);
   const itemPrices: ContractOptions["itemPrices"] = {};
-  for (const e of extras) {
-    const kind = SPACE_ITEM_KINDS.find((k) => k === e.kind);
-    if (kind && itemPrices[kind] === undefined) itemPrices[kind] = e.amountCents;
-  }
+  for (const e of listExtras) if (e.itemKind && itemPrices[e.itemKind] === undefined) itemPrices[e.itemKind] = e.amountCents;
 
-  if (!category) return { berths: options, quote: null, quoteNote: "Nessuna categoria tariffaria adatta: inserisci l'importo a mano.", itemPrices };
+  if (!category) return { berths: options, quote: null, quoteNote: "Nessuna categoria tariffaria adatta: inserisci l'importo a mano.", itemPrices, listExtras };
 
   const [rateRows, periods, [zone]] = await Promise.all([
     db
@@ -143,7 +148,7 @@ export async function loadContractOptions(input: {
       : Promise.resolve([]),
   ]);
   const rate = zoneRate(rateRows, zoneId);
-  if (!rate) return { berths: options, quote: null, quoteNote: `Il ${list.name} non ha tariffe per la categoria ${category.name}.`, itemPrices };
+  if (!rate) return { berths: options, quote: null, quoteNote: `Il ${list.name} non ha tariffe per la categoria ${category.name}.`, itemPrices, listExtras };
 
   const quote = quoteStay({ type, startDate: input.startDate, endDate: input.endDate, rate, periods });
   return {
@@ -159,6 +164,7 @@ export async function loadContractOptions(input: {
     },
     quoteNote: quote.totalCents === 0 ? "Le tariffe di questa categoria non sono ancora compilate." : null,
     itemPrices,
+    listExtras,
   };
 }
 
@@ -187,6 +193,14 @@ const contractSchema = z.object({
 // per le spese fisse solo l'importo (vuoto = nessuna voce).
 const spaceSchema = z.object({ reference: f.optText(), startDate: f.date(), endDate: f.date(), amount: f.money() });
 const feeSchema = z.object({ amount: f.optMoney() });
+const serviceSchema = z.object({
+  description: f.text("scrivi la descrizione"),
+  amount: f.money(),
+  vatRate: z.coerce
+    .number()
+    .int()
+    .refine((r) => (SERVICE_VAT_RATES as readonly number[]).includes(r), "aliquota IVA non valida"),
+});
 
 function parseItems(formData: FormData): { ok: true; items: ContractItemInput[] } | { ok: false; errors: Record<string, string> } {
   const items: ContractItemInput[] = [];
@@ -214,6 +228,18 @@ function parseItems(formData: FormData): { ok: true; items: ContractItemInput[] 
     if (!r.success) errors[`${kind}_amount`] = r.error.issues[0].message;
     else if (r.data.amount !== null) items.push({ kind, reference: null, startDate: null, endDate: null, amountCents: r.data.amount });
   }
+  // Servizi e cauzioni: una riga per ognuno, con campi ripetuti servizio_desc / servizio_amount / servizio_vat.
+  const descs = formData.getAll("servizio_desc").map(String);
+  const amounts = formData.getAll("servizio_amount").map(String);
+  const vats = formData.getAll("servizio_vat").map(String);
+  descs.forEach((desc, i) => {
+    const r = serviceSchema.safeParse({ description: desc, amount: amounts[i] ?? "", vatRate: vats[i] ?? "" });
+    if (!r.success) {
+      errors.servizi ??= `Servizio ${i + 1}: ${r.error.issues[0].message}`;
+      return;
+    }
+    items.push({ kind: SERVICE_ITEM_KIND, reference: null, startDate: null, endDate: null, amountCents: r.data.amount, description: r.data.description, vatRate: r.data.vatRate });
+  });
   return Object.keys(errors).length ? { ok: false, errors } : { ok: true, items };
 }
 
@@ -222,7 +248,7 @@ export async function saveContract(_prev: FormState, formData: FormData): Promis
   const parsed = parseForm(contractSchema, formData);
   const itemsParsed = parseItems(formData);
   if (!parsed.ok) return { ...parsed.state, errors: { ...parsed.state.errors, ...(itemsParsed.ok ? {} : itemsParsed.errors) } };
-  if (!itemsParsed.ok) return fail("Controlla i campi evidenziati.", itemsParsed.errors);
+  if (!itemsParsed.ok) return fail(itemsParsed.errors.servizi ?? "Controlla i campi evidenziati.", itemsParsed.errors);
   const d = parsed.data;
   if (d.endDate < d.startDate) return fail("Controlla i campi evidenziati.", { endDate: "La fine precede l'inizio." });
 
@@ -322,6 +348,8 @@ const itemSchema = z.object({
   startDate: f.optDate(),
   endDate: f.optDate(),
   amount: f.money(),
+  description: f.optText(),
+  vatRate: z.preprocess((v) => (v === "" || v === null || v === undefined ? null : Number(v)), z.number().int().nullable()),
 });
 
 export async function addContractItemAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -330,6 +358,8 @@ export async function addContractItemAction(_prev: FormState, formData: FormData
   if (!parsed.ok) return parsed.state;
   const d = parsed.data;
   const period = itemHasPeriod(d.kind);
+  const service = d.kind === SERVICE_ITEM_KIND;
+  if (service && !d.description) return fail("Controlla i campi evidenziati.", { description: "Scrivi la descrizione del servizio" });
   if (period && (!d.startDate || !d.endDate)) {
     return fail("Controlla i campi evidenziati.", { ...(d.startDate ? {} : { startDate: "Data obbligatoria" }), ...(d.endDate ? {} : { endDate: "Data obbligatoria" }) });
   }
@@ -341,6 +371,8 @@ export async function addContractItemAction(_prev: FormState, formData: FormData
         startDate: period ? d.startDate : null,
         endDate: period ? d.endDate : null,
         amountCents: d.amount,
+        description: service ? d.description : null,
+        vatRate: service ? (d.vatRate ?? 22) : null,
       };
       await addContractItem(tx, { marinaId: ctx.marinaId, userId: ctx.user.id }, d.contractId, item);
       await audit(ctx, "modifica", "contratto", d.contractId, `Aggiunta voce: ${itemTitle(item)}`, tx);

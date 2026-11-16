@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { ActionButton, Field, Form, FormMessage, SelectField, Submit, TextareaField } from "@/components/form";
-import { itemHasPeriod, ITEM_KINDS } from "@/lib/contract-items";
+import { itemHasPeriod, ITEM_KINDS, SERVICE_ITEM_KIND, SERVICE_VAT_RATES } from "@/lib/contract-items";
+import { formatMoney, moneyInput } from "@/lib/format";
 import { CONTRACT_ITEM_LABEL } from "@/lib/labels";
+import type { ListExtra } from "@/server/list-extras";
 import { activateContractAction, addContractItemAction, cancelContractAction, removeContractItemAction, updateContractMeta } from "@/server/contract-actions";
 
 export function ActivateForm({ contractId, firstDueDate }: { contractId: string; firstDueDate: string }) {
@@ -63,14 +65,63 @@ export function ContractMetaForm({ contractId, signedOn, notes }: { contractId: 
   );
 }
 
-export function AddContractItemForm({ contractId, startDate, endDate, active }: { contractId: string; startDate: string; endDate: string; active: boolean }) {
+const VAT_OPTIONS = SERVICE_VAT_RATES.map((r) => ({ value: String(r), label: r === 0 ? "Senza IVA (cauzione)" : `${r}%` }));
+
+export function AddContractItemForm({
+  contractId,
+  startDate,
+  endDate,
+  active,
+  listExtras,
+}: {
+  contractId: string;
+  startDate: string;
+  endDate: string;
+  active: boolean;
+  // Servizi e cauzioni del listino in vigore all'inizio del contratto: sceglierne uno compila voce e importo.
+  listExtras: ListExtra[];
+}) {
   const [kind, setKind] = useState<(typeof ITEM_KINDS)[number]>("auto_coperto");
+  const [picked, setPicked] = useState("");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [vatRate, setVatRate] = useState("22");
   const period = itemHasPeriod(kind);
-  // Dopo un salvataggio riuscito il modulo si svuota: anche la voce scelta torna quella iniziale.
+
+  function pick(extraId: string) {
+    setPicked(extraId);
+    const extra = listExtras.find((e) => e.id === extraId);
+    if (!extra) return;
+    setKind(extra.itemKind ?? SERVICE_ITEM_KIND);
+    setAmount(moneyInput(extra.amountCents));
+    setDescription(extra.itemKind ? "" : extra.name);
+    setVatRate(String(extra.vatRate));
+  }
+
+  function reset() {
+    setKind("auto_coperto");
+    setPicked("");
+    setAmount("");
+    setDescription("");
+    setVatRate("22");
+  }
+
+  // Dopo un salvataggio riuscito il modulo si svuota: anche le scelte tornano quelle iniziali.
   return (
-    <div onReset={() => setKind("auto_coperto")}>
+    <div onReset={reset}>
       <Form action={addContractItemAction} resetOnSuccess className="space-y-3">
         <input type="hidden" name="contractId" value={contractId} />
+        {listExtras.length > 0 && (
+          <SelectField
+            name="fromList"
+            label="Dal listino"
+            value={picked}
+            onChange={(e) => pick(e.target.value)}
+            placeholder="Scegli un servizio o una cauzione…"
+            options={listExtras.map((e) => ({ value: e.id, label: `${e.name} · ${formatMoney(e.amountCents)}${e.vatRate === 0 ? " (senza IVA)" : ""}` }))}
+            hint="Compila voce e importo con il prezzo del listino; puoi sempre cambiarli."
+          />
+        )}
         <SelectField
           name="kind"
           label="Voce"
@@ -78,6 +129,12 @@ export function AddContractItemForm({ contractId, startDate, endDate, active }: 
           onChange={(e) => setKind(e.target.value as (typeof ITEM_KINDS)[number])}
           options={ITEM_KINDS.map((k) => ({ value: k, label: CONTRACT_ITEM_LABEL[k] }))}
         />
+        {kind === SERVICE_ITEM_KIND && (
+          <div className="grid grid-cols-[minmax(0,1fr)_9rem] gap-3">
+            <Field name="description" label="Descrizione" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Es. Cauzione badge" required />
+            <SelectField name="vatRate" label="IVA" value={vatRate} onChange={(e) => setVatRate(e.target.value)} options={VAT_OPTIONS} />
+          </div>
+        )}
         {period && (
           <>
             {(kind === "auto_coperto" || kind === "auto_scoperto") && <Field name="reference" label="Numero del posto auto" />}
@@ -87,7 +144,16 @@ export function AddContractItemForm({ contractId, startDate, endDate, active }: 
             </div>
           </>
         )}
-        <Field name="amount" label="Importo (IVA inclusa)" inputMode="decimal" placeholder="0,00" required hint={active ? "L'addebito nasce subito, con scadenza oggi." : "L'addebito nasce all'attivazione."} />
+        <Field
+          name="amount"
+          label={kind === SERVICE_ITEM_KIND && vatRate === "0" ? "Importo" : "Importo (IVA inclusa)"}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          inputMode="decimal"
+          placeholder="0,00"
+          required
+          hint={active ? "L'addebito nasce subito, con scadenza oggi." : "L'addebito nasce all'attivazione."}
+        />
         <FormMessage />
         <Submit variant="secondary" size="sm">
           Aggiungi

@@ -64,6 +64,13 @@
       "when": 1794779366181,
       "tag": "0008_logo_societa",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794823276020,
+      "tag": "0009_servizi_nel_contratto",
+      "breakpoints": true
     }
   ]
 }

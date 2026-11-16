@@ -89,7 +89,7 @@ export function ContractForm({
         if (request.berthId && !next.berths.some((b) => b.id === request.berthId && b.available)) setBerthId("");
       })
       .catch(() => {
-        if (!superseded) setResult({ request, options: { berths: [], quote: null, quoteNote: "Impossibile verificare la disponibilità: riprova.", itemPrices: {} } });
+        if (!superseded) setResult({ request, options: { berths: [], quote: null, quoteNote: "Impossibile verificare la disponibilità: riprova.", itemPrices: {}, listExtras: [] } });
       });
     return () => {
       superseded = true;
@@ -301,6 +301,8 @@ export function ContractForm({
           }}
           onSpacesTotal={setSpacesCents}
           prices={options?.itemPrices ?? {}}
+          listExtras={options?.listExtras ?? []}
+          listReady={options !== null}
         />
         {extrasCents > 0 && (
           <p className="-mt-2 text-sm text-muted">

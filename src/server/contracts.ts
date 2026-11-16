@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import type { Tx } from "@/db";
 import { berths, boats, charges, contractItems, contracts, movements, owners, payments, type ContractType } from "@/db/schema";
-import { itemHasPeriod, itemTitle, type ContractItemInput } from "@/lib/contract-items";
+import { SERVICE_ITEM_KIND, SERVICE_VAT_RATES, itemHasPeriod, itemTitle, type ContractItemInput } from "@/lib/contract-items";
 import { formatDate, todayRome, yearOf } from "@/lib/dates";
 import { splitVat } from "@/lib/format";
 import { CONTRACT_TYPE_LABEL } from "@/lib/labels";
@@ -98,11 +98,17 @@ async function createInstalmentCharges(
   );
 }
 
-// Controlla le voci aggiuntive: gli spazi vogliono un periodo coerente, le spese fisse compaiono una volta sola.
+// Controlla le voci aggiuntive: gli spazi vogliono un periodo coerente, le spese fisse compaiono una volta sola,
+// i servizi hanno una descrizione e un'aliquota ammessa (possono essere più d'uno).
 export function validateItems(items: ContractItemInput[]) {
   const seen = new Set<string>();
   for (const item of items) {
     if (item.amountCents < 0) throw new DomainError("Importo non valido.", "amount");
+    if (item.kind === SERVICE_ITEM_KIND) {
+      if (!item.description?.trim()) throw new DomainError("Indica la descrizione del servizio.", "description");
+      if (item.vatRate != null && !(SERVICE_VAT_RATES as readonly number[]).includes(item.vatRate)) throw new DomainError("Aliquota IVA non valida.", "vatRate");
+      continue;
+    }
     if (itemHasPeriod(item.kind)) {
       if (!item.startDate || !item.endDate) throw new DomainError("Indica inizio e fine del periodo.", "startDate");
       if (item.endDate < item.startDate) throw new DomainError("La fine del periodo precede l'inizio.", "endDate");
@@ -115,10 +121,12 @@ export function validateItems(items: ContractItemInput[]) {
 
 type ChargeableContract = { id: string; number: string; ownerId: string; vatRate: number };
 
-// Addebito di una voce aggiuntiva, con la stessa aliquota del contratto. Le voci a importo zero non si addebitano.
+// Addebito di una voce aggiuntiva: aliquota del contratto, oppure quella propria del servizio (0 per le cauzioni).
+// Le voci a importo zero non si addebitano.
 async function createItemCharge(tx: Tx, actor: Actor, contract: ChargeableContract, item: { id: string } & ContractItemInput, dueDate: string) {
   if (item.amountCents <= 0) return;
-  const { netCents, vatCents } = splitVat(item.amountCents, contract.vatRate);
+  const vatRate = item.vatRate ?? contract.vatRate;
+  const { netCents, vatCents } = splitVat(item.amountCents, vatRate);
   const [charge] = await tx
     .insert(charges)
     .values({
@@ -130,7 +138,7 @@ async function createItemCharge(tx: Tx, actor: Actor, contract: ChargeableContra
       issueDate: todayRome(),
       dueDate,
       netCents,
-      vatRate: contract.vatRate,
+      vatRate,
       vatCents,
       grossCents: item.amountCents,
       createdBy: actor.userId,

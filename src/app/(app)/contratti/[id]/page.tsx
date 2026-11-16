@@ -16,6 +16,7 @@ import { formatDimensions, formatMoney, splitVat } from "@/lib/format";
 import { CONTRACT_TYPE_LABEL, MOVEMENT_LABEL } from "@/lib/labels";
 import { uuidOrNull } from "@/lib/params";
 import { listCharges } from "@/server/charges";
+import { extrasForDate } from "@/server/list-extras";
 import { latestConsents } from "@/server/owners";
 import { ActivateForm, AddContractItemForm, CancelContractButton, ContractMetaForm, RemoveContractItemButton } from "./contract-forms";
 
@@ -38,7 +39,7 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
   const { contract: c, boat } = row;
   const today = todayRome();
 
-  const [chargeRows, moveRows, consents, itemRows] = await Promise.all([
+  const [chargeRows, moveRows, consents, itemRows, listExtras] = await Promise.all([
     listCharges(ctx.marinaId, today, { contractId: id }),
     db
       .select({ id: movements.id, kind: movements.kind, at: movements.at, note: movements.note, userName: users.name })
@@ -48,6 +49,7 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
       .orderBy(desc(movements.at)),
     latestConsents(ctx.marinaId, c.ownerId),
     db.select().from(contractItems).where(and(eq(contractItems.contractId, id), eq(contractItems.marinaId, ctx.marinaId))),
+    extrasForDate(ctx.marinaId, c.startDate),
   ]);
   const items = sortItems(itemRows);
   const itemsTotal = items.reduce((sum, it) => sum + it.amountCents, 0);
@@ -142,7 +144,10 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
                 <tbody>
                   {items.map((it) => (
                     <tr key={it.id}>
-                      <td>{itemTitle(it)}</td>
+                      <td>
+                        {itemTitle(it)}
+                        {it.vatRate === 0 && <span className="text-xs text-muted"> · senza IVA</span>}
+                      </td>
                       <td className="whitespace-nowrap text-muted tabular-nums">{it.startDate ? `${formatDate(it.startDate)} – ${formatDate(it.endDate)}` : "—"}</td>
                       <td className="num">{formatMoney(it.amountCents)}</td>
                       {open && (
@@ -266,7 +271,7 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
 
           {open && (
             <Card title="Aggiungi spazio o spesa">
-              <AddContractItemForm contractId={id} startDate={c.startDate} endDate={c.endDate} active={c.status === "attivo"} />
+              <AddContractItemForm contractId={id} startDate={c.startDate} endDate={c.endDate} active={c.status === "attivo"} listExtras={listExtras} />
             </Card>
           )}
 

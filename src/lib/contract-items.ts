@@ -4,7 +4,12 @@ import { CONTRACT_ITEM_LABEL } from "./labels";
 // Voci del contratto oltre al posto barca, nell'ordine in cui compaiono nel contratto stampato.
 export const SPACE_ITEM_KINDS = ["secca", "auto_coperto", "auto_scoperto", "carrello"] as const satisfies readonly ContractItemKind[];
 export const FEE_ITEM_KINDS = ["gestione", "rifiuti"] as const satisfies readonly ContractItemKind[];
-export const ITEM_KINDS = [...SPACE_ITEM_KINDS, ...FEE_ITEM_KINDS] as const;
+// Servizi e cauzioni presi dal listino (o scritti a mano): descrizione e aliquota propria, anche più d'uno per contratto.
+export const SERVICE_ITEM_KIND = "servizio" as const satisfies ContractItemKind;
+export const ITEM_KINDS = [...SPACE_ITEM_KINDS, ...FEE_ITEM_KINDS, SERVICE_ITEM_KIND] as const;
+
+/** Aliquote ammesse per un servizio; 0 = senza IVA (cauzioni). */
+export const SERVICE_VAT_RATES = [22, 10, 5, 4, 0] as const;
 
 export interface ContractItemInput {
   kind: ContractItemKind;
@@ -12,6 +17,9 @@ export interface ContractItemInput {
   startDate: string | null;
   endDate: string | null;
   amountCents: number;
+  /** Solo per i servizi: descrizione (es. «Cauzione badge») e aliquota (0 = senza IVA). */
+  description?: string | null;
+  vatRate?: number | null;
 }
 
 /** Gli spazi (a terra, posti auto, carrello) hanno un periodo; le spese fisse no. */
@@ -19,8 +27,9 @@ export function itemHasPeriod(kind: ContractItemKind): boolean {
   return (SPACE_ITEM_KINDS as readonly string[]).includes(kind);
 }
 
-/** Descrizione breve della voce, con il numero del posto auto se indicato. */
-export function itemTitle(item: { kind: ContractItemKind; reference: string | null }): string {
+/** Descrizione breve della voce: il nome del servizio, oppure la voce con il numero del posto auto se indicato. */
+export function itemTitle(item: { kind: ContractItemKind; reference: string | null; description?: string | null }): string {
+  if (item.kind === SERVICE_ITEM_KIND && item.description) return item.description;
   const label = CONTRACT_ITEM_LABEL[item.kind];
   return item.reference ? `${label} n. ${item.reference}` : label;
 }

@@ -368,6 +368,41 @@ describe.skipIf(!available)("regole del porto (database)", () => {
     expect(await db.select().from(contractItems).where(eq(contractItems.contractId, c.id))).toHaveLength(1);
   });
 
+  it("servizi e cauzioni del listino: anche più d'uno, ognuno con la sua aliquota e il suo addebito", async () => {
+    const c = await create(a, {
+      type: "annuale",
+      status: "attivo",
+      startDate: "2032-01-01",
+      endDate: "2032-12-31",
+      amountCents: 131000,
+      instalments: { count: 1, firstDueDate: "2032-01-01", everyMonths: 1 },
+      items: [
+        { kind: "servizio", reference: null, startDate: null, endDate: null, amountCents: 5000, description: "Cauzione badge", vatRate: 0 },
+        { kind: "servizio", reference: null, startDate: null, endDate: null, amountCents: 12200, description: "Alaggio e varo", vatRate: 22 },
+      ],
+    });
+    const rows = await db.select().from(charges).where(eq(charges.contractId, c.id));
+    const cauzione = rows.find((r) => r.description.startsWith("Cauzione badge"))!;
+    const alaggio = rows.find((r) => r.description.startsWith("Alaggio e varo"))!;
+    expect(cauzione).toMatchObject({ grossCents: 5000, vatRate: 0, vatCents: 0, netCents: 5000 });
+    expect(alaggio).toMatchObject({ grossCents: 12200, vatRate: 22, vatCents: 2200, netCents: 10000 });
+
+    // Un servizio aggiunto dopo, sul contratto attivo: stessa regola.
+    await db.transaction((tx) =>
+      addContractItem(tx, actor(a), c.id, { kind: "servizio", reference: null, startDate: null, endDate: null, amountCents: 3000, description: "Cauzione chiavi", vatRate: 0 }),
+    );
+    const extra = (await db.select().from(charges).where(eq(charges.contractId, c.id))).find((r) => r.description.startsWith("Cauzione chiavi"));
+    expect(extra).toMatchObject({ vatRate: 0, vatCents: 0 });
+
+    // Senza descrizione o con un'aliquota inventata il servizio è rifiutato.
+    await expect(
+      create(a, { status: "bozza", items: [{ kind: "servizio", reference: null, startDate: null, endDate: null, amountCents: 100, description: " ", vatRate: 22 }] }),
+    ).rejects.toThrow(/descrizione/);
+    await expect(
+      create(a, { status: "bozza", items: [{ kind: "servizio", reference: null, startDate: null, endDate: null, amountCents: 100, description: "Prova", vatRate: 17 }] }),
+    ).rejects.toThrow(/Aliquota/);
+  });
+
   it("tariffe: una sola riga per listino, categoria e zona, anche per la tariffa base", async () => {
     const [list] = await db.select().from(priceLists).where(eq(priceLists.marinaId, a.marinaId)).limit(1);
     const [cat] = await db.select().from(berthCategories).where(eq(berthCategories.marinaId, a.marinaId)).limit(1);

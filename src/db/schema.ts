@@ -42,7 +42,7 @@ export const contractStatusEnum = pgEnum("contract_status", ["bozza", "attivo", 
 export const presenceEnum = pgEnum("presence", ["atteso", "in_porto", "fuori", "partito"]);
 export const movementKindEnum = pgEnum("movement_kind", ["arrivo", "partenza", "uscita", "rientro"]);
 // Voci del contratto oltre al posto barca: spazi a terra, posti auto, carrello e spese fisse.
-export const contractItemKindEnum = pgEnum("contract_item_kind", ["secca", "auto_coperto", "auto_scoperto", "carrello", "gestione", "rifiuti"]);
+export const contractItemKindEnum = pgEnum("contract_item_kind", ["secca", "auto_coperto", "auto_scoperto", "carrello", "gestione", "rifiuti", "servizio"]);
 export const chargeKindEnum = pgEnum("charge_kind", ["ormeggio", "servizi", "utenze", "altro"]);
 export const paymentMethodEnum = pgEnum("payment_method", ["contanti", "bonifico", "pos", "assegno", "altro"]);
 export const ledgerDirectionEnum = pgEnum("ledger_direction", ["entrata", "uscita"]);
@@ -485,6 +485,10 @@ export const contractItems = pgTable(
     startDate: date("start_date"),
     endDate: date("end_date"),
     amountCents: integer("amount_cents").notNull(),
+    // Solo per i servizi (cauzioni e altri servizi del listino): descrizione e aliquota propria (0 = senza IVA).
+    // Vuote per le altre voci, che usano il nome della voce e l'aliquota del contratto.
+    description: text("description"),
+    vatRate: integer("vat_rate"),
     chargeId: uuid("charge_id").references(() => charges.id, { onDelete: "set null" }),
     createdAt: createdAt(),
   },

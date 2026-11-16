@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
@@ -9,7 +10,7 @@ import { PageHeader } from "@/components/ui";
 import { db } from "@/db";
 import { berths, boats, contractItems, contracts, marinas, owners } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
-import { itemHasPeriod, sortItems } from "@/lib/contract-items";
+import { SERVICE_ITEM_KIND, itemHasPeriod, itemTitle, sortItems } from "@/lib/contract-items";
 import { formatDate, todayRome } from "@/lib/dates";
 import { auxEngine, describeEngine, mainEngine } from "@/lib/engines";
 import { formatMoney } from "@/lib/format";
@@ -102,6 +103,8 @@ export default page(async function ContractPrintPage({ params }: { params: Promi
   const spaces = items.filter((it) => itemHasPeriod(it.kind)) as (typeof items[number] & { kind: keyof typeof SPACE_PHRASE })[];
   const gestione = items.find((it) => it.kind === "gestione");
   const rifiuti = items.find((it) => it.kind === "rifiuti");
+  // Cauzioni e altri servizi presi dal listino: importo e aliquota propri.
+  const services = items.filter((it) => it.kind === SERVICE_ITEM_KIND);
   const rentCents = c.amountCents + spaces.reduce((s, it) => s + it.amountCents, 0);
 
   // Scadenze di tutto il contratto (canone, spazi e spese), sommate per data.
@@ -291,6 +294,19 @@ export default page(async function ContractPrintPage({ params }: { params: Promi
               </>
             ) : (
               <>Per il periodo di locazione non sono previste spese di gestione comuni né quota rifiuti. </>
+            )}
+            {services.length > 0 && (
+              <>
+                Sono inoltre dovuti i seguenti importi:{" "}
+                {services.map((it, i) => (
+                  <Fragment key={it.id}>
+                    {i > 0 && (i === services.length - 1 ? " e " : "; ")}
+                    {itemTitle(it)} <strong>{formatMoney(it.amountCents)}</strong>
+                    {it.vatRate === 0 ? " (senza IVA)" : ""}
+                  </Fragment>
+                ))}
+                .{" "}
+              </>
             )}
             Il conduttore non può rinunciare ai servizi comuni né a quelli previsti dal Regolamento di porto, né può omettere o ritardare il loro pagamento a cagione
             del mancato utilizzo.
