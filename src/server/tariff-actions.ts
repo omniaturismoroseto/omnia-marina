@@ -234,6 +234,25 @@ export async function addPriceListExtra(_prev: FormState, formData: FormData): P
   return { ok: true };
 }
 
+// Modifica di un servizio o di una cauzione già nel listino: nome, importo, IVA e voce del contratto collegata.
+const extraUpdateSchema = extraSchema.omit({ listId: true }).extend({ extraId: f.id() });
+
+export async function updatePriceListExtra(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = parseForm(extraUpdateSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const { extraId, name, amount, vatRate, itemKind } = parsed.data;
+  const updated = await db
+    .update(priceListExtras)
+    .set({ name, amountCents: amount, vatRate, itemKind })
+    .where(and(eq(priceListExtras.id, extraId), eq(priceListExtras.marinaId, ctx.marinaId)))
+    .returning({ listId: priceListExtras.priceListId });
+  if (updated.length === 0) return fail("Voce non trovata.");
+  await audit(ctx, "modifica", "tariffe", updated[0].listId, `Modificato ${name}`);
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Salvato." };
+}
+
 export async function deletePriceListExtra(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
   const extraId = String(formData.get("extraId") ?? "");

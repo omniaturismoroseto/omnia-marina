@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { ActionButton, Field, Form, FormMessage, SelectField, Submit } from "@/components/form";
 import { addDays, formatDate, isValidISODate } from "@/lib/dates";
 import { SPACE_ITEM_KINDS } from "@/lib/contract-items";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, moneyInput } from "@/lib/format";
 import { CONTRACT_ITEM_LABEL } from "@/lib/labels";
 import type { Quote } from "@/lib/pricing";
 import {
@@ -18,6 +18,7 @@ import {
   loadOfficialPriceListAction,
   savePierZones,
   savePriceList,
+  updatePriceListExtra,
   saveRates,
   saveTariffZone,
   simulateQuote,
@@ -383,6 +384,72 @@ export interface ExtraRow {
   itemKind: keyof typeof CONTRACT_ITEM_LABEL | null;
 }
 
+const EXTRA_VAT_OPTIONS = [...VAT_OPTIONS.slice(0, -1), { value: "0", label: "Senza IVA (cauzione)" }];
+
+// Campi comuni al modulo di aggiunta e a quello di modifica.
+function ExtraFields({ extra }: { extra?: ExtraRow }) {
+  return (
+    <>
+      <Field name="name" label="Servizio" placeholder="Es. Posto auto coperto" defaultValue={extra?.name} required />
+      <Field name="amount" label="Importo" inputMode="decimal" placeholder="0,00" defaultValue={extra ? moneyInput(extra.amountCents) : undefined} required />
+      <SelectField name="vatRate" label="IVA" defaultValue={String(extra?.vatRate ?? 22)} options={EXTRA_VAT_OPTIONS} />
+      <SelectField
+        name="itemKind"
+        label="Voce del contratto"
+        defaultValue={extra?.itemKind ?? ""}
+        placeholder="Nessuna"
+        options={SPACE_ITEM_KINDS.map((k) => ({ value: k, label: CONTRACT_ITEM_LABEL[k] }))}
+        hint="Facoltativo: l'importo si propone quando la voce si aggiunge a un contratto."
+      />
+    </>
+  );
+}
+
+function ExtraItem({ extra, editable }: { extra: ExtraRow; editable: boolean }) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <li className="py-2 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <span>
+          {extra.name}
+          <span className="block text-xs text-muted">
+            {extra.vatRate === 0 ? "senza IVA" : `IVA ${extra.vatRate}% inclusa`}
+            {extra.itemKind && ` · proposto nei contratti come «${CONTRACT_ITEM_LABEL[extra.itemKind].toLowerCase()}»`}
+          </span>
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="mr-1 font-medium tabular-nums">{formatMoney(extra.amountCents)}</span>
+          {editable && !editing && (
+            <>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>
+                Modifica
+              </button>
+              <ActionButton action={deletePriceListExtra} fields={{ extraId: extra.id }} variant="ghost" size="sm" confirm={`Eliminare «${extra.name}» dal listino?`}>
+                Elimina
+              </ActionButton>
+            </>
+          )}
+        </span>
+      </div>
+      {editing && (
+        <Form action={updatePriceListExtra} className="mt-3 grid grid-cols-1 gap-3 rounded-md border border-line-soft bg-paper p-3 sm:grid-cols-2">
+          <input type="hidden" name="extraId" value={extra.id} />
+          <ExtraFields extra={extra} />
+          <div className="flex items-center gap-2 sm:col-span-2">
+            <Submit variant="secondary" size="sm">
+              Salva
+            </Submit>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
+              Chiudi
+            </button>
+            <FormMessage />
+          </div>
+        </Form>
+      )}
+    </li>
+  );
+}
+
 // Servizi e cauzioni a prezzo fisso: si propongono quando si crea un addebito.
 export function PriceListExtras({ listId, extras, editable }: { listId: string; extras: ExtraRow[]; editable: boolean }) {
   return (
@@ -392,40 +459,15 @@ export function PriceListExtras({ listId, extras, editable }: { listId: string; 
       ) : (
         <ul className="divide-y divide-line-soft">
           {extras.map((e) => (
-            <li key={e.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-              <span>
-                {e.name}
-                <span className="block text-xs text-muted">
-                  {e.vatRate === 0 ? "senza IVA" : `IVA ${e.vatRate}% inclusa`}
-                  {e.itemKind && ` · proposto nei contratti come «${CONTRACT_ITEM_LABEL[e.itemKind].toLowerCase()}»`}
-                </span>
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="font-medium tabular-nums">{formatMoney(e.amountCents)}</span>
-                {editable && (
-                  <ActionButton action={deletePriceListExtra} fields={{ extraId: e.id }} variant="ghost" size="sm">
-                    Rimuovi
-                  </ActionButton>
-                )}
-              </span>
-            </li>
+            // La chiave cambia con i valori: dopo un salvataggio la riga si richiude da sola.
+            <ExtraItem key={`${e.id}:${e.name}:${e.amountCents}:${e.vatRate}:${e.itemKind ?? ""}`} extra={e} editable={editable} />
           ))}
         </ul>
       )}
       {editable && (
         <Form action={addPriceListExtra} resetOnSuccess className="grid grid-cols-1 gap-3 border-t border-line-soft pt-4 sm:grid-cols-2">
           <input type="hidden" name="listId" value={listId} />
-          <Field name="name" label="Servizio" placeholder="Es. Posto auto coperto" required />
-          <Field name="amount" label="Importo" inputMode="decimal" placeholder="0,00" required />
-          <SelectField name="vatRate" label="IVA" defaultValue="22" options={[...VAT_OPTIONS.slice(0, -1), { value: "0", label: "Senza IVA (cauzione)" }]} />
-          <SelectField
-            name="itemKind"
-            label="Voce del contratto"
-            defaultValue=""
-            placeholder="Nessuna"
-            options={SPACE_ITEM_KINDS.map((k) => ({ value: k, label: CONTRACT_ITEM_LABEL[k] }))}
-            hint="Facoltativo: l'importo si propone quando la voce si aggiunge a un contratto."
-          />
+          <ExtraFields />
           <div className="flex items-center gap-3 sm:col-span-2">
             <Submit variant="secondary">Aggiungi</Submit>
             <FormMessage />

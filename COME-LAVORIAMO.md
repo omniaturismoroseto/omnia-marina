@@ -66,11 +66,14 @@ Si apre il browser: scegli lo stesso account con cui hai creato il progetto.
 
 ## Pubblicare
 
-Scarica le ultime modifiche e pubblica:
+Prima si scaricano le ultime modifiche, poi si pubblica: se la pubblicazione partisse prima, andrebbero online i file
+vecchi. Questo comando fa le due cose in ordine e **pubblica solo se lo scaricamento è riuscito**:
 
 ```powershell
-cd "C:\Users\roset\OneDrive\Desktop\App Porto\omnia-marina"; git pull origin main; gcloud run deploy omnia-marina --source . --region europe-west1 --project omnia-marina --quiet
+cd "C:\Users\roset\OneDrive\Desktop\App Porto\omnia-marina"; git pull origin main; if ($LASTEXITCODE -eq 0) { gcloud run deploy omnia-marina --source . --region europe-west1 --project omnia-marina --quiet } else { Write-Host "git pull non riuscito: pubblicazione annullata" }
 ```
+
+Se compare «git pull non riuscito», non è stato pubblicato niente: guarda «Quando qualcosa va storto» più sotto.
 
 Ci vogliono 5-10 minuti. Alla fine compare `Service URL: …`: la nuova versione è online.
 
