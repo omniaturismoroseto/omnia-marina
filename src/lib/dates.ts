@@ -39,6 +39,15 @@ export function addMonths(value: string, months: number): string {
   return toISO(d);
 }
 
+// Ultimo giorno di un periodo annuale che inizia in `start`: il giorno prima dello stesso giorno dell'anno dopo
+// (16/11/2026 → 15/11/2027; 01/01 → 31/12). Chi inizia il 29 febbraio finisce il 28 febbraio dell'anno dopo.
+export function annualEnd(start: string): string {
+  const [y, m, d] = start.split("-").map(Number);
+  const next = new Date(Date.UTC(y + 1, m - 1, d)); // il 29/02 di un anno non bisestile scivola al 01/03
+  next.setUTCDate(next.getUTCDate() - 1);
+  return toISO(next);
+}
+
 // Giorni da `from` a `to` (positivo se `to` è successivo).
 export function diffDays(from: string, to: string): number {
   return Math.round((parseISO(to).getTime() - parseISO(from).getTime()) / 86_400_000);

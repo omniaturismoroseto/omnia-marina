@@ -303,6 +303,7 @@ export function ContractForm({
           prices={options?.itemPrices ?? {}}
           listExtras={options?.listExtras ?? []}
           listReady={options !== null}
+          annualDefault={type === "annuale"}
         />
         {extrasCents > 0 && (
           <p className="-mt-2 text-sm text-muted">

@@ -1,0 +1,1 @@
+ALTER TABLE "contract_items" ADD COLUMN "annual" boolean DEFAULT false NOT NULL;

@@ -481,9 +481,11 @@ export const contractItems = pgTable(
     kind: contractItemKindEnum("kind").notNull(),
     // Numero del posto auto o altro riferimento.
     reference: text("reference"),
-    // Periodo per gli spazi; vuoto per le spese fisse.
+    // Periodo per gli spazi; vuoto per le spese fisse. annual: spazio preso per un anno intero dalla data di inizio
+    // (la fine è il giorno prima dello stesso giorno dell'anno dopo), come si stampa nel contratto.
     startDate: date("start_date"),
     endDate: date("end_date"),
+    annual: boolean("annual").notNull().default(false),
     amountCents: integer("amount_cents").notNull(),
     // Solo per i servizi (cauzioni e altri servizi del listino): descrizione e aliquota propria (0 = senza IVA).
     // Vuote per le altre voci, che usano il nome della voce e l'aliquota del contratto.

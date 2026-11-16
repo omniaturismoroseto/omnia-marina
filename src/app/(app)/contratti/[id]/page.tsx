@@ -148,7 +148,9 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
                         {itemTitle(it)}
                         {it.vatRate === 0 && <span className="text-xs text-muted"> · senza IVA</span>}
                       </td>
-                      <td className="whitespace-nowrap text-muted tabular-nums">{it.startDate ? `${formatDate(it.startDate)} – ${formatDate(it.endDate)}` : "—"}</td>
+                      <td className="whitespace-nowrap text-muted tabular-nums">
+                        {it.startDate ? `${it.annual ? "Annuale · " : ""}${formatDate(it.startDate)} – ${formatDate(it.endDate)}` : "—"}
+                      </td>
                       <td className="num">{formatMoney(it.amountCents)}</td>
                       {open && (
                         <td className="text-right">
@@ -271,7 +273,7 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
 
           {open && (
             <Card title="Aggiungi spazio o spesa">
-              <AddContractItemForm contractId={id} startDate={c.startDate} endDate={c.endDate} active={c.status === "attivo"} listExtras={listExtras} />
+              <AddContractItemForm contractId={id} startDate={c.startDate} endDate={c.endDate} active={c.status === "attivo"} listExtras={listExtras} annualDefault={c.type === "annuale"} />
             </Card>
           )}
 

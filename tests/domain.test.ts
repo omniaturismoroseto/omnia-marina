@@ -403,6 +403,14 @@ describe.skipIf(!available)("regole del porto (database)", () => {
     ).rejects.toThrow(/Aliquota/);
   });
 
+  it("uno spazio annuale dura un anno dalla data di inizio", async () => {
+    const space = (endDate: string) => ({ kind: "auto_scoperto" as const, reference: "10", startDate: "2033-11-16", endDate, amountCents: 21000, annual: true });
+    await expect(create(a, { status: "bozza", items: [space("2034-06-30")] })).rejects.toThrow(/annuale/);
+    const c = await create(a, { status: "bozza", startDate: "2033-11-16", endDate: "2033-11-18", items: [space("2034-11-15")] });
+    const [item] = await db.select().from(contractItems).where(eq(contractItems.contractId, c.id));
+    expect(item).toMatchObject({ annual: true, startDate: "2033-11-16", endDate: "2034-11-15" });
+  });
+
   it("tariffe: una sola riga per listino, categoria e zona, anche per la tariffa base", async () => {
     const [list] = await db.select().from(priceLists).where(eq(priceLists.marinaId, a.marinaId)).limit(1);
     const [cat] = await db.select().from(berthCategories).where(eq(berthCategories.marinaId, a.marinaId)).limit(1);

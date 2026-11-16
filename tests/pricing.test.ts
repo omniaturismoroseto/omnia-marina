@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { categoryForBoat, occupiedUntil, quoteStay, seasonForDate, splitInstalments, zoneRate, type RateRow, type SeasonPeriod } from "../src/lib/pricing";
-import { addMonths, diffDays } from "../src/lib/dates";
+import { addMonths, annualEnd, diffDays } from "../src/lib/dates";
 import { parseMeters, parseMoney, splitVat } from "../src/lib/format";
 
 const periods: SeasonPeriod[] = [
@@ -149,6 +149,12 @@ describe("date e importi", () => {
   it("addMonths resta a fine mese", () => {
     expect(addMonths("2026-01-31", 1)).toBe("2026-02-28");
     expect(addMonths("2026-12-15", 2)).toBe("2027-02-15");
+  });
+  it("annualEnd: un anno dalla data di inizio, meno un giorno", () => {
+    expect(annualEnd("2026-11-16")).toBe("2027-11-15");
+    expect(annualEnd("2026-01-01")).toBe("2026-12-31");
+    expect(annualEnd("2028-02-29")).toBe("2029-02-28");
+    expect(annualEnd("2027-03-01")).toBe("2028-02-29");
   });
   it("diffDays", () => {
     expect(diffDays("2026-03-28", "2026-03-30")).toBe(2); // attraversa il cambio dell'ora

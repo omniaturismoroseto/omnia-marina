@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { berthCategories, berths, boats, contracts, piers, priceLists, rates, seasonPeriods, tariffZones, type ContractType } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
-import { isValidISODate } from "@/lib/dates";
+import { annualEnd, isValidISODate } from "@/lib/dates";
 import { formatDimensions } from "@/lib/format";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
 import {
@@ -209,7 +209,11 @@ function parseItems(formData: FormData): { ok: true; items: ContractItemInput[] 
 
   for (const kind of SPACE_ITEM_KINDS) {
     if (read(kind, "on") !== "on") continue;
-    const r = spaceSchema.safeParse({ reference: read(kind, "ref"), startDate: read(kind, "from"), endDate: read(kind, "to"), amount: read(kind, "amount") });
+    // Con «Annuale» la fine la calcola il server: un anno dalla data di inizio, meno un giorno.
+    const annual = read(kind, "annual") === "on";
+    const from = String(read(kind, "from"));
+    const to = annual && isValidISODate(from) ? annualEnd(from) : read(kind, "to");
+    const r = spaceSchema.safeParse({ reference: read(kind, "ref"), startDate: from, endDate: to, amount: read(kind, "amount") });
     if (!r.success) {
       for (const issue of r.error.issues) {
         const key = { reference: "ref", startDate: "from", endDate: "to", amount: "amount" }[String(issue.path[0])] ?? "amount";
@@ -221,7 +225,7 @@ function parseItems(formData: FormData): { ok: true; items: ContractItemInput[] 
       errors[`${kind}_to`] = "La fine precede l'inizio.";
       continue;
     }
-    items.push({ kind, reference: r.data.reference, startDate: r.data.startDate, endDate: r.data.endDate, amountCents: r.data.amount });
+    items.push({ kind, reference: r.data.reference, startDate: r.data.startDate, endDate: r.data.endDate, amountCents: r.data.amount, annual });
   }
   for (const kind of FEE_ITEM_KINDS) {
     const r = feeSchema.safeParse({ amount: read(kind, "amount") });
@@ -350,6 +354,7 @@ const itemSchema = z.object({
   amount: f.money(),
   description: f.optText(),
   vatRate: z.preprocess((v) => (v === "" || v === null || v === undefined ? null : Number(v)), z.number().int().nullable()),
+  annual: f.checkbox(),
 });
 
 export async function addContractItemAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -360,6 +365,8 @@ export async function addContractItemAction(_prev: FormState, formData: FormData
   const period = itemHasPeriod(d.kind);
   const service = d.kind === SERVICE_ITEM_KIND;
   if (service && !d.description) return fail("Controlla i campi evidenziati.", { description: "Scrivi la descrizione del servizio" });
+  const annual = period && d.annual;
+  if (annual && d.startDate) d.endDate = annualEnd(d.startDate);
   if (period && (!d.startDate || !d.endDate)) {
     return fail("Controlla i campi evidenziati.", { ...(d.startDate ? {} : { startDate: "Data obbligatoria" }), ...(d.endDate ? {} : { endDate: "Data obbligatoria" }) });
   }
@@ -370,6 +377,7 @@ export async function addContractItemAction(_prev: FormState, formData: FormData
         reference: period ? d.reference : null,
         startDate: period ? d.startDate : null,
         endDate: period ? d.endDate : null,
+        annual,
         amountCents: d.amount,
         description: service ? d.description : null,
         vatRate: service ? (d.vatRate ?? 22) : null,

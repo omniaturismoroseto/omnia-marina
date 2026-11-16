@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 import { Plus, X } from "lucide-react";
 import { Field } from "@/components/form";
+import { annualEnd, isValidISODate } from "@/lib/dates";
 import { formatMoney, moneyInput, parseMoney } from "@/lib/format";
 import { CONTRACT_ITEM_LABEL } from "@/lib/labels";
 import { SPACE_ITEM_KINDS } from "@/lib/contract-items";
@@ -10,7 +11,8 @@ import type { ListExtra } from "@/server/list-extras";
 
 type SpaceKind = (typeof SPACE_ITEM_KINDS)[number];
 // fromList: nome della voce del listino scelta, mostrato sotto l'importo al posto del prezzo generico.
-type SpaceState = { on: boolean; ref: string; from: string; to: string; amount: string; fromList?: string };
+// annual: spazio per un anno intero dalla data di inizio; la fine si calcola e non si modifica.
+type SpaceState = { on: boolean; annual: boolean; ref: string; from: string; to: string; amount: string; fromList?: string };
 type ServiceLine = { key: number; desc: string; amount: string; vatRate: number };
 
 const vatLabel = (rate: number) => (rate === 0 ? "senza IVA" : `IVA ${rate}% inclusa`);
@@ -19,7 +21,7 @@ const HAS_REFERENCE: Record<SpaceKind, boolean> = { secca: false, auto_coperto: 
 
 /**
  * Voci del contratto oltre al posto barca: spazi a terra, posti auto e carrello (con periodo e importo)
- * e le spese fisse di gestione e rifiuti. I campi si chiamano <tipo>_on, _ref, _from, _to, _amount.
+ * e le spese fisse di gestione e rifiuti. I campi si chiamano <tipo>_on, _annual, _ref, _from, _to, _amount.
  * Dal listino si aggiungono anche cauzioni e altri servizi, con il loro prezzo e la loro IVA: campi ripetuti
  * servizio_desc, servizio_amount, servizio_vat.
  */
@@ -34,6 +36,7 @@ export function ContractExtras({
   prices,
   listExtras,
   listReady,
+  annualDefault,
 }: {
   startDate: string;
   endDate: string;
@@ -47,9 +50,11 @@ export function ContractExtras({
   // Servizi e cauzioni del listino in vigore alla data di inizio; listReady: barca e date scelte, listino letto.
   listExtras: ListExtra[];
   listReady: boolean;
+  // Contratto annuale: gli spazi aggiunti nascono già con «Annuale» spuntato.
+  annualDefault: boolean;
 }) {
   const [spaces, setSpaces] = useState<Record<SpaceKind, SpaceState>>(
-    () => Object.fromEntries(SPACE_ITEM_KINDS.map((k) => [k, { on: false, ref: "", from: "", to: "", amount: "" }])) as Record<SpaceKind, SpaceState>,
+    () => Object.fromEntries(SPACE_ITEM_KINDS.map((k) => [k, { on: false, annual: false, ref: "", from: "", to: "", amount: "" }])) as Record<SpaceKind, SpaceState>,
   );
   const [services, setServices] = useState<ServiceLine[]>([]);
   const [picked, setPicked] = useState("");
@@ -72,11 +77,19 @@ export function ContractExtras({
     if (extra.itemKind) {
       const kind = extra.itemKind;
       const s = spaces[kind];
-      update(kind, { on: true, from: s.from || startDate, to: s.to || endDate, amount: moneyInput(extra.amountCents), fromList: extra.name });
+      update(kind, { ...turnOn(s), amount: moneyInput(extra.amountCents), fromList: extra.name });
     } else {
       setServiceLines([...services, { key: Date.now(), desc: extra.name, amount: moneyInput(extra.amountCents), vatRate: extra.vatRate }]);
     }
     setPicked("");
+  }
+
+  // Accende uno spazio con il periodo del contratto, o con un anno intero se il contratto è annuale.
+  function turnOn(s: SpaceState): Partial<SpaceState> {
+    if (s.on) return {};
+    const from = s.from || startDate;
+    const annual = annualDefault;
+    return { on: true, annual, from, to: annual && isValidISODate(from) ? annualEnd(from) : s.to || endDate };
   }
 
   function update(kind: SpaceKind, patch: Partial<SpaceState>) {
@@ -161,7 +174,7 @@ export function ContractExtras({
                     update(
                       kind,
                       e.target.checked
-                        ? { on: true, from: s.from || startDate, to: s.to || endDate, amount: s.amount || (prices[kind] ? moneyInput(prices[kind]) : "") }
+                        ? { ...turnOn(s), amount: s.amount || (prices[kind] ? moneyInput(prices[kind]) : "") }
                         : { on: false },
                     )
                   }
@@ -171,8 +184,25 @@ export function ContractExtras({
               {s.on && (
                 <div className={`mt-3 grid grid-cols-1 gap-3 ${HAS_REFERENCE[kind] ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
                   {HAS_REFERENCE[kind] && <Field name={`${kind}_ref`} label="Numero" value={s.ref} onChange={(e) => update(kind, { ref: e.target.value })} />}
-                  <Field name={`${kind}_from`} label="Dal" type="date" value={s.from} onChange={(e) => update(kind, { from: e.target.value })} required />
-                  <Field name={`${kind}_to`} label="Al" type="date" value={s.to} min={s.from} onChange={(e) => update(kind, { to: e.target.value })} required />
+                  <Field
+                    name={`${kind}_from`}
+                    label="Dal"
+                    type="date"
+                    value={s.from}
+                    onChange={(e) => update(kind, s.annual && isValidISODate(e.target.value) ? { from: e.target.value, to: annualEnd(e.target.value) } : { from: e.target.value })}
+                    required
+                  />
+                  <Field
+                    name={`${kind}_to`}
+                    label="Al"
+                    type="date"
+                    value={s.to}
+                    min={s.from}
+                    onChange={(e) => update(kind, { to: e.target.value })}
+                    readOnly={s.annual}
+                    hint={s.annual ? "Un anno dalla data di inizio." : undefined}
+                    required
+                  />
                   <Field
                     name={`${kind}_amount`}
                     label="Importo (IVA incl.)"
@@ -183,6 +213,17 @@ export function ContractExtras({
                     required
                     hint={s.fromList ? `Dal listino: ${s.fromList}` : prices[kind] ? `Listino: ${moneyInput(prices[kind])} €` : undefined}
                   />
+                  <label className="flex items-center gap-2 text-sm text-ink sm:col-span-full">
+                    <input
+                      type="checkbox"
+                      name={`${kind}_annual`}
+                      checked={s.annual}
+                      onChange={(e) =>
+                        update(kind, e.target.checked && isValidISODate(s.from) ? { annual: true, to: annualEnd(s.from) } : { annual: e.target.checked })
+                      }
+                    />
+                    Annuale <span className="text-muted">(un anno intero dalla data di inizio)</span>
+                  </label>
                 </div>
               )}
             </div>

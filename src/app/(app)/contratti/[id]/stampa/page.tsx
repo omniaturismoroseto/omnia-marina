@@ -215,7 +215,8 @@ export default page(async function ContractPrintPage({ params }: { params: Promi
             </li>
             {spaces.map((it) => (
               <li key={it.id}>
-                – {SPACE_PHRASE[it.kind](it.reference)}, con inizio il <strong>{formatDate(it.startDate)}</strong> e termine il <strong>{formatDate(it.endDate)}</strong>;
+                – {SPACE_PHRASE[it.kind](it.reference)}, {it.annual ? "per la durata di un anno, " : ""}con inizio il <strong>{formatDate(it.startDate)}</strong> e
+                termine il <strong>{formatDate(it.endDate)}</strong>;
               </li>
             ))}
           </ul>
@@ -243,7 +244,8 @@ export default page(async function ContractPrintPage({ params }: { params: Promi
               {spaces.map((it) => (
                 <tr key={it.id}>
                   <td className="py-0.5 pr-3">
-                    locazione {it.kind === "auto_coperto" || it.kind === "auto_scoperto" ? "del" : "dello"} {CONTRACT_ITEM_LABEL[it.kind].toLowerCase()}
+                    locazione {it.annual ? "annuale " : ""}
+                    {it.kind === "auto_coperto" || it.kind === "auto_scoperto" ? "del" : "dello"} {CONTRACT_ITEM_LABEL[it.kind].toLowerCase()}
                     {it.reference ? ` n. ${it.reference}` : ""}
                   </td>
                   <td className="py-0.5 text-right whitespace-nowrap tabular-nums">{formatMoney(it.amountCents)}</td>

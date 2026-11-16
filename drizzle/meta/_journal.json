@@ -71,6 +71,13 @@
       "when": 1794823276020,
       "tag": "0009_servizi_nel_contratto",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794825099061,
+      "tag": "0010_spazi_annuali",
+      "breakpoints": true
     }
   ]
 }

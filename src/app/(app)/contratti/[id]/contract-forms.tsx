@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ActionButton, Field, Form, FormMessage, SelectField, Submit, TextareaField } from "@/components/form";
 import { itemHasPeriod, ITEM_KINDS, SERVICE_ITEM_KIND, SERVICE_VAT_RATES } from "@/lib/contract-items";
+import { annualEnd, isValidISODate } from "@/lib/dates";
 import { formatMoney, moneyInput } from "@/lib/format";
 import { CONTRACT_ITEM_LABEL } from "@/lib/labels";
 import type { ListExtra } from "@/server/list-extras";
@@ -73,11 +74,14 @@ export function AddContractItemForm({
   endDate,
   active,
   listExtras,
+  annualDefault,
 }: {
   contractId: string;
   startDate: string;
   endDate: string;
   active: boolean;
+  // Contratto annuale: gli spazi nascono con «Annuale» spuntato.
+  annualDefault: boolean;
   // Servizi e cauzioni del listino in vigore all'inizio del contratto: sceglierne uno compila voce e importo.
   listExtras: ListExtra[];
 }) {
@@ -86,7 +90,20 @@ export function AddContractItemForm({
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [vatRate, setVatRate] = useState("22");
+  const [annual, setAnnual] = useState(annualDefault);
+  const [from, setFrom] = useState(startDate);
+  const [to, setTo] = useState(annualDefault ? annualEnd(startDate) : endDate);
   const period = itemHasPeriod(kind);
+
+  function changeFrom(value: string) {
+    setFrom(value);
+    if (annual && isValidISODate(value)) setTo(annualEnd(value));
+  }
+
+  function changeAnnual(on: boolean) {
+    setAnnual(on);
+    if (on && isValidISODate(from)) setTo(annualEnd(from));
+  }
 
   function pick(extraId: string) {
     setPicked(extraId);
@@ -104,6 +121,9 @@ export function AddContractItemForm({
     setAmount("");
     setDescription("");
     setVatRate("22");
+    setAnnual(annualDefault);
+    setFrom(startDate);
+    setTo(annualDefault ? annualEnd(startDate) : endDate);
   }
 
   // Dopo un salvataggio riuscito il modulo si svuota: anche le scelte tornano quelle iniziali.
@@ -139,9 +159,13 @@ export function AddContractItemForm({
           <>
             {(kind === "auto_coperto" || kind === "auto_scoperto") && <Field name="reference" label="Numero del posto auto" />}
             <div className="grid grid-cols-2 gap-3">
-              <Field name="startDate" label="Dal" type="date" defaultValue={startDate} required />
-              <Field name="endDate" label="Al" type="date" defaultValue={endDate} required />
+              <Field name="startDate" label="Dal" type="date" value={from} onChange={(e) => changeFrom(e.target.value)} required />
+              <Field name="endDate" label="Al" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} readOnly={annual} required />
             </div>
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input type="checkbox" name="annual" checked={annual} onChange={(e) => changeAnnual(e.target.checked)} />
+              Annuale <span className="text-muted">(un anno intero dalla data di inizio)</span>
+            </label>
           </>
         )}
         <Field

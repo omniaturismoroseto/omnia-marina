@@ -17,6 +17,8 @@ export interface ContractItemInput {
   startDate: string | null;
   endDate: string | null;
   amountCents: number;
+  /** Solo per gli spazi: preso per un anno intero dalla data di inizio. */
+  annual?: boolean;
   /** Solo per i servizi: descrizione (es. «Cauzione badge») e aliquota (0 = senza IVA). */
   description?: string | null;
   vatRate?: number | null;

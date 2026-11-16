@@ -3,7 +3,7 @@ import { and, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import type { Tx } from "@/db";
 import { berths, boats, charges, contractItems, contracts, movements, owners, payments, type ContractType } from "@/db/schema";
 import { SERVICE_ITEM_KIND, SERVICE_VAT_RATES, itemHasPeriod, itemTitle, type ContractItemInput } from "@/lib/contract-items";
-import { formatDate, todayRome, yearOf } from "@/lib/dates";
+import { annualEnd, formatDate, todayRome, yearOf } from "@/lib/dates";
 import { splitVat } from "@/lib/format";
 import { CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { occupiedUntil, splitInstalments } from "@/lib/pricing";
@@ -112,6 +112,9 @@ export function validateItems(items: ContractItemInput[]) {
     if (itemHasPeriod(item.kind)) {
       if (!item.startDate || !item.endDate) throw new DomainError("Indica inizio e fine del periodo.", "startDate");
       if (item.endDate < item.startDate) throw new DomainError("La fine del periodo precede l'inizio.", "endDate");
+      if (item.annual && item.endDate !== annualEnd(item.startDate)) {
+        throw new DomainError(`${itemTitle(item)}: un periodo annuale che inizia il ${formatDate(item.startDate)} finisce il ${formatDate(annualEnd(item.startDate))}.`, "endDate");
+      }
     } else {
       if (seen.has(item.kind)) throw new DomainError(`${itemTitle(item)}: voce già presente nel contratto.`, "kind");
       seen.add(item.kind);
