@@ -9,6 +9,8 @@ import { boats, charges, contracts, marinas, owners, privacyConsents } from "@/d
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { toFormState } from "./errors";
+import { setOwnerFormer } from "./owners";
 
 const ownerSchema = z
   .object({
@@ -230,6 +232,24 @@ export async function eraseOwner(_prev: FormState, formData: FormData): Promise<
     await audit(ctx, "anonimizzazione", "cliente", ownerId, "Dati personali rimossi su richiesta", tx);
   });
 
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// Spunta o toglie la categoria «Ex cliente» (nome scelto dalla direzione in Impostazioni → Porto).
+export async function setOwnerFormerAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(OFFICE);
+  const ownerId = String(formData.get("ownerId") ?? "");
+  if (!z.uuid().safeParse(ownerId).success) return fail("Cliente non trovato.");
+  const former = formData.get("former") === "1";
+  try {
+    await db.transaction(async (tx) => {
+      await setOwnerFormer(tx, ctx.marinaId, ownerId, former);
+      await audit(ctx, "modifica", "cliente", ownerId, former ? "Spostato nella categoria ex clienti" : "Tolto dalla categoria ex clienti", tx);
+    });
+  } catch (err) {
+    return toFormState(err);
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }

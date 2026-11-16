@@ -31,7 +31,7 @@ const ROLE_OPTIONS = [
 type Marina = Record<
   "name" | "legalName" | "vatNumber" | "fiscalCode" | "address" | "zip" | "city" | "province" | "phone" | "email" | "vhfChannel",
   string | null
-> & { defaultVatRate: number; serviceFeeCents: number | null; wasteFeeCents: number | null };
+> & { defaultVatRate: number; serviceFeeCents: number | null; wasteFeeCents: number | null; formerOwnerLabel: string };
 
 export function MarinaForm({ marina }: { marina: Marina }) {
   return (
@@ -64,6 +64,14 @@ export function MarinaForm({ marina }: { marina: Marina }) {
           inputMode="decimal"
           placeholder="Es. 40,00"
           hint="Proposta nei nuovi contratti annuali (art. 3)."
+        />
+        <Field
+          name="formerOwnerLabel"
+          label="Categoria dei clienti senza contratto"
+          defaultValue={marina.formerOwnerLabel}
+          required
+          maxLength={40}
+          hint="Nome della spunta per chi non ha più un contratto attivo, es. «Ex cliente»."
         />
       </div>
       <div className="flex items-center gap-3">

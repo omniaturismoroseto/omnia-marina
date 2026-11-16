@@ -7,7 +7,7 @@ import { page } from "@/components/page";
 import { ChargeStatusBadge, ContractStatusBadge } from "@/components/status";
 import { Badge, ButtonLink, Card, Details, EmptyState, Notice, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { berths, boats, contracts, owners, privacyConsents, users } from "@/db/schema";
+import { berths, boats, contracts, marinas, owners, privacyConsents, users } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, formatDateTime, todayRome } from "@/lib/dates";
 import { formatDimensions, formatMoney } from "@/lib/format";
@@ -16,6 +16,8 @@ import { uuidOrNull } from "@/lib/params";
 import { contractNumberLabel } from "@/lib/contract-numbers";
 import { listCharges } from "@/server/charges";
 import { latestConsents, type ConsentKind } from "@/server/owners";
+import { ActionButton } from "@/components/form";
+import { setOwnerFormerAction } from "@/server/owner-actions";
 import { ConsentForm, EraseOwnerButton } from "./privacy-forms";
 
 export const metadata: Metadata = { title: "Scheda cliente" };
@@ -34,7 +36,7 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
   if (!owner) notFound();
 
   const today = todayRome();
-  const [boatRows, contractRows, chargeRows, consentMap, history] = await Promise.all([
+  const [boatRows, contractRows, chargeRows, consentMap, history, [marina]] = await Promise.all([
     db.select().from(boats).where(eq(boats.ownerId, id)).orderBy(asc(boats.name)),
     db
       .select({
@@ -70,7 +72,10 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
       .leftJoin(users, eq(users.id, privacyConsents.recordedBy))
       .where(eq(privacyConsents.ownerId, id))
       .orderBy(desc(privacyConsents.recordedAt)),
+    db.select({ formerLabel: marinas.formerOwnerLabel }).from(marinas).where(eq(marinas.id, ctx.marinaId)),
   ]);
+  const formerLabel = marina.formerLabel;
+  const hasActiveContract = contractRows.some((c) => c.status === "attivo");
 
   const consents = consentMap.get(id) ?? { informativa: null, marketing: null, terzi: null };
   const anonymized = owner.anonymizedAt !== null;
@@ -88,6 +93,7 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
         description={
           <span className="flex flex-wrap items-center gap-1.5">
             <Badge>{owner.type === "azienda" ? "Azienda" : "Persona fisica"}</Badge>
+            {owner.former && <Badge tone="sea">{formerLabel}</Badge>}
             {!anonymized && (consents.informativa?.granted ? <Badge tone="ok">Informativa firmata</Badge> : <Badge tone="warn">Informativa mancante</Badge>)}
           </span>
         }
@@ -294,6 +300,31 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
         </div>
 
         <div className="space-y-5">
+          {!anonymized && (
+            <Card title="Categoria">
+              {owner.former ? (
+                <>
+                  <p className="mb-3 text-sm text-muted">
+                    Il cliente è nella categoria <strong className="text-ink">{formerLabel}</strong>: non compare nell&apos;elenco normale dei clienti
+                    ma nella linguetta «{formerLabel}». Esce da solo dalla categoria quando attivi un suo nuovo contratto.
+                  </p>
+                  <ActionButton action={setOwnerFormerAction} fields={{ ownerId: id, former: "0" }} size="sm">
+                    Togli da «{formerLabel}»
+                  </ActionButton>
+                </>
+              ) : hasActiveContract ? (
+                <p className="text-sm text-muted">Ha un contratto attivo: la categoria «{formerLabel}» si usa solo per chi non ne ha.</p>
+              ) : (
+                <>
+                  <p className="mb-3 text-sm text-muted">Non ha contratti attivi. Se ha lasciato il porto, spostalo nella categoria «{formerLabel}».</p>
+                  <ActionButton action={setOwnerFormerAction} fields={{ ownerId: id, former: "1" }} size="sm">
+                    Sposta in «{formerLabel}»
+                  </ActionButton>
+                </>
+              )}
+            </Card>
+          )}
+
           <Card title="Privacy e consensi">
             {anonymized ? (
               <p className="text-sm text-muted">Dati personali cancellati.</p>

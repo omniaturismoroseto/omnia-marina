@@ -1,7 +1,8 @@
 import "server-only";
 import { and, desc, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { privacyConsents } from "@/db/schema";
+import { db, type Tx } from "@/db";
+import { contracts, owners, privacyConsents } from "@/db/schema";
+import { DomainError } from "./errors";
 
 export type ConsentKind = "informativa" | "marketing" | "terzi";
 export type ConsentState = Record<ConsentKind, { granted: boolean; recordedAt: Date; policyVersion: string } | null>;
@@ -31,4 +32,24 @@ export async function latestConsents(marinaId: string, ownerId?: string): Promis
 
 export function hasInformativa(state: ConsentState | undefined): boolean {
   return state?.informativa?.granted === true;
+}
+
+// Categoria «Ex cliente» (il nome lo sceglie la direzione): si spunta solo su chi non ha contratti attivi.
+// La spunta si toglie da sola quando il cliente ha di nuovo un contratto attivo (src/server/contracts.ts).
+export async function setOwnerFormer(tx: Tx, marinaId: string, ownerId: string, former: boolean) {
+  const [owner] = await tx
+    .select({ id: owners.id })
+    .from(owners)
+    .where(and(eq(owners.id, ownerId), eq(owners.marinaId, marinaId)))
+    .limit(1);
+  if (!owner) throw new DomainError("Cliente non trovato.");
+  if (former) {
+    const [active] = await tx
+      .select({ id: contracts.id })
+      .from(contracts)
+      .where(and(eq(contracts.ownerId, ownerId), eq(contracts.marinaId, marinaId), eq(contracts.status, "attivo")))
+      .limit(1);
+    if (active) throw new DomainError("Il cliente ha un contratto attivo: la categoria si può usare solo per chi non ne ha.");
+  }
+  await tx.update(owners).set({ former, updatedAt: new Date() }).where(eq(owners.id, ownerId));
 }

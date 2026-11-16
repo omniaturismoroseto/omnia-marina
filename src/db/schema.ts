@@ -83,6 +83,8 @@ export const marinas = pgTable("marinas", {
   // Spese di gestione comuni e quota rifiuti proposte nei nuovi contratti annuali.
   serviceFeeCents: integer("service_fee_cents"),
   wasteFeeCents: integer("waste_fee_cents"),
+  // Nome della categoria dei clienti senza contratto attivo (owners.former), scelto dalla direzione.
+  formerOwnerLabel: text("former_owner_label").notNull().default("Ex cliente"),
   // Pianta dal vero: dimensioni in pixel della foto aerea caricata e scala (pixel per metro).
   // planVersion cambia a ogni nuova foto, così il browser non mostra quella vecchia dalla cache.
   planWidth: integer("plan_width"),
@@ -154,6 +156,27 @@ export const sessions = pgTable(
 
 // ───────────────────────── Anagrafiche ─────────────────────────
 
+// Un'importazione di clienti (e barche) da Excel: quante righe, quanti clienti creati o completati, quante barche.
+// Annullarla cancella i clienti e le barche che ha creato e che non hanno contratti.
+export const ownerImports = pgTable(
+  "owner_imports",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    sheetName: text("sheet_name").notNull(),
+    rowsCount: integer("rows_count").notNull(),
+    ownersCreated: integer("owners_created").notNull(),
+    ownersUpdated: integer("owners_updated").notNull(),
+    boatsCreated: integer("boats_created").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("owner_imports_marina_idx").on(t.marinaId, t.createdAt)],
+);
+
 export const owners = pgTable(
   "owners",
   {
@@ -184,11 +207,16 @@ export const owners = pgTable(
     idDocNumber: text("id_doc_number"),
     idDocExpiry: date("id_doc_expiry"),
     notes: text("notes"),
+    // Categoria «Ex cliente» (nome in marinas.former_owner_label): solo per chi non ha contratti attivi;
+    // si toglie da sola quando il cliente ha di nuovo un contratto attivo.
+    former: boolean("former").notNull().default(false),
+    // Importazione da Excel che ha creato il cliente: serve ad annullarla.
+    importId: uuid("import_id").references(() => ownerImports.id, { onDelete: "set null" }),
     anonymizedAt: timestamp("anonymized_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index("owners_marina_name_idx").on(t.marinaId, t.displayName)],
+  (t) => [index("owners_marina_name_idx").on(t.marinaId, t.displayName), index("owners_marina_fiscal_idx").on(t.marinaId, t.fiscalCode)],
 );
 
 // Registro dei consensi: ogni riga è un evento (concesso o revocato). Non si modifica mai,
@@ -249,6 +277,7 @@ export const boats = pgTable(
     insurancePolicy: text("insurance_policy"),
     insuranceExpiry: date("insurance_expiry"),
     notes: text("notes"),
+    importId: uuid("import_id").references(() => ownerImports.id, { onDelete: "set null" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

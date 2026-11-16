@@ -189,6 +189,14 @@ export interface ContractInput {
   items?: ContractItemInput[];
 }
 
+// Un cliente con un contratto attivo non è più «ex cliente».
+async function clearFormer(tx: Tx, marinaId: string, ownerId: string) {
+  await tx
+    .update(owners)
+    .set({ former: false })
+    .where(and(eq(owners.id, ownerId), eq(owners.marinaId, marinaId), eq(owners.former, true)));
+}
+
 // Controlla che il posto indicato dal browser sia di questo porto (per le bozze non si verifica la disponibilità).
 async function assertOwnBerth(tx: Tx, marinaId: string, berthId: string | null) {
   if (!berthId) return;
@@ -248,6 +256,7 @@ export async function createContract(tx: Tx, actor: Actor, input: ContractInput)
   }
 
   if (number) {
+    await clearFormer(tx, actor.marinaId, input.ownerId);
     await createInstalmentCharges(tx, actor, { id: created.id, number, ...input }, input.instalments, todayRome());
     await chargePendingItems(tx, actor, { id: created.id, number, ownerId: input.ownerId, vatRate: input.vatRate }, input.instalments.firstDueDate);
   }
@@ -337,6 +346,7 @@ export async function activateContract(tx: Tx, actor: Actor, contractId: string,
   const year = yearOf(c.startDate);
   const { seq, number, fillsGap } = await assignContractNumber(tx, actor.marinaId, year);
   await tx.update(contracts).set({ status: "attivo", year, seq, number, updatedAt: new Date() }).where(eq(contracts.id, c.id));
+  await clearFormer(tx, actor.marinaId, c.ownerId);
   const numbered = { ...c, number };
   await createInstalmentCharges(tx, actor, numbered, plan, todayRome());
   await chargePendingItems(tx, actor, numbered, plan.firstDueDate);

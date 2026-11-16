@@ -19,7 +19,10 @@ lavorare per più porti con ruoli diversi.
   in partenza, oltre scadenza, non disponibile) e a una data qualsiasi. Due viste: lo **schema** pontile per
   pontile e la **pianta dal vero**, con i posti disegnati nelle misure reali sopra una foto aerea del porto.
 - **Banchina** – pagina per telefono: arrivi attesi, partenze, barche fuori in mare, segnalazioni e movimenti del giorno.
-- **Clienti e barche** – anagrafica completa di proprietario e unità, assicurazione con scadenze.
+- **Clienti e barche** – anagrafica completa di proprietario e unità, assicurazione con scadenze. **Importazione da Excel**
+  dell'elenco esistente con anteprima: colonne riconosciute, doppioni uniti, clienti già presenti completati solo nei campi
+  vuoti, correzioni proposte, annullamento. I clienti senza contratto attivo si possono spostare nella categoria
+  «Ex cliente» (nome scelto dalla direzione), che esce dall'elenco normale.
 - **Privacy** – registro dei consensi con storico (chi, quando, quale versione dell'informativa), informativa
   stampabile, esportazione dei dati del cliente, cancellazione/anonimizzazione, registro delle operazioni.
 - **Contratti** – annuali, stagionali, mensili e transiti; posti liberi e adatti alla barca proposti in automatico,
@@ -204,7 +207,6 @@ tests/               test automatici
 - Nessun invio di email o SMS (scadenze, solleciti) e nessun recupero password via email: la password la reimposta la direzione.
 - Nessuna fatturazione elettronica né pagamenti online.
 - Il diportista non ha ancora un proprio accesso (prenotazioni e area riservata sono un passo successivo).
-- La foto della pianta dal vero è una sola per porto e i posti si dispongono a mano: non c'è riconoscimento
-  automatico dei posti dall'immagine.
+- La foto della pianta dal vero è una sola per porto; il riconoscimento automatico propone i posti, ma vanno controllati.
 - L'app è installabile ma non funziona senza connessione.
 - Il freno ai tentativi di accesso è in memoria: con più istanze del server va spostato su database o Redis.

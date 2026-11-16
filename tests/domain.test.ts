@@ -21,6 +21,9 @@ import {
   type ContractInput,
 } from "@/server/contracts";
 import { DomainError, toFormState } from "@/server/errors";
+import { setOwnerFormer } from "@/server/owners";
+import { importOwners, undoOwnerImport } from "@/server/owner-import";
+import { ownerKey, type ImportBoat, type ImportOwner, type ImportRow } from "@/lib/owner-import";
 import { CONTRACT_APPROVAL_TEMPLATE, CONTRACT_TERMS_TEMPLATE } from "@/lib/contract-texts";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
 import { loadOfficialPriceList, OFFICIAL_CATEGORIES, OFFICIAL_EXTRAS } from "@/server/official-price-list";
@@ -480,6 +483,67 @@ describe.skipIf(!available)("regole del porto (database)", () => {
     // (arrivo simulato: la data di inizio è nel futuro e la banchina non lo registrerebbe)
     await db.update(contracts).set({ presence: "in_porto", checkedInAt: new Date() }).where(eq(contracts.id, draft.id));
     await expect(db.transaction((tx) => revertToDraft(tx, actor(a), draft.id))).rejects.toThrow(/già arrivata/);
+  });
+
+  it("ex cliente: solo senza contratti attivi, e un nuovo contratto attivo toglie la categoria", async () => {
+    const [owner] = await db
+      .insert(owners)
+      .values({ marinaId: a.marinaId, type: "persona", firstName: "Eva", lastName: "Partita", displayName: "Partita Eva" })
+      .returning({ id: owners.id });
+    const [boat] = await db.insert(boats).values({ marinaId: a.marinaId, ownerId: owner.id, name: "Gamma", lengthCm: 600, beamCm: 240 }).returning({ id: boats.id });
+    await db.transaction((tx) => setOwnerFormer(tx, a.marinaId, owner.id, true));
+    expect((await db.select().from(owners).where(eq(owners.id, owner.id)))[0].former).toBe(true);
+    // Un altro porto non può toccarlo.
+    await expect(db.transaction((tx) => setOwnerFormer(tx, b.marinaId, owner.id, false))).rejects.toThrow(/non trovato/);
+
+    // Torna con un contratto attivo: esce dalla categoria e non ci può rientrare finché il contratto è attivo.
+    await create(a, { ownerId: owner.id, boatId: boat.id, startDate: "2041-05-01", endDate: "2041-05-03", instalments: { count: 1, firstDueDate: "2041-05-01", everyMonths: 1 } });
+    expect((await db.select().from(owners).where(eq(owners.id, owner.id)))[0].former).toBe(false);
+    await expect(db.transaction((tx) => setOwnerFormer(tx, a.marinaId, owner.id, true))).rejects.toThrow(/contratto attivo/);
+  });
+
+  it("importazione clienti: doppioni uniti, esistenti completati senza sovrascrivere, annullamento", async () => {
+    const owner = (o: Partial<ImportOwner>): ImportOwner => ({
+      type: "persona", firstName: "", lastName: "", companyName: "", fiscalCode: "", vatNumber: "", birthDate: "", birthPlace: "", address: "", zip: "",
+      city: "", province: "", country: "Italia", phone: "", email: "", pec: "", sdiCode: "", notes: "", ...o,
+    });
+    const boat = (b: Partial<ImportBoat>): ImportBoat => ({
+      name: "", registration: "", type: "motore", builder: "", model: "", year: null, lengthCm: null, beamCm: null, draftCm: null, flag: "",
+      engineType: "", engineBrand: "", engineCount: null, enginePowerHp: null, auxEngineType: "", auxEngineBrand: "", auxEngineCount: null,
+      auxEnginePowerHp: null, declaredValueCents: null, insuranceCompany: "", insurancePolicy: "", insuranceExpiry: "", ...b,
+    });
+    const rossi = owner({ lastName: "Rossi", firstName: "Mario", fiscalCode: "RSSMRA85T10A562S", phone: "3391234567" });
+    const rows: ImportRow[] = [
+      { row: 2, excluded: false, owner: rossi, boat: boat({ name: "Alba", lengthCm: 600, beamCm: 240 }) },
+      { row: 3, excluded: false, owner: rossi, boat: boat({ name: "Senza misure" }) },
+      // Cliente già presente nel porto (stesso nome, nessun codice fiscale): si completa solo il vuoto.
+      { row: 4, excluded: false, owner: owner({ lastName: "Prova", firstName: "Ada", phone: "3400000000", city: "Pescara" }), boat: boat({ name: "Alfa", lengthCm: 900, beamCm: 300 }) },
+      { row: 5, excluded: false, owner: owner({ lastName: "Neri", firstName: "Lia" }), boat: null },
+      { row: 6, excluded: true, owner: owner({ lastName: "Escluso", firstName: "Del Tutto" }), boat: null },
+    ];
+    const keyOf = (o: ImportOwner) => ownerKey(o);
+    const result = await db.transaction((tx) =>
+      importOwners(tx, actor(a), { fileName: "clienti.xlsx", sheetName: "dati", rows, decisions: { [keyOf(rows[3].owner)]: "salta" }, markFormer: false }),
+    );
+    expect(result).toMatchObject({ ownersCreated: 1, ownersMatched: 1, ownersUpdated: 1, ownersSkipped: 1, boatsCreated: 1, boatsSkipped: 2 });
+
+    const created = await db.select().from(owners).where(eq(owners.importId, result.importId));
+    expect(created.map((o) => o.displayName)).toEqual(["Rossi Mario"]);
+    expect((await db.select().from(boats).where(eq(boats.ownerId, created[0].id))).map((b) => b.name)).toEqual(["Alba"]);
+    const [ada] = await db.select().from(owners).where(eq(owners.id, a.ownerId));
+    expect(ada).toMatchObject({ displayName: "Prova Ada", phone: "3400000000", city: "Pescara", importId: null });
+    expect(await db.select().from(owners).where(and(eq(owners.marinaId, a.marinaId), eq(owners.lastName, "Neri")))).toHaveLength(0);
+
+    // Una riga senza nome blocca tutta l'importazione.
+    await expect(
+      db.transaction((tx) => importOwners(tx, actor(a), { fileName: "x.xlsx", sheetName: "dati", rows: [{ row: 9, excluded: false, owner: owner({}), boat: null }], decisions: {}, markFormer: false })),
+    ).rejects.toThrow(/manca il nome/);
+
+    // Annullamento: il cliente importato senza contratti sparisce con la sua barca; un altro porto non può annullare.
+    await expect(db.transaction((tx) => undoOwnerImport(tx, actor(b), result.importId))).rejects.toThrow(/non trovata/);
+    const undone = await db.transaction((tx) => undoOwnerImport(tx, actor(a), result.importId));
+    expect(undone).toMatchObject({ ownersDeleted: 1, boatsDeleted: 1, ownersKept: 0 });
+    expect(await db.select().from(owners).where(eq(owners.id, created[0].id))).toHaveLength(0);
   });
 
   it("tariffe: una sola riga per listino, categoria e zona, anche per la tariffa base", async () => {

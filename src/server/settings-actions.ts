@@ -34,6 +34,7 @@ const marinaSchema = z.object({
   defaultVatRate: f.int(0, 30, "Aliquota non valida"),
   serviceFeeCents: f.optMoney(),
   wasteFeeCents: f.optMoney(),
+  formerOwnerLabel: f.text("Dai un nome alla categoria"),
 });
 
 export async function saveMarina(_prev: FormState, formData: FormData): Promise<FormState> {

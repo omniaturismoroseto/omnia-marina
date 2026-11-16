@@ -85,6 +85,13 @@
       "when": 1794827839110,
       "tag": "0011_bozze_senza_numero",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794832917949,
+      "tag": "0012_clienti_ex_e_importazioni",
+      "breakpoints": true
     }
   ]
 }

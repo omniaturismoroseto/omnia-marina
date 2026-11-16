@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
-import { Plus } from "lucide-react";
+import { FileSpreadsheet, Plus } from "lucide-react";
 import { page } from "@/components/page";
 import { Badge, ButtonLink, EmptyState, FilterTabs, PageHeader, SearchBox } from "@/components/ui";
 import { db } from "@/db";
-import { owners } from "@/db/schema";
+import { marinas, owners } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatMoney } from "@/lib/format";
 import { one, qs, type SearchParams } from "@/lib/params";
@@ -19,7 +19,8 @@ export default page(async function OwnersPage({ searchParams }: { searchParams: 
   const ctx = await requireMarina(OFFICE);
   const sp = await searchParams;
   const q = one(sp.q).trim();
-  const filter = one(sp.privacy) === "mancante" ? "mancante" : "tutti";
+  // Gli ex clienti (categoria con nome scelto dalla direzione) stanno nella loro scheda, non nell'elenco normale.
+  const filter = one(sp.stato) === "ex" ? "ex" : one(sp.privacy) === "mancante" ? "mancante" : "tutti";
   const pageNumber = Math.max(1, Number.parseInt(one(sp.p), 10) || 1);
 
   const like = `%${q.replace(/[%_\\]/g, "\\$&")}%`;
@@ -32,11 +33,12 @@ export default page(async function OwnersPage({ searchParams }: { searchParams: 
   const where = and(
     eq(owners.marinaId, ctx.marinaId),
     sql`${owners.anonymizedAt} is null`,
+    eq(owners.former, filter === "ex"),
     q ? or(ilike(owners.displayName, like), ilike(owners.fiscalCode, like), ilike(owners.vatNumber, like), ilike(owners.email, like), ilike(owners.phone, like)) : undefined,
     filter === "mancante" ? noInformativa : undefined,
   );
 
-  const [rows, [{ total }], [{ missing }], consents] = await Promise.all([
+  const [rows, [{ total }], [{ missing }], consents, [{ formerCount }], [marina]] = await Promise.all([
     db
       .select({
         id: owners.id,
@@ -60,8 +62,13 @@ export default page(async function OwnersPage({ searchParams }: { searchParams: 
     db
       .select({ missing: sql<number>`count(*)::int` })
       .from(owners)
-      .where(and(eq(owners.marinaId, ctx.marinaId), sql`${owners.anonymizedAt} is null`, noInformativa)),
+      .where(and(eq(owners.marinaId, ctx.marinaId), sql`${owners.anonymizedAt} is null`, eq(owners.former, false), noInformativa)),
     latestConsents(ctx.marinaId),
+    db
+      .select({ formerCount: sql<number>`count(*)::int` })
+      .from(owners)
+      .where(and(eq(owners.marinaId, ctx.marinaId), sql`${owners.anonymizedAt} is null`, eq(owners.former, true))),
+    db.select({ label: marinas.formerOwnerLabel }).from(marinas).where(eq(marinas.id, ctx.marinaId)),
   ]);
 
   const pages = Math.ceil(total / PAGE_SIZE);
@@ -72,39 +79,59 @@ export default page(async function OwnersPage({ searchParams }: { searchParams: 
         title="Clienti"
         description="Proprietari e intestatari dei posti barca, con dati di contatto e consensi privacy."
         actions={
-          <ButtonLink href="/clienti/nuovo" variant="primary">
-            <Plus size={16} aria-hidden="true" />
-            Nuovo cliente
-          </ButtonLink>
+          <>
+            <ButtonLink href="/clienti/importa">
+              <FileSpreadsheet size={16} aria-hidden="true" />
+              Importa da Excel
+            </ButtonLink>
+            <ButtonLink href="/clienti/nuovo" variant="primary">
+              <Plus size={16} aria-hidden="true" />
+              Nuovo cliente
+            </ButtonLink>
+          </>
         }
       />
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <SearchBox action="/clienti" defaultValue={q} placeholder="Nome, codice fiscale, telefono…">
           {filter === "mancante" && <input type="hidden" name="privacy" value="mancante" />}
+          {filter === "ex" && <input type="hidden" name="stato" value="ex" />}
         </SearchBox>
         <FilterTabs
           current={filter}
           items={[
-            { value: "tutti", label: "Tutti", href: `/clienti${qs({ q })}` },
+            { value: "tutti", label: "Clienti", href: `/clienti${qs({ q })}` },
             { value: "mancante", label: "Informativa mancante", count: missing, href: `/clienti${qs({ q, privacy: "mancante" })}` },
+            { value: "ex", label: marina.label, count: formerCount, href: `/clienti${qs({ q, stato: "ex" })}` },
           ]}
         />
       </div>
 
       <div className="card overflow-x-auto">
         {rows.length === 0 ? (
-          <EmptyState
-            title={q || filter === "mancante" ? "Nessun cliente corrisponde alla ricerca" : "Nessun cliente"}
-            description={q || filter === "mancante" ? undefined : "Inizia inserendo il primo proprietario: potrai poi aggiungere le sue barche e i contratti."}
-            action={
-              q || filter === "mancante" ? undefined : (
-                <ButtonLink href="/clienti/nuovo" variant="primary">
-                  Nuovo cliente
-                </ButtonLink>
-              )
-            }
-          />
+          filter === "ex" && !q ? (
+            <EmptyState
+              title={`Nessun cliente in «${marina.label}»`}
+              description="Dalla scheda di un cliente senza contratto attivo puoi spostarlo in questa categoria."
+            />
+          ) : (
+            <EmptyState
+              title={q || filter !== "tutti" ? "Nessun cliente corrisponde alla ricerca" : "Nessun cliente"}
+              description={
+                q || filter !== "tutti" ? undefined : "Inizia inserendo il primo proprietario, oppure importa l'elenco dei clienti e delle barche da un file Excel."
+              }
+              action={
+                q || filter !== "tutti" ? undefined : (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <ButtonLink href="/clienti/importa">Importa da Excel</ButtonLink>
+                    <ButtonLink href="/clienti/nuovo" variant="primary">
+                      Nuovo cliente
+                    </ButtonLink>
+                  </div>
+                )
+              }
+            />
+          )
         ) : (
           <table className="tbl">
             <thead>

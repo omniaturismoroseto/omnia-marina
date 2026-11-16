@@ -28,6 +28,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Logo della società di gestione: caricato da Impostazioni → Porto, salvato in `marina_logos` (PNG/JPEG, mai SVG) e servito da
   `/logo?v=<marinas.logo_version>`; `portLogo` (`src/lib/logo.ts`) e `PortLogo`/`PortLogoTile` (`src/components/port-logo.tsx`) lo mostrano
   nel menu (su riquadro bianco) e nelle intestazioni di contratto e informativa. Il logo di Omnia Marina resta quello dell'app.
+- Importazione clienti (`/clienti/importa`): il file si legge nel browser (`readXlsx`); analisi, pulizia e raggruppamento sono
+  funzioni pure in `src/lib/owner-import.ts` (con `fiscal.ts` e `provinces.ts`), il salvataggio in `src/server/owner-import.ts`
+  (`importOwners` rifà i controlli bloccanti, `undoOwnerImport` toglie solo ciò che non è stato usato). I clienti già presenti
+  (stesso CF, P.IVA o, senza codici, stesso nome) si completano solo nei campi vuoti; ogni riga creata porta `import_id`.
+- Categoria «ex cliente»: `owners.former`, nome in `marinas.former_owner_label` (Impostazioni → Porto). Solo per chi non ha un
+  contratto attivo (`setOwnerFormer`); attivare un contratto la toglie (`clearFormer` in `src/server/contracts.ts`). L'elenco
+  clienti normale e il conteggio «Informativa mancante» escludono gli ex clienti.
 - Pianta dal vero: le coordinate dei posti (`berths.plan_x/plan_y/plan_angle`) sono in pixel della foto caricata;
   la geometria sta in `src/lib/plan.ts`, la foto nel database (`marina_plans`) ed è servita da `/pianta/immagine`.
 - Numerazione dei contratti: le bozze non hanno numero (`seq`/`number` vuoti, in stampa «BOZZA»); il numero nasce all'attivazione
