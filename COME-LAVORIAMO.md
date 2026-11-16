@@ -170,6 +170,22 @@ Remove-Item "C:\Users\roset\OneDrive\Desktop\App Porto\omnia-marina\.git\index.l
 Se succede spesso, conviene spostare il progetto fuori da OneDrive (per esempio in `C:\Users\roset\Progetti`):
 è GitHub a conservare le copie, OneDrive non serve.
 
+### `Deletion of directory '.git/objects/…' failed. Should I try again? (y/n)`
+
+Durante il `git pull` git riordina i suoi file interni e OneDrive, che li sta sincronizzando, gli impedisce di
+cancellare una cartella. Il progetto non corre rischi.
+
+1. Metti in pausa OneDrive: icona della nuvola in basso a destra → ingranaggio → **Sospendi sincronizzazione** → 2 ore.
+2. Scrivi `y` e premi Invio. Se chiede di nuovo, ancora `y`. Se continua a non riuscire, scrivi `n`: restano solo
+   alcuni file vecchi inutili, non si perde niente.
+3. Il comando prosegue da solo: finisce di scaricare e, con il comando unico, pubblica.
+
+Perché non ricapiti, una volta sola, nella cartella del progetto (git smette di riordinare i file durante il `pull`):
+
+```powershell
+git config gc.auto 0; git config maintenance.auto false
+```
+
 ### PowerShell dice che l'esecuzione di script è disabilitata
 
 Scrivi `gcloud.cmd` al posto di `gcloud` nei comandi.
