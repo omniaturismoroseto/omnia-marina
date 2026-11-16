@@ -11,13 +11,18 @@ const TABS = [
 
 export function SettingsTabs({ current }: { current: (typeof TABS)[number]["key"] }) {
   return (
-    <nav className="no-print mb-5 flex gap-1 overflow-x-auto border-b border-line" aria-label="Sezioni delle impostazioni">
+    // Su schermi stretti le schede scorrono di lato, senza barra di scorrimento. La linea di base è un'ombra interna:
+    // se la scheda attiva sporgesse sotto il bordo, Windows mostrerebbe una barra verticale con le frecce.
+    <nav
+      className="no-print mb-5 flex gap-1 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--color-line)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      aria-label="Sezioni delle impostazioni"
+    >
       {TABS.map((t) => (
         <Link
           key={t.key}
           href={t.href}
           aria-current={t.key === current ? "page" : undefined}
-          className={`-mb-px border-b-2 px-3 py-2 text-[15px] font-medium whitespace-nowrap ${
+          className={`border-b-2 px-3 py-2 text-[15px] font-medium whitespace-nowrap ${
             t.key === current ? "border-buoy text-ink" : "border-transparent text-muted hover:text-ink"
           }`}
         >
