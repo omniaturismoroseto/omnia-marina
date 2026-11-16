@@ -12,6 +12,7 @@ import { formatDate, formatDateLong, isValidISODate, todayRome } from "@/lib/dat
 import { formatDimensions, formatMeters } from "@/lib/format";
 import { BERTH_STATUS_LABEL, CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { one, qs, uuidOrNull, type SearchParams } from "@/lib/params";
+import { contractNumberLabel } from "@/lib/contract-numbers";
 import { countStates, getBoard, STATE_LABEL, type BerthState, type BoardBerth, type BoardPier } from "@/server/board";
 import { PlanView } from "./plan-view";
 import { PlanZoom } from "./plan-zoom";
@@ -170,10 +171,10 @@ async function BerthPanel({ berth, date, today, marinaId, office }: { berth: Boa
                 "Contratto",
                 office ? (
                   <Link key="c" href={`/contratti/${o.contractId}`} className="link">
-                    {o.number} · {CONTRACT_TYPE_LABEL[o.type]}
+                    {contractNumberLabel(o.number)} · {CONTRACT_TYPE_LABEL[o.type]}
                   </Link>
                 ) : (
-                  `${o.number} · ${CONTRACT_TYPE_LABEL[o.type]}`
+                  `${contractNumberLabel(o.number)} · ${CONTRACT_TYPE_LABEL[o.type]}`
                 ),
               ],
               ["Periodo", `${formatDate(o.startDate)} – ${formatDate(o.endDate)}`],

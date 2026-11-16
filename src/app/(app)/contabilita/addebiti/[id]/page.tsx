@@ -12,6 +12,7 @@ import { formatDate, todayRome } from "@/lib/dates";
 import { formatMoney, moneyInput } from "@/lib/format";
 import { CHARGE_KIND_LABEL, PAYMENT_METHOD_LABEL } from "@/lib/labels";
 import { uuidOrNull } from "@/lib/params";
+import { contractNumberLabel } from "@/lib/contract-numbers";
 import { chargeStatus } from "@/server/accounting";
 import { CancelChargeButton, PaymentForm, RemovePaymentButton } from "../../accounting-forms";
 
@@ -65,7 +66,7 @@ export default page(async function ChargePage({ params }: { params: Promise<{ id
               items={[
                 ["Cliente", <Link key="o" href={`/clienti/${charge.ownerId}`} className="link">{row.ownerName}</Link>],
                 ["Tipo", CHARGE_KIND_LABEL[charge.kind]],
-                ["Contratto", charge.contractId && <Link key="c" href={`/contratti/${charge.contractId}`} className="link">{row.contractNumber}</Link>],
+                ["Contratto", charge.contractId && <Link key="c" href={`/contratti/${charge.contractId}`} className="link">{contractNumberLabel(row.contractNumber)}</Link>],
                 ["Data dell'addebito", formatDate(charge.issueDate)],
                 ["Scadenza", formatDate(charge.dueDate)],
                 ["Importo (IVA inclusa)", <strong key="g">{formatMoney(charge.grossCents)}</strong>],

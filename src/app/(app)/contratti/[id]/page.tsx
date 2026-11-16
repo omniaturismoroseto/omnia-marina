@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, desc, eq } from "drizzle-orm";
-import { Printer } from "lucide-react";
+import { Pencil, Printer } from "lucide-react";
 import { MovementButtons } from "@/components/movement-buttons";
 import { page } from "@/components/page";
 import { ChargeStatusBadge, ContractStatusBadge, PresenceBadge } from "@/components/status";
@@ -14,18 +14,24 @@ import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, formatDateTime, todayRome } from "@/lib/dates";
 import { formatDimensions, formatMoney, splitVat } from "@/lib/format";
 import { CONTRACT_TYPE_LABEL, MOVEMENT_LABEL } from "@/lib/labels";
-import { uuidOrNull } from "@/lib/params";
+import { one, uuidOrNull, type SearchParams } from "@/lib/params";
 import { listCharges } from "@/server/charges";
 import { extrasForDate } from "@/server/list-extras";
 import { latestConsents } from "@/server/owners";
-import { ActivateForm, AddContractItemForm, CancelContractButton, ContractMetaForm, RemoveContractItemButton } from "./contract-forms";
+import { ActivateForm, AddContractItemForm, CancelContractButton, ContractMetaForm, RemoveContractItemButton, RevertToDraftButton } from "./contract-forms";
 
 export const metadata: Metadata = { title: "Contratto" };
 
-export default page(async function ContractPage({ params }: { params: Promise<{ id: string }> }) {
+export default page(async function ContractPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: SearchParams }) {
   const ctx = await requireMarina(OFFICE);
   const id = uuidOrNull((await params).id);
   if (!id) notFound();
+  // Esito dell'ultima operazione, passato dall'azione: attivazione, ritorno in bozza, modifica della bozza.
+  const sp = await searchParams;
+  const activated = one(sp.attivato) === "1";
+  const reopenedNumber = one(sp.riaperto);
+  const gap = one(sp.buco) === "1";
+  const edited = one(sp.modificato) === "1";
 
   const [row] = await db
     .select({ contract: contracts, ownerName: owners.displayName, boat: boats, berthCode: berths.code })
@@ -65,7 +71,7 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
   return (
     <>
       <PageHeader
-        title={`Contratto ${c.number}`}
+        title={c.number ? `Contratto ${c.number}` : "Contratto in bozza"}
         back={{ href: "/contratti", label: "Contratti" }}
         description={
           <span className="flex flex-wrap items-center gap-1.5">
@@ -75,12 +81,39 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
           </span>
         }
         actions={
-          <ButtonLink href={`/contratti/${id}/stampa`}>
-            <Printer size={16} aria-hidden="true" />
-            Stampa
-          </ButtonLink>
+          <span className="flex flex-wrap gap-2">
+            {c.status === "bozza" && (
+              <ButtonLink href={`/contratti/${id}/modifica`}>
+                <Pencil size={16} aria-hidden="true" />
+                Modifica
+              </ButtonLink>
+            )}
+            <ButtonLink href={`/contratti/${id}/stampa`}>
+              <Printer size={16} aria-hidden="true" />
+              Stampa
+            </ButtonLink>
+          </span>
         }
       />
+
+      {(activated || reopenedNumber || edited) && (
+        <div className="mb-5">
+          {activated && c.number && (
+            <Notice tone="ok">
+              Contratto attivato con il numero <strong>{c.number}</strong>.{gap && " Ha ripreso un numero che era rimasto libero nella numerazione."}
+            </Notice>
+          )}
+          {reopenedNumber && c.status === "bozza" && (
+            <Notice tone={gap ? "warn" : "sea"}>
+              Il contratto è tornato in bozza e ha lasciato libero il numero <strong>{reopenedNumber}</strong>.{" "}
+              {gap
+                ? "Ora nella numerazione c'è un buco: lo riprenderà il primo contratto che verrà attivato."
+                : "Era l'ultimo numero dell'anno: la numerazione resta senza buchi."}
+            </Notice>
+          )}
+          {edited && c.status === "bozza" && <Notice tone="ok">Bozza aggiornata.</Notice>}
+        </div>
+      )}
 
       {open && (privacyMissing || insuranceExpired || !c.signedOn) && (
         <div className="mb-5 space-y-2">
@@ -256,7 +289,13 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
                   <ActivateForm contractId={id} firstDueDate={c.startDate > today ? c.startDate : today} />
                 </>
               ) : (
-                <p className="text-sm text-muted">Questa bozza non ha un posto barca: annullala e crea un nuovo contratto scegliendo il posto.</p>
+                <p className="text-sm text-muted">
+                  Questa bozza non ha un posto barca: scegline uno con{" "}
+                  <Link href={`/contratti/${id}/modifica`} className="link">
+                    Modifica
+                  </Link>
+                  , poi attivala.
+                </p>
               )}
             </Card>
           )}
@@ -280,6 +319,15 @@ export default page(async function ContractPage({ params }: { params: Promise<{ 
           {open && (
             <Card title="Firma e note">
               <ContractMetaForm contractId={id} signedOn={c.signedOn} notes={c.notes} />
+            </Card>
+          )}
+
+          {c.status === "attivo" && c.presence === "atteso" && !c.checkedInAt && (
+            <Card title="Correggere il contratto">
+              <p className="mb-3 text-sm text-muted">
+                Per cambiare dati, posto o importo riporta il contratto in bozza: perde il numero {c.number} e gli addebiti non ancora incassati.
+              </p>
+              <RevertToDraftButton contractId={id} number={c.number ?? ""} />
             </Card>
           )}
 

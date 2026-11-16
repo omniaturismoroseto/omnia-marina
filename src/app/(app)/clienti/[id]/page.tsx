@@ -13,6 +13,7 @@ import { formatDate, formatDateTime, todayRome } from "@/lib/dates";
 import { formatDimensions, formatMoney } from "@/lib/format";
 import { BOAT_TYPE_LABEL, CONSENT_LABEL, CONSENT_METHOD_LABEL, CONSENT_SHORT, CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { uuidOrNull } from "@/lib/params";
+import { contractNumberLabel } from "@/lib/contract-numbers";
 import { listCharges } from "@/server/charges";
 import { latestConsents, type ConsentKind } from "@/server/owners";
 import { ConsentForm, EraseOwnerButton } from "./privacy-forms";
@@ -209,7 +210,7 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
                     <tr key={c.id}>
                       <td>
                         <Link href={`/contratti/${c.id}`} className="link">
-                          {c.number}
+                          {contractNumberLabel(c.number)}
                         </Link>
                         <span className="block text-xs text-muted">
                           {CONTRACT_TYPE_LABEL[c.type]} ·{" "}

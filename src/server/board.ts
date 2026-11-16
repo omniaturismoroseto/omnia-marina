@@ -17,7 +17,7 @@ export type BerthState = "libero" | "occupato" | "fuori" | "atteso" | "partenza"
 
 export interface Occupant {
   contractId: string;
-  number: string;
+  number: string | null;
   type: ContractType;
   presence: Presence;
   startDate: string;

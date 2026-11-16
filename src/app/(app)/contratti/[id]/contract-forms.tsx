@@ -7,7 +7,14 @@ import { annualEnd, isValidISODate } from "@/lib/dates";
 import { formatMoney, moneyInput } from "@/lib/format";
 import { CONTRACT_ITEM_LABEL } from "@/lib/labels";
 import type { ListExtra } from "@/server/list-extras";
-import { activateContractAction, addContractItemAction, cancelContractAction, removeContractItemAction, updateContractMeta } from "@/server/contract-actions";
+import {
+  activateContractAction,
+  addContractItemAction,
+  cancelContractAction,
+  removeContractItemAction,
+  revertToDraftAction,
+  updateContractMeta,
+} from "@/server/contract-actions";
 
 export function ActivateForm({ contractId, firstDueDate }: { contractId: string; firstDueDate: string }) {
   const [instalments, setInstalments] = useState(1);
@@ -48,6 +55,20 @@ export function CancelContractButton({ contractId, draft }: { contractId: string
       confirm={draft ? "Annullare questa bozza?" : "Annullando il contratto il posto torna libero e gli addebiti non ancora incassati vengono annullati. Confermi?"}
     >
       {draft ? "Annulla la bozza" : "Annulla il contratto"}
+    </ActionButton>
+  );
+}
+
+export function RevertToDraftButton({ contractId, number }: { contractId: string; number: string }) {
+  return (
+    <ActionButton
+      action={revertToDraftAction}
+      fields={{ contractId }}
+      variant="secondary"
+      size="sm"
+      confirm={`Riportare il contratto ${number} in bozza? Perderà il numero ${number} e gli addebiti non ancora incassati; il posto tornerà libero. Se ${number} non è l'ultimo numero dell'anno resterà un buco nella numerazione, che verrà ripreso dal primo contratto attivato.`}
+    >
+      Torna in bozza
     </ActionButton>
   );
 }

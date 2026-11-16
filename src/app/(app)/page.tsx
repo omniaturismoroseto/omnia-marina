@@ -10,9 +10,11 @@ import { OFFICE, requireMarina } from "@/lib/context";
 import { addDays, formatDate, formatDateLong, formatMonth, monthKey, todayRome } from "@/lib/dates";
 import { formatMoney, formatPercent } from "@/lib/format";
 import { CONTRACT_TYPE_LABEL } from "@/lib/labels";
+import { contractNumberLabel } from "@/lib/contract-numbers";
 import { countStates, getBoard } from "@/server/board";
 import { chargeTotals, listCharges } from "@/server/charges";
 import { getDockRows } from "@/server/dock";
+import { contractNumberGaps } from "@/server/contracts";
 
 export const metadata: Metadata = { title: "Cruscotto" };
 
@@ -23,7 +25,7 @@ export default page(async function DashboardPage() {
   const in30 = addDays(today, 30);
   const in60 = addDays(today, 60);
 
-  const [board, dock, totals, [income], upcoming, expiring, [insurance], [privacy], [taskCount], [drafts]] = await Promise.all([
+  const [board, dock, totals, [income], upcoming, expiring, [insurance], [privacy], [taskCount], [drafts], numberGaps] = await Promise.all([
     getBoard(ctx.marinaId, today, today),
     getDockRows(ctx.marinaId, today),
     chargeTotals(ctx.marinaId, today),
@@ -64,6 +66,7 @@ export default page(async function DashboardPage() {
       .select({ count: sql<number>`count(*)::int` })
       .from(contracts)
       .where(and(eq(contracts.marinaId, ctx.marinaId), eq(contracts.status, "bozza"))),
+    contractNumberGaps(ctx.marinaId),
   ]);
 
   const counts = countStates(board);
@@ -80,6 +83,13 @@ export default page(async function DashboardPage() {
     { label: "Assicurazioni scadute o in scadenza", count: insurance.count, href: "/barche", tone: "warn" as const },
     { label: "Clienti senza informativa privacy firmata", count: privacy.count, href: "/clienti?privacy=mancante", tone: "warn" as const },
     { label: "Contratti in bozza da attivare", count: drafts.count, href: "/contratti?stato=bozze", tone: "sea" as const },
+    // Un contratto tornato in bozza lascia un numero libero: si segnala finché il prossimo contratto attivato non lo riprende.
+    {
+      label: numberGaps.length === 1 ? `Numero di contratto libero: ${numberGaps[0]}` : `Numeri di contratto liberi: ${numberGaps.join(", ")}`,
+      count: numberGaps.length,
+      href: "/contratti",
+      tone: "warn" as const,
+    },
   ].filter((t) => t.count > 0);
 
   if (counts.total === 0) {
@@ -250,7 +260,7 @@ export default page(async function DashboardPage() {
                     <td className="whitespace-nowrap tabular-nums">{formatDate(c.endDate)}</td>
                     <td>
                       <Link href={`/contratti/${c.id}`} className="link">
-                        {c.number}
+                        {contractNumberLabel(c.number)}
                       </Link>{" "}
                       <span className="text-xs text-muted">{CONTRACT_TYPE_LABEL[c.type]}</span>
                     </td>

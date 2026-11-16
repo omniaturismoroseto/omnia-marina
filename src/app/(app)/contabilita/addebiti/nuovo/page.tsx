@@ -7,6 +7,7 @@ import { boats, contracts, marinas, owners, priceListExtras, priceLists } from "
 import { OFFICE, requireMarina } from "@/lib/context";
 import { todayRome } from "@/lib/dates";
 import { uuidOrNull, type SearchParams } from "@/lib/params";
+import { contractNumberLabel } from "@/lib/contract-numbers";
 import { ChargeForm } from "../../accounting-forms";
 
 export const metadata: Metadata = { title: "Nuovo addebito" };
@@ -57,7 +58,7 @@ export default page(async function NewChargePage({ searchParams }: { searchParam
       />
       <ChargeForm
         owners={ownerList}
-        contracts={contractList.map((c) => ({ id: c.id, ownerId: c.ownerId, label: `${c.number} · ${c.boatName}` }))}
+        contracts={contractList.map((c) => ({ id: c.id, ownerId: c.ownerId, label: `${contractNumberLabel(c.number)} · ${c.boatName}` }))}
         today={today}
         defaultVatRate={marina.vat}
         initialOwnerId={ownerList.some((o) => o.id === ownerParam) ? ownerParam! : ""}

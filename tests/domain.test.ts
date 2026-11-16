@@ -8,7 +8,18 @@ import { db } from "@/db";
 import { berthCategories, berths, boats, charges, contractItems, contracts, ledgerEntries, ledgerImports, marinas, movements, owners, piers, priceListExtras, priceLists, rates, tariffZones, users } from "@/db/schema";
 import { addDays, todayRome } from "@/lib/dates";
 import { deletePayment, importLedger, registerPayment, undoLedgerImport } from "@/server/accounting";
-import { activateContract, addContractItem, cancelContract, createContract, recordMovement, removeContractItem, type ContractInput } from "@/server/contracts";
+import {
+  activateContract,
+  addContractItem,
+  cancelContract,
+  contractNumberGaps,
+  createContract,
+  recordMovement,
+  removeContractItem,
+  revertToDraft,
+  updateDraftContract,
+  type ContractInput,
+} from "@/server/contracts";
 import { DomainError, toFormState } from "@/server/errors";
 import { CONTRACT_APPROVAL_TEMPLATE, CONTRACT_TERMS_TEMPLATE } from "@/lib/contract-texts";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
@@ -409,6 +420,66 @@ describe.skipIf(!available)("regole del porto (database)", () => {
     const c = await create(a, { status: "bozza", startDate: "2033-11-16", endDate: "2033-11-18", items: [space("2034-11-15")] });
     const [item] = await db.select().from(contractItems).where(eq(contractItems.contractId, c.id));
     expect(item).toMatchObject({ annual: true, startDate: "2033-11-16", endDate: "2034-11-15" });
+  });
+
+  it("bozze senza numero, ritorno in bozza con buco segnalato e ripreso dal primo contratto attivato", async () => {
+    const plan = { count: 1, firstDueDate: "2040-01-01", everyMonths: 1 };
+    const period = (m: string) => ({ startDate: `2040-${m}-01`, endDate: `2040-${m}-03`, instalments: { ...plan, firstDueDate: `2040-${m}-01` } });
+    const c1 = await create(a, period("01"));
+    const c2 = await create(a, period("02"));
+    const c3 = await create(a, period("03"));
+    expect([c1.number, c2.number, c3.number]).toEqual(["2040/0001", "2040/0002", "2040/0003"]);
+
+    // Una bozza nasce senza numero.
+    const draft = await create(a, { ...period("04"), status: "bozza" });
+    expect(draft.number).toBeNull();
+
+    // Il secondo torna in bozza: perde numero e addebiti, e lascia un buco.
+    const back = await db.transaction((tx) => revertToDraft(tx, actor(a), c2.id));
+    expect(back).toEqual({ freedNumber: "2040/0002", leavesGap: true });
+    const [reverted] = await db.select().from(contracts).where(eq(contracts.id, c2.id));
+    expect(reverted).toMatchObject({ status: "bozza", number: null, seq: null });
+    expect(await db.select().from(charges).where(eq(charges.contractId, c2.id))).toHaveLength(0);
+    expect(await contractNumberGaps(a.marinaId)).toContain("2040/0002");
+
+    // Il primo contratto attivato riprende il numero libero.
+    const activated = await db.transaction((tx) => activateContract(tx, actor(a), draft.id, { ...plan, firstDueDate: "2040-04-01" }));
+    expect(activated).toEqual({ number: "2040/0002", fillsGap: true });
+    expect((await contractNumberGaps(a.marinaId)).filter((n) => n.startsWith("2040/"))).toEqual([]);
+
+    // L'ultimo numero dell'anno non lascia buchi.
+    expect(await db.transaction((tx) => revertToDraft(tx, actor(a), c3.id))).toEqual({ freedNumber: "2040/0003", leavesGap: false });
+
+    // Una bozza si modifica; un contratto attivo no.
+    await db.transaction((tx) =>
+      updateDraftContract(tx, actor(a), c3.id, {
+        ownerId: a.ownerId,
+        boatId: a.boatId,
+        berthId: a.berthId,
+        type: "transito",
+        startDate: "2040-03-05",
+        endDate: "2040-03-08",
+        amountCents: 45000,
+        vatRate: 22,
+        signedOn: null,
+        notes: "corretta",
+      }),
+    );
+    const [edited] = await db.select().from(contracts).where(eq(contracts.id, c3.id));
+    expect(edited).toMatchObject({ startDate: "2040-03-05", endDate: "2040-03-08", amountCents: 45000, notes: "corretta", status: "bozza" });
+    await expect(
+      db.transaction((tx) => updateDraftContract(tx, actor(a), c1.id, { ...edited, berthId: edited.berthId, amountCents: 1 })),
+    ).rejects.toThrow(/solo i contratti in bozza/);
+    // Un altro porto non può toccare la bozza.
+    await expect(db.transaction((tx) => updateDraftContract(tx, actor(b), c3.id, { ...edited, amountCents: 1 }))).rejects.toThrow(/non trovato/);
+
+    // Con un incasso registrato o con la barca già arrivata non si torna in bozza.
+    const [due] = await db.select().from(charges).where(eq(charges.contractId, c1.id));
+    await db.transaction((tx) => registerPayment(tx, actor(a), { chargeId: due.id, paidOn: today, amountCents: 1000, method: "contanti", reference: null }));
+    await expect(db.transaction((tx) => revertToDraft(tx, actor(a), c1.id))).rejects.toThrow(/incassi/);
+    // (arrivo simulato: la data di inizio è nel futuro e la banchina non lo registrerebbe)
+    await db.update(contracts).set({ presence: "in_porto", checkedInAt: new Date() }).where(eq(contracts.id, draft.id));
+    await expect(db.transaction((tx) => revertToDraft(tx, actor(a), draft.id))).rejects.toThrow(/già arrivata/);
   });
 
   it("tariffe: una sola riga per listino, categoria e zona, anche per la tariffa base", async () => {

@@ -78,6 +78,13 @@
       "when": 1794825099061,
       "tag": "0010_spazi_annuali",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794827839110,
+      "tag": "0011_bozze_senza_numero",
+      "breakpoints": true
     }
   ]
 }

@@ -22,7 +22,7 @@ import {
   type ContractItemInput,
 } from "@/lib/contract-items";
 import { categoryForBoat, occupiedUntil, quoteStay, zoneRate, type QuoteLine } from "@/lib/pricing";
-import { activateContract, addContractItem, cancelContract, createContract, removeContractItem } from "./contracts";
+import { activateContract, addContractItem, cancelContract, createContract, removeContractItem, revertToDraft, updateDraftContract } from "./contracts";
 import { toFormState } from "./errors";
 import { extrasOfList, type ListExtra } from "./list-extras";
 
@@ -256,7 +256,7 @@ export async function saveContract(_prev: FormState, formData: FormData): Promis
   const d = parsed.data;
   if (d.endDate < d.startDate) return fail("Controlla i campi evidenziati.", { endDate: "La fine precede l'inizio." });
 
-  let created: { id: string; number: string };
+  let created: { id: string; number: string | null; fillsGap: boolean };
   try {
     created = await db.transaction(async (tx) => {
       const result = await createContract(
@@ -278,7 +278,7 @@ export async function saveContract(_prev: FormState, formData: FormData): Promis
           items: itemsParsed.items,
         },
       );
-      await audit(ctx, "creazione", "contratto", result.id, `${result.number} (${d.intent})`, tx);
+      await audit(ctx, "creazione", "contratto", result.id, result.number ? `${result.number} (attivo)` : "Bozza", tx);
       return result;
     });
   } catch (err) {
@@ -286,7 +286,8 @@ export async function saveContract(_prev: FormState, formData: FormData): Promis
   }
 
   revalidatePath("/", "layout");
-  redirect(`/contratti/${created.id}`);
+  // La scheda dice con quale numero è nato il contratto e se ha ripreso un numero rimasto libero.
+  redirect(`/contratti/${created.id}${created.number ? `?attivato=1${created.fillsGap ? "&buco=1" : ""}` : ""}`);
 }
 
 const activateSchema = z.object({ contractId: f.id(), ...planFields });
@@ -296,20 +297,81 @@ export async function activateContractAction(_prev: FormState, formData: FormDat
   const parsed = parseForm(activateSchema, formData);
   if (!parsed.ok) return parsed.state;
   const d = parsed.data;
+  let activated: { number: string; fillsGap: boolean };
   try {
-    await db.transaction(async (tx) => {
-      await activateContract(tx, { marinaId: ctx.marinaId, userId: ctx.user.id }, d.contractId, {
+    activated = await db.transaction(async (tx) => {
+      const result = await activateContract(tx, { marinaId: ctx.marinaId, userId: ctx.user.id }, d.contractId, {
         count: d.instalments,
         firstDueDate: d.firstDueDate,
         everyMonths: d.everyMonths,
       });
-      await audit(ctx, "attivazione", "contratto", d.contractId, undefined, tx);
+      await audit(ctx, "attivazione", "contratto", d.contractId, `Numero ${result.number}${result.fillsGap ? " (numero rimasto libero)" : ""}`, tx);
+      return result;
     });
   } catch (err) {
     return toFormState(err);
   }
   revalidatePath("/", "layout");
-  return { ok: true };
+  redirect(`/contratti/${d.contractId}?attivato=1${activated.fillsGap ? "&buco=1" : ""}`);
+}
+
+// Riporta in bozza un contratto attivo: perde numero e addebiti. La scheda segnala il numero lasciato libero.
+export async function revertToDraftAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(OFFICE);
+  const contractId = String(formData.get("contractId") ?? "");
+  if (!UUID.test(contractId)) return fail("Contratto non trovato.");
+  let reverted: { freedNumber: string; leavesGap: boolean };
+  try {
+    reverted = await db.transaction(async (tx) => {
+      const result = await revertToDraft(tx, { marinaId: ctx.marinaId, userId: ctx.user.id }, contractId);
+      await audit(
+        ctx,
+        "modifica",
+        "contratto",
+        contractId,
+        `Tornato in bozza, libera il numero ${result.freedNumber}${result.leavesGap ? " (buco nella numerazione)" : ""}`,
+        tx,
+      );
+      return result;
+    });
+  } catch (err) {
+    return toFormState(err);
+  }
+  revalidatePath("/", "layout");
+  redirect(`/contratti/${contractId}?riaperto=${encodeURIComponent(reverted.freedNumber)}${reverted.leavesGap ? "&buco=1" : ""}`);
+}
+
+// Modifica di una bozza (stessi campi del nuovo contratto, senza rate e voci aggiuntive).
+const draftSchema = z.object({
+  contractId: f.id(),
+  ownerId: f.id("Scegli il cliente"),
+  boatId: f.id("Scegli la barca"),
+  berthId: f.optId(),
+  type: f.choice(TYPES),
+  startDate: f.date(),
+  endDate: f.date(),
+  amount: f.money(),
+  vatRate: f.int(0, 30, "Aliquota non valida"),
+  signedOn: f.optDate(),
+  notes: f.optText(),
+});
+
+export async function saveDraftContract(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(OFFICE);
+  const parsed = parseForm(draftSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const { contractId, amount, ...d } = parsed.data;
+  if (d.endDate < d.startDate) return fail("Controlla i campi evidenziati.", { endDate: "La fine precede l'inizio." });
+  try {
+    await db.transaction(async (tx) => {
+      await updateDraftContract(tx, { marinaId: ctx.marinaId, userId: ctx.user.id }, contractId, { ...d, amountCents: amount });
+      await audit(ctx, "modifica", "contratto", contractId, "Bozza modificata", tx);
+    });
+  } catch (err) {
+    return toFormState(err);
+  }
+  revalidatePath("/", "layout");
+  redirect(`/contratti/${contractId}?modificato=1`);
 }
 
 export async function cancelContractAction(_prev: FormState, formData: FormData): Promise<FormState> {

@@ -16,6 +16,7 @@ import { auxEngine, describeEngine, mainEngine } from "@/lib/engines";
 import { formatDimensions, formatMeters, formatMoney } from "@/lib/format";
 import { BOAT_TYPE_LABEL, CONTRACT_TYPE_LABEL, MOVEMENT_LABEL } from "@/lib/labels";
 import { uuidOrNull } from "@/lib/params";
+import { contractNumberLabel } from "@/lib/contract-numbers";
 import { deleteBoat } from "@/server/boat-actions";
 
 export const metadata: Metadata = { title: "Scheda barca" };
@@ -136,7 +137,7 @@ export default page(async function BoatPage({ params }: { params: Promise<{ id: 
                       <tr key={c.id}>
                         <td>
                           <Link href={`/contratti/${c.id}`} className="link">
-                            {c.number}
+                            {contractNumberLabel(c.number)}
                           </Link>
                           <span className="block text-xs text-muted">{CONTRACT_TYPE_LABEL[c.type]}</span>
                         </td>

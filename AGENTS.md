@@ -30,6 +30,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   nel menu (su riquadro bianco) e nelle intestazioni di contratto e informativa. Il logo di Omnia Marina resta quello dell'app.
 - Pianta dal vero: le coordinate dei posti (`berths.plan_x/plan_y/plan_angle`) sono in pixel della foto caricata;
   la geometria sta in `src/lib/plan.ts`, la foto nel database (`marina_plans`) ed è servita da `/pianta/immagine`.
+- Numerazione dei contratti: le bozze non hanno numero (`seq`/`number` vuoti, in stampa «BOZZA»); il numero nasce all'attivazione
+  ed è il più basso libero dell'anno (`src/lib/contract-numbers.ts`, `assignContractNumber`). «Torna in bozza» (`revertToDraft`) libera
+  numero e addebiti mai incassati; i buchi (`contractNumberGaps`) si segnalano in elenco contratti e cruscotto finché non vengono ripresi.
+  Solo le bozze si modificano (`/contratti/[id]/modifica`, `updateDraftContract`). Mostrare i numeri con `contractNumberLabel`.
 - Contratto stampato (`/contratti/[id]/stampa`): gli articoli 1-3 (oggetto, canone, spese) li compone la pagina con i dati
   del contratto; dal 4 in poi stampa `marinas.contract_terms`, poi l'approvazione specifica `marinas.contract_approval_text`
   (modelli in `src/lib/contract-texts.ts`). Spazi a terra, posti auto, carrello e spese fisse sono `contract_items`, ognuna con

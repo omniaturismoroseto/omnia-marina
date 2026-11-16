@@ -12,7 +12,7 @@ export const paidByCharge = db
 
 export interface DockRow {
   contractId: string;
-  number: string;
+  number: string | null;
   type: "annuale" | "stagionale" | "mensile" | "transito";
   presence: "atteso" | "in_porto" | "fuori" | "partito";
   startDate: string;

@@ -123,10 +123,10 @@ export default page(async function ContractPrintPage({ params }: { params: Promi
 
   return (
     <>
-      <DocumentTitle title={`Contratto ${c.number.replace("/", "-")} - ${owner.displayName}`} />
+      <DocumentTitle title={c.number ? `Contratto ${c.number.replace("/", "-")} - ${owner.displayName}` : `Bozza contratto - ${owner.displayName}`} />
       <div className="no-print">
         <PageHeader
-          title={`Contratto ${c.number}`}
+          title={c.number ? `Contratto ${c.number}` : "Contratto in bozza"}
           description="Anteprima di stampa. Per averne un file, stampa e scegli «Salva come PDF»: il nome riporta numero e cliente."
           back={{ href: `/contratti/${id}`, label: "Scheda contratto" }}
           actions={<PrintButton />}
@@ -146,8 +146,12 @@ export default page(async function ContractPrintPage({ params }: { params: Promi
           </div>
           <div className="shrink-0 text-right">
             <p className="text-xs tracking-widest text-muted uppercase">Contratto n.</p>
-            <p className="font-display text-xl font-semibold tabular-nums">{c.number}</p>
-            {c.status === "bozza" && <p className="text-xs font-semibold text-bad uppercase">Bozza</p>}
+            {/* Le bozze non hanno numero: al suo posto si stampa BOZZA. */}
+            {c.number ? (
+              <p className="font-display text-xl font-semibold tabular-nums">{c.number}</p>
+            ) : (
+              <p className="font-display text-xl font-semibold tracking-wider text-bad">BOZZA</p>
+            )}
           </div>
         </header>
 

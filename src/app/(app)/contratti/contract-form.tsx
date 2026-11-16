@@ -6,7 +6,7 @@ import { Field, Form, FormMessage, SelectField, Submit, TextareaField } from "@/
 import { addDays, addMonths, formatDate, isValidISODate } from "@/lib/dates";
 import { formatMoney, moneyInput, parseMoney } from "@/lib/format";
 import { splitInstalments } from "@/lib/pricing";
-import { loadContractOptions, saveContract, type ContractOptions } from "@/server/contract-actions";
+import { loadContractOptions, saveContract, saveDraftContract, type ContractOptions } from "@/server/contract-actions";
 import { ContractExtras, feeInput } from "./contract-extras";
 
 type ContractType = "annuale" | "stagionale" | "mensile" | "transito";
@@ -32,6 +32,7 @@ export function ContractForm({
   defaultVatRate,
   fees,
   initial,
+  draft,
 }: {
   owners: { id: string; name: string }[];
   boats: { id: string; ownerId: string; name: string; size: string }[];
@@ -40,15 +41,19 @@ export function ContractForm({
   // Spese di gestione e quota rifiuti predefinite del porto, proposte nei contratti annuali.
   fees: { gestione: number | null; rifiuti: number | null };
   initial: { ownerId: string; boatId: string; berthId: string; startDate: string; type: ContractType };
+  // Modifica di una bozza: valori salvati. Rate, scadenze e voci aggiuntive restano fuori (si decidono all'attivazione
+  // e dalla scheda del contratto).
+  draft?: { contractId: string; endDate: string; amountCents: number; vatRate: number; signedOn: string | null; notes: string | null };
 }) {
   const [ownerId, setOwnerId] = useState(initial.ownerId);
   const [boatId, setBoatId] = useState(initial.boatId);
   const [type, setType] = useState<ContractType>(initial.type);
   const [startDate, setStartDate] = useState(initial.startDate);
-  const [endDate, setEndDate] = useState(suggestedEnd(initial.type, initial.startDate));
+  const [endDate, setEndDate] = useState(draft?.endDate ?? suggestedEnd(initial.type, initial.startDate));
   const [berthId, setBerthId] = useState(initial.berthId);
-  const [amount, setAmount] = useState("");
-  const [amountEdited, setAmountEdited] = useState(false);
+  const [amount, setAmount] = useState(draft ? moneyInput(draft.amountCents) : "");
+  // In una bozza l'importo salvato vale come scritto a mano: il listino non lo sovrascrive.
+  const [amountEdited, setAmountEdited] = useState(Boolean(draft));
   const [instalments, setInstalments] = useState(1);
   const [everyMonths, setEveryMonths] = useState(1);
   const [firstDue, setFirstDue] = useState(initial.startDate);
@@ -63,7 +68,7 @@ export function ContractForm({
   // Ultima risposta del server, con la richiesta a cui si riferisce.
   const [result, setResult] = useState<{ request: object; options: ContractOptions } | null>(null);
   // Serve dentro la risposta asincrona: un importo scritto a mano non va sovrascritto dal listino.
-  const amountEditedRef = useRef(false);
+  const amountEditedRef = useRef(Boolean(draft));
 
   const ownerBoats = useMemo(() => boats.filter((b) => b.ownerId === ownerId), [boats, ownerId]);
   const datesValid = isValidISODate(startDate) && isValidISODate(endDate) && endDate >= startDate;
@@ -135,7 +140,8 @@ export function ContractForm({
   const piersInOrder = [...new Set(availableBerths.map((b) => b.pierName))];
 
   return (
-    <Form action={saveContract} className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_21rem]">
+    <Form action={draft ? saveDraftContract : saveContract} className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_21rem]">
+      {draft && <input type="hidden" name="contractId" value={draft.contractId} />}
       <div className="space-y-5">
         <fieldset className="card p-4">
           <legend className="float-left mb-3 w-full text-[15px] font-semibold text-ink">Cliente e barca</legend>
@@ -221,7 +227,7 @@ export function ContractForm({
         </fieldset>
 
         <fieldset className="card p-4">
-          <legend className="float-left mb-3 w-full text-[15px] font-semibold text-ink">Importo e rate</legend>
+          <legend className="float-left mb-3 w-full text-[15px] font-semibold text-ink">{draft ? "Importo" : "Importo e rate"}</legend>
           <div className="clear-both grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field
               name="amount"
@@ -239,41 +245,45 @@ export function ContractForm({
             <SelectField
               name="vatRate"
               label="Aliquota IVA"
-              defaultValue={String(defaultVatRate)}
+              defaultValue={String(draft?.vatRate ?? defaultVatRate)}
               options={[22, 10, 5, 4, 0].map((r) => ({ value: String(r), label: `${r}%` }))}
             />
-            <Field name="signedOn" label="Firmato il" type="date" defaultValue="" hint="Lascia vuoto se non ancora firmato." />
-            <SelectField
-              name="instalments"
-              label="Numero di rate"
-              value={String(instalments)}
-              onChange={(e) => setInstalments(Number(e.target.value))}
-              options={[1, 2, 3, 4, 6, 12].map((n) => ({ value: String(n), label: n === 1 ? "Unica soluzione" : `${n} rate` }))}
-            />
-            <Field
-              name="firstDueDate"
-              label={instalments === 1 ? "Scadenza del pagamento" : "Scadenza della prima rata"}
-              type="date"
-              value={firstDue}
-              onChange={(e) => {
-                setFirstDue(e.target.value);
-                setFirstDueEdited(true);
-              }}
-              required
-            />
-            {instalments > 1 ? (
-              <SelectField
-                name="everyMonths"
-                label="Cadenza"
-                value={String(everyMonths)}
-                onChange={(e) => setEveryMonths(Number(e.target.value))}
-                options={[1, 2, 3, 4, 6].map((n) => ({ value: String(n), label: n === 1 ? "Ogni mese" : `Ogni ${n} mesi` }))}
-              />
-            ) : (
-              <input type="hidden" name="everyMonths" value="1" />
+            <Field name="signedOn" label="Firmato il" type="date" defaultValue={draft?.signedOn ?? ""} hint="Lascia vuoto se non ancora firmato." />
+            {!draft && (
+              <>
+                <SelectField
+                  name="instalments"
+                  label="Numero di rate"
+                  value={String(instalments)}
+                  onChange={(e) => setInstalments(Number(e.target.value))}
+                  options={[1, 2, 3, 4, 6, 12].map((n) => ({ value: String(n), label: n === 1 ? "Unica soluzione" : `${n} rate` }))}
+                />
+                <Field
+                  name="firstDueDate"
+                  label={instalments === 1 ? "Scadenza del pagamento" : "Scadenza della prima rata"}
+                  type="date"
+                  value={firstDue}
+                  onChange={(e) => {
+                    setFirstDue(e.target.value);
+                    setFirstDueEdited(true);
+                  }}
+                  required
+                />
+                {instalments > 1 ? (
+                  <SelectField
+                    name="everyMonths"
+                    label="Cadenza"
+                    value={String(everyMonths)}
+                    onChange={(e) => setEveryMonths(Number(e.target.value))}
+                    options={[1, 2, 3, 4, 6].map((n) => ({ value: String(n), label: n === 1 ? "Ogni mese" : `Ogni ${n} mesi` }))}
+                  />
+                ) : (
+                  <input type="hidden" name="everyMonths" value="1" />
+                )}
+              </>
             )}
           </div>
-          {plan.length > 1 && (
+          {!draft && plan.length > 1 && (
             <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted">
               {plan.map((p) => (
                 <li key={p.index} className="tabular-nums">
@@ -284,28 +294,30 @@ export function ContractForm({
           )}
         </fieldset>
 
-        <ContractExtras
-          startDate={startDate}
-          endDate={endDate}
-          gestione={gestione}
-          rifiuti={rifiuti}
-          onGestione={(v) => {
-            setGestione(v);
-            setFeesEdited(true);
-            feesEditedRef.current = true;
-          }}
-          onRifiuti={(v) => {
-            setRifiuti(v);
-            setFeesEdited(true);
-            feesEditedRef.current = true;
-          }}
-          onSpacesTotal={setSpacesCents}
-          prices={options?.itemPrices ?? {}}
-          listExtras={options?.listExtras ?? []}
-          listReady={options !== null}
-          annualDefault={type === "annuale"}
-        />
-        {extrasCents > 0 && (
+        {!draft && (
+          <ContractExtras
+            startDate={startDate}
+            endDate={endDate}
+            gestione={gestione}
+            rifiuti={rifiuti}
+            onGestione={(v) => {
+              setGestione(v);
+              setFeesEdited(true);
+              feesEditedRef.current = true;
+            }}
+            onRifiuti={(v) => {
+              setRifiuti(v);
+              setFeesEdited(true);
+              feesEditedRef.current = true;
+            }}
+            onSpacesTotal={setSpacesCents}
+            prices={options?.itemPrices ?? {}}
+            listExtras={options?.listExtras ?? []}
+            listReady={options !== null}
+            annualDefault={type === "annuale"}
+          />
+        )}
+        {!draft && extrasCents > 0 && (
           <p className="-mt-2 text-sm text-muted">
             Totale del contratto: <strong className="text-ink tabular-nums">{formatMoney((amountCents ?? 0) + extrasCents)}</strong> (posto barca{" "}
             {formatMoney(amountCents ?? 0)} + altre voci {formatMoney(extrasCents)}).
@@ -314,20 +326,38 @@ export function ContractForm({
 
         <fieldset className="card p-4">
           <legend className="float-left mb-3 w-full text-[15px] font-semibold text-ink">Note</legend>
-          <TextareaField name="notes" label="Note per ufficio e banchina" rows={2} wrapperClassName="clear-both" placeholder="Es. orario di arrivo previsto, richieste particolari" />
+          <TextareaField
+            name="notes"
+            label="Note per ufficio e banchina"
+            rows={2}
+            wrapperClassName="clear-both"
+            defaultValue={draft?.notes ?? ""}
+            placeholder="Es. orario di arrivo previsto, richieste particolari"
+          />
         </fieldset>
 
         <FormMessage />
         <div className="flex flex-wrap gap-2">
-          <Submit name="intent" value="attivo">
-            Salva e attiva
-          </Submit>
-          <Submit name="intent" value="bozza" variant="secondary">
-            Salva come bozza
-          </Submit>
-          <Link href="/contratti" className="btn btn-ghost">
-            Annulla
-          </Link>
+          {draft ? (
+            <>
+              <Submit>Salva modifiche</Submit>
+              <Link href={`/contratti/${draft.contractId}`} className="btn btn-ghost">
+                Annulla
+              </Link>
+            </>
+          ) : (
+            <>
+              <Submit name="intent" value="attivo">
+                Salva e attiva
+              </Submit>
+              <Submit name="intent" value="bozza" variant="secondary">
+                Salva come bozza
+              </Submit>
+              <Link href="/contratti" className="btn btn-ghost">
+                Annulla
+              </Link>
+            </>
+          )}
         </div>
         <p className="text-sm text-muted">
           Attivando il contratto il posto viene impegnato e nascono gli addebiti delle rate. La bozza non impegna il posto{startDate > today ? "" : " e non compare in banchina"}.

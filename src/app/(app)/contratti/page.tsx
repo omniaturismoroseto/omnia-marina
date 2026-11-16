@@ -4,7 +4,7 @@ import { and, asc, desc, eq, gte, ilike, lte, ne, or, sql } from "drizzle-orm";
 import { Plus } from "lucide-react";
 import { page } from "@/components/page";
 import { ContractStatusBadge } from "@/components/status";
-import { ButtonLink, EmptyState, FilterTabs, PageHeader, SearchBox } from "@/components/ui";
+import { ButtonLink, EmptyState, FilterTabs, Notice, PageHeader, SearchBox } from "@/components/ui";
 import { db } from "@/db";
 import { berths, boats, contracts, owners } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
@@ -12,6 +12,8 @@ import { addDays, formatDate, todayRome } from "@/lib/dates";
 import { formatMoney } from "@/lib/format";
 import { CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { one, qs, type SearchParams } from "@/lib/params";
+import { contractNumberLabel } from "@/lib/contract-numbers";
+import { contractNumberGaps } from "@/server/contracts";
 
 export const metadata: Metadata = { title: "Contratti" };
 
@@ -38,7 +40,7 @@ export default page(async function ContractsPage({ searchParams }: { searchParam
     tutti: undefined,
   }[filter];
 
-  const [rows, [counts]] = await Promise.all([
+  const [rows, [counts], numberGaps] = await Promise.all([
     db
       .select({
         id: contracts.id,
@@ -64,7 +66,7 @@ export default page(async function ContractsPage({ searchParams }: { searchParam
           q ? or(ilike(contracts.number, like), ilike(owners.displayName, like), ilike(boats.name, like), ilike(berths.code, like)) : undefined,
         ),
       )
-      .orderBy(filter === "scadenza" ? asc(contracts.endDate) : desc(contracts.startDate), desc(contracts.seq))
+      .orderBy(filter === "scadenza" ? asc(contracts.endDate) : desc(contracts.startDate), sql`${contracts.seq} desc nulls last`)
       .limit(300),
     db
       .select({
@@ -74,6 +76,7 @@ export default page(async function ContractsPage({ searchParams }: { searchParam
       })
       .from(contracts)
       .where(eq(contracts.marinaId, ctx.marinaId)),
+    contractNumberGaps(ctx.marinaId),
   ]);
 
   const tab = (value: Filter, label: string, count?: number) => ({ value, label, count, href: `/contratti${qs({ q, stato: value === "attivi" ? null : value })}` });
@@ -90,6 +93,16 @@ export default page(async function ContractsPage({ searchParams }: { searchParam
           </ButtonLink>
         }
       />
+
+      {numberGaps.length > 0 && (
+        <div className="mb-4">
+          <Notice>
+            {numberGaps.length === 1 ? "Nella numerazione dei contratti è rimasto libero il numero " : "Nella numerazione dei contratti sono rimasti liberi i numeri "}
+            <strong>{numberGaps.join(", ")}</strong> (contratti tornati in bozza).{" "}
+            {numberGaps.length === 1 ? "Lo riprenderà il primo contratto che verrà attivato." : "Li riprenderanno, nell'ordine, i prossimi contratti attivati."}
+          </Notice>
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <SearchBox action="/contratti" defaultValue={q} placeholder="Numero, cliente, barca, posto…">
@@ -138,7 +151,7 @@ export default page(async function ContractsPage({ searchParams }: { searchParam
                 <tr key={c.id}>
                   <td>
                     <Link href={`/contratti/${c.id}`} className="link whitespace-nowrap">
-                      {c.number}
+                      {contractNumberLabel(c.number)}
                     </Link>
                     <span className="block text-xs text-muted">{CONTRACT_TYPE_LABEL[c.type]}</span>
                   </td>

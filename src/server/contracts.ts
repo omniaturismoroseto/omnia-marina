@@ -1,8 +1,9 @@
 import "server-only";
-import { and, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
-import type { Tx } from "@/db";
+import { and, eq, gt, inArray, isNotNull, lt, ne, sql } from "drizzle-orm";
+import { db, type Tx } from "@/db";
 import { berths, boats, charges, contractItems, contracts, movements, owners, payments, type ContractType } from "@/db/schema";
 import { SERVICE_ITEM_KIND, SERVICE_VAT_RATES, itemHasPeriod, itemTitle, type ContractItemInput } from "@/lib/contract-items";
+import { firstFreeSeq, formatContractNumber, seqGaps } from "@/lib/contract-numbers";
 import { annualEnd, formatDate, todayRome, yearOf } from "@/lib/dates";
 import { splitVat } from "@/lib/format";
 import { CONTRACT_TYPE_LABEL } from "@/lib/labels";
@@ -20,15 +21,28 @@ export interface InstalmentPlan {
   everyMonths: number;
 }
 
-async function nextContractNumber(tx: Tx, marinaId: string, year: number) {
+// Numero di un contratto che diventa definitivo: il più basso libero dell'anno. Un numero lasciato libero da un
+// contratto tornato in bozza viene così ripreso dal primo contratto attivato (fillsGap).
+async function assignContractNumber(tx: Tx, marinaId: string, year: number) {
   // Un solo numeratore alla volta per porto e anno, così non nascono due contratti con lo stesso numero.
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`contratti:${marinaId}:${year}`}))`);
-  const [row] = await tx
-    .select({ max: sql<number>`coalesce(max(${contracts.seq}), 0)::int` })
+  const rows = await tx
+    .select({ seq: contracts.seq })
     .from(contracts)
-    .where(and(eq(contracts.marinaId, marinaId), eq(contracts.year, year)));
-  const seq = row.max + 1;
-  return { seq, number: `${year}/${String(seq).padStart(4, "0")}` };
+    .where(and(eq(contracts.marinaId, marinaId), eq(contracts.year, year), isNotNull(contracts.seq)));
+  const { seq, fillsGap } = firstFreeSeq(rows.map((r) => r.seq!));
+  return { seq, number: formatContractNumber(year, seq), fillsGap };
+}
+
+/** Numeri di contratto rimasti liberi, anno per anno: vanno sempre segnalati finché un contratto attivato non li riprende. */
+export async function contractNumberGaps(marinaId: string, tx: Tx | typeof db = db): Promise<string[]> {
+  const rows = await tx
+    .select({ year: contracts.year, seq: contracts.seq })
+    .from(contracts)
+    .where(and(eq(contracts.marinaId, marinaId), isNotNull(contracts.seq)));
+  const byYear = new Map<number, number[]>();
+  for (const r of rows) byYear.set(r.year, [...(byYear.get(r.year) ?? []), r.seq!]);
+  return [...byYear.entries()].sort(([a], [b]) => a - b).flatMap(([year, seqs]) => seqGaps(seqs).map((seq) => formatContractNumber(year, seq)));
 }
 
 // Contratto attivo o concluso che occupa già il posto nel periodo indicato.
@@ -175,7 +189,14 @@ export interface ContractInput {
   items?: ContractItemInput[];
 }
 
-export async function createContract(tx: Tx, actor: Actor, input: ContractInput): Promise<{ id: string; number: string }> {
+// Controlla che il posto indicato dal browser sia di questo porto (per le bozze non si verifica la disponibilità).
+async function assertOwnBerth(tx: Tx, marinaId: string, berthId: string | null) {
+  if (!berthId) return;
+  const [berth] = await tx.select({ id: berths.id }).from(berths).where(and(eq(berths.id, berthId), eq(berths.marinaId, marinaId))).limit(1);
+  if (!berth) throw new DomainError("Posto barca non trovato.", "berthId");
+}
+
+export async function createContract(tx: Tx, actor: Actor, input: ContractInput): Promise<{ id: string; number: string | null; fillsGap: boolean }> {
   if (input.endDate < input.startDate) throw new DomainError("La data di fine precede la data di inizio.", "endDate");
   const items = input.items ?? [];
   validateItems(items);
@@ -190,10 +211,15 @@ export async function createContract(tx: Tx, actor: Actor, input: ContractInput)
   if (input.status === "attivo") {
     if (!input.berthId) throw new DomainError("Per attivare il contratto serve un posto barca.", "berthId");
     await assertBerthUsable(tx, actor.marinaId, input.berthId, boat, input.startDate, until);
+  } else {
+    await assertOwnBerth(tx, actor.marinaId, input.berthId);
   }
 
+  // Le bozze nascono senza numero: lo ricevono quando diventano definitive.
   const year = yearOf(input.startDate);
-  const { seq, number } = await nextContractNumber(tx, actor.marinaId, year);
+  const assigned = input.status === "attivo" ? await assignContractNumber(tx, actor.marinaId, year) : null;
+  const seq = assigned?.seq ?? null;
+  const number = assigned?.number ?? null;
   const [created] = await tx
     .insert(contracts)
     .values({
@@ -221,11 +247,72 @@ export async function createContract(tx: Tx, actor: Actor, input: ContractInput)
     await tx.insert(contractItems).values(items.map((item) => ({ marinaId: actor.marinaId, contractId: created.id, ...item })));
   }
 
-  if (input.status === "attivo") {
+  if (number) {
     await createInstalmentCharges(tx, actor, { id: created.id, number, ...input }, input.instalments, todayRome());
     await chargePendingItems(tx, actor, { id: created.id, number, ownerId: input.ownerId, vatRate: input.vatRate }, input.instalments.firstDueDate);
   }
-  return { id: created.id, number };
+  return { id: created.id, number, fillsGap: assigned?.fillsGap ?? false };
+}
+
+export type DraftInput = Omit<ContractInput, "status" | "instalments" | "items">;
+
+// Modifica di una bozza: cliente, barca, posto, tipo, date, importo e note. Le voci aggiuntive si gestiscono dalla scheda.
+export async function updateDraftContract(tx: Tx, actor: Actor, contractId: string, input: DraftInput) {
+  const c = await loadContract(tx, actor.marinaId, contractId);
+  if (c.status !== "bozza") throw new DomainError("Si possono modificare solo i contratti in bozza: riporta prima il contratto in bozza.");
+  if (input.endDate < input.startDate) throw new DomainError("La data di fine precede la data di inizio.", "endDate");
+  const [owner] = await tx.select({ id: owners.id }).from(owners).where(and(eq(owners.id, input.ownerId), eq(owners.marinaId, actor.marinaId))).limit(1);
+  if (!owner) throw new DomainError("Cliente non trovato.", "ownerId");
+  const [boat] = await tx.select().from(boats).where(and(eq(boats.id, input.boatId), eq(boats.marinaId, actor.marinaId))).limit(1);
+  if (!boat) throw new DomainError("Barca non trovata.", "boatId");
+  if (boat.ownerId !== input.ownerId) throw new DomainError("La barca non appartiene al cliente selezionato.", "boatId");
+  await assertOwnBerth(tx, actor.marinaId, input.berthId);
+  await tx
+    .update(contracts)
+    .set({
+      ownerId: input.ownerId,
+      boatId: input.boatId,
+      berthId: input.berthId,
+      type: input.type,
+      year: yearOf(input.startDate),
+      startDate: input.startDate,
+      endDate: input.endDate,
+      occupiedUntil: occupiedUntil(input.type, input.startDate, input.endDate),
+      amountCents: input.amountCents,
+      vatRate: input.vatRate,
+      signedOn: input.signedOn,
+      notes: input.notes,
+      updatedAt: new Date(),
+    })
+    .where(eq(contracts.id, c.id));
+}
+
+// Da attivo a bozza: il contratto perde il numero e gli addebiti (mai incassati), il posto torna libero.
+// Se il numero non era l'ultimo dell'anno resta un buco: lo si segnala e lo riprende il primo contratto attivato.
+export async function revertToDraft(tx: Tx, actor: Actor, contractId: string): Promise<{ freedNumber: string; leavesGap: boolean }> {
+  const c = await loadContract(tx, actor.marinaId, contractId);
+  if (c.status !== "attivo") throw new DomainError("Solo un contratto attivo può tornare in bozza.");
+  if (c.checkedInAt || c.presence !== "atteso") {
+    throw new DomainError("La barca risulta già arrivata: un contratto in uso non può tornare in bozza.");
+  }
+  const chargeRows = await tx
+    .select({ id: charges.id })
+    .from(charges)
+    .where(and(eq(charges.contractId, c.id), eq(charges.marinaId, actor.marinaId)));
+  const chargeIds = chargeRows.map((r) => r.id);
+  if (chargeIds.length > 0) {
+    const [paid] = await tx.select({ id: payments.id }).from(payments).where(inArray(payments.chargeId, chargeIds)).limit(1);
+    if (paid) throw new DomainError("Ci sono incassi registrati su questo contratto: per riportarlo in bozza elimina prima gli incassi dalla contabilità.");
+    // Addebiti mai incassati: spariscono; le voci aggiuntive restano e verranno riaddebitate all'attivazione.
+    await tx.delete(charges).where(and(inArray(charges.id, chargeIds), eq(charges.marinaId, actor.marinaId)));
+  }
+  await tx.update(contracts).set({ status: "bozza", seq: null, number: null, updatedAt: new Date() }).where(eq(contracts.id, c.id));
+  const [later] = await tx
+    .select({ id: contracts.id })
+    .from(contracts)
+    .where(and(eq(contracts.marinaId, actor.marinaId), eq(contracts.year, c.year), gt(contracts.seq, c.seq ?? 0)))
+    .limit(1);
+  return { freedNumber: c.number ?? "", leavesGap: Boolean(later) };
 }
 
 async function loadContract(tx: Tx, marinaId: string, contractId: string) {
@@ -239,16 +326,21 @@ async function loadContract(tx: Tx, marinaId: string, contractId: string) {
   return row;
 }
 
-// Da bozza ad attivo: il posto viene impegnato e nascono gli addebiti delle rate.
-export async function activateContract(tx: Tx, actor: Actor, contractId: string, plan: InstalmentPlan) {
+// Da bozza ad attivo: il contratto riceve il numero (il più basso libero dell'anno), il posto viene impegnato
+// e nascono gli addebiti delle rate e delle voci aggiuntive.
+export async function activateContract(tx: Tx, actor: Actor, contractId: string, plan: InstalmentPlan): Promise<{ number: string; fillsGap: boolean }> {
   const c = await loadContract(tx, actor.marinaId, contractId);
   if (c.status !== "bozza") throw new DomainError("Solo un contratto in bozza può essere attivato.");
   if (!c.berthId) throw new DomainError("Assegna un posto barca prima di attivare il contratto.");
   const [boat] = await tx.select().from(boats).where(eq(boats.id, c.boatId)).limit(1);
   await assertBerthUsable(tx, actor.marinaId, c.berthId, boat, c.startDate, c.occupiedUntil, c.id);
-  await tx.update(contracts).set({ status: "attivo", updatedAt: new Date() }).where(eq(contracts.id, c.id));
-  await createInstalmentCharges(tx, actor, c, plan, todayRome());
-  await chargePendingItems(tx, actor, c, plan.firstDueDate);
+  const year = yearOf(c.startDate);
+  const { seq, number, fillsGap } = await assignContractNumber(tx, actor.marinaId, year);
+  await tx.update(contracts).set({ status: "attivo", year, seq, number, updatedAt: new Date() }).where(eq(contracts.id, c.id));
+  const numbered = { ...c, number };
+  await createInstalmentCharges(tx, actor, numbered, plan, todayRome());
+  await chargePendingItems(tx, actor, numbered, plan.firstDueDate);
+  return { number, fillsGap };
 }
 
 // Aggiunge una voce a un contratto in bozza o attivo. Se il contratto è attivo l'addebito nasce subito, con scadenza oggi.
@@ -261,7 +353,7 @@ export async function addContractItem(tx: Tx, actor: Actor, contractId: string, 
     .insert(contractItems)
     .values({ marinaId: actor.marinaId, contractId: c.id, ...item })
     .returning({ id: contractItems.id });
-  if (c.status === "attivo") await createItemCharge(tx, actor, c, { id: created.id, ...item }, todayRome());
+  if (c.status === "attivo" && c.number) await createItemCharge(tx, actor, { ...c, number: c.number }, { id: created.id, ...item }, todayRome());
   return created.id;
 }
 

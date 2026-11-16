@@ -430,9 +430,11 @@ export const contracts = pgTable(
     marinaId: uuid("marina_id")
       .notNull()
       .references(() => marinas.id, { onDelete: "cascade" }),
+    // Le bozze non hanno numero: seq e number nascono quando il contratto diventa definitivo (attivo) e prendono
+    // il numero libero più basso dell'anno, così un numero lasciato da un contratto tornato in bozza viene ripreso.
     year: integer("year").notNull(),
-    seq: integer("seq").notNull(),
-    number: text("number").notNull(),
+    seq: integer("seq"),
+    number: text("number"),
     ownerId: uuid("owner_id")
       .notNull()
       .references(() => owners.id, { onDelete: "restrict" }),
