@@ -39,8 +39,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   (modelli in `src/lib/contract-texts.ts`). Spazi a terra, posti auto, carrello e spese fisse sono `contract_items`, ognuna con
   il proprio addebito (`src/server/contracts.ts`). Le voci `servizio` (cauzioni e altri servizi presi dal listino con
   `src/server/list-extras.ts`) hanno descrizione e aliquota propria (`vat_rate` 0 = senza IVA) e possono essere più d'una.
-- Riconoscimento automatico: `src/server/plan-ai.ts` chiama Claude (`claude-opus-5-5`) su Vertex AI con `AnthropicVertex`;
-  si accende con `ANTHROPIC_VERTEX_PROJECT_ID` (+ `CLOUD_ML_REGION`, predefinito `global`). La conversione della risposta
+- Riconoscimento automatico: `src/server/plan-ai.ts` chiama Claude (`claude-opus-5-5`). Con `ANTHROPIC_API_KEY` (in produzione dal
+  segreto `anthropic-api-key` di Secret Manager) usa l'API Anthropic diretta, con `fallbacks: "default"` lato server; altrimenti, con
+  `ANTHROPIC_VERTEX_PROJECT_ID` (+ `CLOUD_ML_REGION`, predefinito `global`), Vertex AI con `AnthropicVertex` (Google ha negato la quota). La conversione della risposta
   in proposte è in `src/lib/plan-analysis.ts`. Per i collaudi locali `PLAN_ANALYSIS_FIXTURE` (percorso di un JSON) sostituisce
   la chiamata: non metterlo nel `.env` dell'anteprima, e ricompilare dopo averlo tolto (la build copia `.env` in `.next/standalone`).
 - Produzione: `output: "standalone"` + `Dockerfile` (Cloud Run). Le migrazioni si applicano all'avvio con

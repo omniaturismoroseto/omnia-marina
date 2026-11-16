@@ -3,7 +3,7 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { betaRefusalFallbackMiddleware } from "@anthropic-ai/sdk";
+import Anthropic, { betaRefusalFallbackMiddleware } from "@anthropic-ai/sdk";
 import { AnthropicVertex } from "@anthropic-ai/vertex-sdk";
 import { analyzePlanPhoto, PlanAnalysisError } from "../src/server/plan-ai";
 
@@ -125,5 +125,40 @@ describe("analisi della foto con Claude su Vertex AI", () => {
   it("una risposta troncata non viene usata", async () => {
     reply = { status: 200, body: message("max_tokens", '{"structures": [') };
     await expect(analyzePlanPhoto(photo, null, client())).rejects.toThrow(/incompleta/);
+  });
+});
+
+// Con la chiave Anthropic: stessa richiesta verso l'API diretta, con il ripiego su un altro modello affidato al server.
+const direct = () => new Anthropic({ apiKey: "chiave-di-prova", baseURL: baseURL.replace(/\/v1$/, ""), maxRetries: 0 });
+
+describe("analisi della foto con l'API Anthropic diretta", () => {
+  it("usa la chiave, il modello nel corpo e il ripiego lato server", async () => {
+    requests.length = 0;
+    reply = { status: 200, body: message("end_turn", JSON.stringify(analysis)) };
+    const result = await analyzePlanPhoto(photo, 2.99, direct());
+    expect(result.structures[0].sides[0].berths).toBe(25);
+
+    const [req] = requests;
+    expect(req.url).toBe("/v1/messages");
+    expect(req.headers.authorization).toBe("Bearer chiave-di-prova"); // questa versione della libreria manda la chiave così
+    expect(String(req.headers["anthropic-beta"])).toContain("server-side-fallback-2026-07-01");
+    expect(req.body.model).toBe("claude-opus-5-5");
+    expect(req.body.fallbacks).toBe("default");
+    expect(req.body.thinking).toEqual({ type: "adaptive" });
+  });
+
+  it("una chiave non valida viene spiegata", async () => {
+    reply = { status: 401, body: { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } } };
+    await expect(analyzePlanPhoto(photo, null, direct())).rejects.toThrow(/chiave Anthropic non è valida/);
+  });
+
+  it("un credito esaurito viene spiegato", async () => {
+    reply = { status: 400, body: { type: "error", error: { type: "invalid_request_error", message: "Your credit balance is too low to access the Anthropic API." } } };
+    await expect(analyzePlanPhoto(photo, null, direct())).rejects.toThrow(/credito dell'account Anthropic è esaurito/);
+  });
+
+  it("troppe richieste ravvicinate chiedono di riprovare", async () => {
+    reply = { status: 429, body: { type: "error", error: { type: "rate_limit_error", message: "Number of requests has exceeded your rate limit" } } };
+    await expect(analyzePlanPhoto(photo, null, direct())).rejects.toThrow(/riprova tra qualche minuto/);
   });
 });

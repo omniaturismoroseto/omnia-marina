@@ -86,45 +86,56 @@ Ci vogliono 5-10 minuti. Alla fine compare `Service URL: …`: la nuova versione
 
 ## Riconoscimento automatico dei pontili (una volta sola)
 
-In Impostazioni → Pianta dal vero, il pulsante «Riconosci pontili e banchine» fa guardare la foto a Claude (Anthropic),
-attraverso Vertex AI di Google: tutto resta nel progetto `omnia-marina` e si paga sulla fatturazione Google, senza
-account o chiavi in più. Va acceso una volta, dopo aver pubblicato una versione che lo contiene.
+In Impostazioni → Pianta dal vero, il pulsante «Riconosci pontili e banchine» fa guardare la foto a Claude (Anthropic).
+Si accende una volta, in uno dei due modi qui sotto. Ogni analisi costa indicativamente tra 10 e 30 centesimi, con un
+limite di 20 analisi al giorno per porto.
 
-1. Attiva il servizio Vertex AI nel progetto:
+### Con una chiave Anthropic (il modo in uso)
 
-   ```powershell
-   gcloud services enable aiplatform.googleapis.com --project omnia-marina
-   ```
-
-2. Abilita il modello **Claude Opus 5.5**: apri
-   <https://console.cloud.google.com/agent-platform/publishers/anthropic/model-garden/claude-opus-5-5?project=omnia-marina>
-   (oppure cerca «Model Garden» nella console e poi «Claude Opus 5.5»), premi **Abilita** e accetta le condizioni.
-   Facoltativo: fai lo stesso con **Claude Opus 4.8**, che l'app usa solo nel caso raro in cui Opus 5.5 rifiuti una foto.
-
-3. Dai all'app il permesso di usarlo:
+1. Su <https://console.anthropic.com> crea l'account (o entra), poi in **Settings → Billing** inserisci una carta e un
+   credito iniziale (bastano pochi euro). In **Settings → Limits** puoi fissare una spesa massima al mese.
+2. In **Settings → API keys** premi **Create key**, chiamala `omnia-marina` e **copiala**: viene mostrata una volta sola.
+   Non incollarla in chat né in file del progetto.
+3. Mettila nell'archivio dei segreti di Google: apri
+   <https://console.cloud.google.com/security/secret-manager?project=omnia-marina>, premi **Crea secret**, nome
+   `anthropic-api-key`, nel valore incolla la chiave, poi **Crea secret**.
+4. Dai all'app il permesso di leggerla:
 
    ```powershell
-   gcloud projects add-iam-policy-binding omnia-marina --member "serviceAccount:omnia-marina-run@omnia-marina.iam.gserviceaccount.com" --role roles/aiplatform.user --condition=None
+   gcloud secrets add-iam-policy-binding anthropic-api-key --member "serviceAccount:omnia-marina-run@omnia-marina.iam.gserviceaccount.com" --role roles/secretmanager.secretAccessor --project omnia-marina
    ```
 
-4. Accendilo nell'app:
+5. Collegala all'app (resta collegata anche nelle pubblicazioni successive):
 
    ```powershell
-   gcloud run services update omnia-marina --update-env-vars "ANTHROPIC_VERTEX_PROJECT_ID=omnia-marina,CLOUD_ML_REGION=global" --region europe-west1 --project omnia-marina
+   gcloud run services update omnia-marina --update-secrets "ANTHROPIC_API_KEY=anthropic-api-key:latest" --region europe-west1 --project omnia-marina
    ```
 
-Da quel momento il pulsante è attivo. Ogni analisi costa indicativamente tra 10 e 30 centesimi (una foto e la
-risposta), con un limite di 20 analisi al giorno per porto. Per spegnerlo:
+Da quel momento il pulsante è attivo. Messaggi possibili:
+
+- «La chiave Anthropic non è valida»: crea una nuova chiave, aggiungila al segreto `anthropic-api-key` come **nuova
+  versione** (pulsante «Nuova versione» nella pagina del segreto) e ripeti il passo 5.
+- «Il credito dell'account Anthropic è esaurito»: ricarica in **Settings → Billing**.
+
+Per spegnerlo:
 
 ```powershell
-gcloud run services update omnia-marina --remove-env-vars ANTHROPIC_VERTEX_PROJECT_ID --region europe-west1 --project omnia-marina
+gcloud run services update omnia-marina --remove-secrets ANTHROPIC_API_KEY --region europe-west1 --project omnia-marina
 ```
 
-Se l'app dice che Google ha rifiutato la richiesta, quasi sempre manca il passo 2 o il passo 3.
+### In alternativa: Claude su Google Cloud (Vertex AI)
 
-Se l'app dice che la **quota** è esaurita o non assegnata: nella console apri IAM e amministrazione → **Quote**, cerca
-«claude-opus-5-5», seleziona le righe della località `global` (richieste al minuto e token al minuto) e chiedi un
-aumento, per esempio 10 richieste e 100.000 token al minuto. Di solito Google risponde entro qualche giorno.
+Tutto resta nel progetto Google e si paga sulla fatturazione Google, ma serve una **quota** che Google assegna a sua
+discrezione: per i progetti con la fatturazione attivata da poco di solito la nega in automatico (è successo a
+novembre 2026). Se in futuro la si vuole usare, senza chiave Anthropic collegata (la chiave ha la precedenza):
+
+1. `gcloud services enable aiplatform.googleapis.com --project omnia-marina`
+2. Nel Model Garden della console abilita **Claude Opus 5.5** (e, facoltativo, **Claude Opus 4.8**).
+3. `gcloud projects add-iam-policy-binding omnia-marina --member "serviceAccount:omnia-marina-run@omnia-marina.iam.gserviceaccount.com" --role roles/aiplatform.user --condition=None`
+4. `gcloud run services update omnia-marina --update-env-vars "ANTHROPIC_VERTEX_PROJECT_ID=omnia-marina,CLOUD_ML_REGION=global" --region europe-west1 --project omnia-marina`
+5. In IAM e amministrazione → **Quote**, riga `global_online_prediction_requests_per_base_model` con
+   `base_model: anthropic-claude-opus`, chiedi un aumento (per esempio 10 al minuto) e controlla l'esito nella scheda
+   «Richieste di aumento».
 
 ---
 

@@ -74,7 +74,7 @@ export function AutoDetect(props: {
           nomi e numeri, e con un clic nascono pontili e posti già disposti sulla foto.
         </p>
         {!props.available && (
-          <p className="mt-2 text-warn">Non ancora attivo: va abilitato una volta su Google Cloud, con i comandi in COME-LAVORIAMO.md.</p>
+          <p className="mt-2 text-warn">Non ancora attivo: va acceso una volta, con la chiave Anthropic, seguendo i passi in COME-LAVORIAMO.md.</p>
         )}
         {props.available && props.categories.length === 0 && (
           <p className="mt-2 text-warn">Servono prima le categorie dei posti (Impostazioni → Categorie).</p>

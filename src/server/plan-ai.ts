@@ -7,9 +7,10 @@ import { z } from "zod";
 import type { AiAnalysis } from "@/lib/plan-analysis";
 
 /*
- * Riconoscimento automatico di pontili e banchine nella foto aerea, con Claude su Google Cloud (Vertex AI).
- * Gira nel progetto Google del porto: nessuna chiave a parte, l'app si autentica con il proprio account di servizio
- * e il costo finisce sulla fatturazione Google. Attivazione: variabile ANTHROPIC_VERTEX_PROJECT_ID (vedi COME-LAVORIAMO.md).
+ * Riconoscimento automatico di pontili e banchine nella foto aerea, con Claude. Due strade (vedi COME-LAVORIAMO.md):
+ * - API Anthropic diretta: variabile ANTHROPIC_API_KEY (in produzione dall'archivio segreti di Google). Ha la precedenza.
+ * - Claude su Google Cloud (Vertex AI): variabile ANTHROPIC_VERTEX_PROJECT_ID; l'app si autentica con il proprio
+ *   account di servizio e il costo va sulla fatturazione Google, ma serve una quota assegnata da Google.
  */
 
 const MODEL = "claude-opus-5-5";
@@ -66,17 +67,48 @@ ${scale}`;
 
 export class PlanAnalysisError extends Error {}
 
-// Il motivo dato da Google, in breve: la pagina è riservata alla direzione, e così l'errore si capisce senza aprire i registri.
-function googleDetail(error: InstanceType<typeof Anthropic.APIError>): string {
+// Il motivo dato dal servizio, in breve: la pagina è riservata alla direzione, e così l'errore si capisce senza aprire i registri.
+function serviceDetail(error: InstanceType<typeof Anthropic.APIError>, provider: Provider): string {
   const text = error.message.replace(/\s+/g, " ").trim();
-  return text ? ` Dettaglio di Google: ${text.slice(0, 220)}${text.length > 220 ? "…" : ""}` : "";
+  return text ? ` Dettaglio di ${provider === "vertex" ? "Google" : "Anthropic"}: ${text.slice(0, 220)}${text.length > 220 ? "…" : ""}` : "";
+}
+
+// Errori dell'API Anthropic diretta: chiave, credito, limiti di frequenza.
+function anthropicError(error: unknown): PlanAnalysisError | null {
+  if (!(error instanceof Anthropic.APIError)) return null;
+  const detail = serviceDetail(error, "anthropic");
+  if (error instanceof Anthropic.AuthenticationError) {
+    return new PlanAnalysisError(`La chiave Anthropic non è valida o è stata revocata: creane una nuova e aggiornala (istruzioni in COME-LAVORIAMO.md).${detail}`);
+  }
+  if (error.status === 400 && /credit balance/i.test(error.message)) {
+    return new PlanAnalysisError(`Il credito dell'account Anthropic è esaurito: ricaricalo su console.anthropic.com → Billing, poi riprova.${detail}`);
+  }
+  if (error instanceof Anthropic.PermissionDeniedError) {
+    return new PlanAnalysisError(`Anthropic ha rifiutato la richiesta: controlla che la chiave abbia accesso al modello (istruzioni in COME-LAVORIAMO.md).${detail}`);
+  }
+  if (error instanceof Anthropic.RateLimitError || error.status === 529) {
+    return new PlanAnalysisError(`Il servizio di analisi è momentaneamente occupato o hai fatto troppe richieste ravvicinate: riprova tra qualche minuto.${detail}`);
+  }
+  return null;
+}
+
+type Provider = "anthropic" | "vertex";
+
+function configuredProvider(): Provider | null {
+  if (process.env.ANTHROPIC_API_KEY?.trim()) return "anthropic";
+  if (process.env.ANTHROPIC_VERTEX_PROJECT_ID) return "vertex";
+  return null;
 }
 
 export function planAnalysisAvailable(): boolean {
-  return Boolean(process.env.ANTHROPIC_VERTEX_PROJECT_ID || process.env.PLAN_ANALYSIS_FIXTURE);
+  return Boolean(configuredProvider() || process.env.PLAN_ANALYSIS_FIXTURE);
 }
 
-function defaultClient(): AnthropicVertex {
+function defaultClient(): Anthropic | AnthropicVertex {
+  if (configuredProvider() === "anthropic") {
+    // trim: una chiave incollata con un a capo finale verrebbe rifiutata.
+    return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY!.trim(), timeout: 4 * 60 * 1000, maxRetries: 1 });
+  }
   return new AnthropicVertex({
     projectId: process.env.ANTHROPIC_VERTEX_PROJECT_ID,
     region: process.env.CLOUD_ML_REGION || "global",
@@ -101,12 +133,16 @@ export async function analyzePlanPhoto(
   if (fixture && !client) return AnalysisSchema.parse(JSON.parse(await readFile(fixture, "utf8")));
 
   const api = client ?? defaultClient();
+  const provider: Provider = api instanceof AnthropicVertex ? "vertex" : "anthropic";
   let message;
   try {
     // create (non parse): così si legge il motivo di fine risposta prima di interpretarla.
     message = await api.beta.messages.create(
       {
         model: MODEL,
+        // Sull'API diretta, se il modello declina la richiesta la riprova il server con un altro modello adatto;
+        // su Vertex questo parametro non esiste e se ne occupa il middleware del client.
+        ...(provider === "anthropic" ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
         max_tokens: 16000,
         thinking: { type: "adaptive" },
         output_config: { effort: "high", format: betaZodOutputFormat(AnalysisSchema) },
@@ -123,22 +159,25 @@ export async function analyzePlanPhoto(
           },
         ],
       },
-      { fallbackState: new BetaFallbackState() },
+      provider === "vertex" ? { fallbackState: new BetaFallbackState() } : undefined,
     );
   } catch (error) {
     console.error("Analisi della foto non riuscita:", error);
-    if (error instanceof Anthropic.RateLimitError) {
+    if (provider === "anthropic") {
+      const known = anthropicError(error);
+      if (known) throw known;
+    } else if (error instanceof Anthropic.RateLimitError) {
       // Google risponde 429 sia per una quota del progetto esaurita (o mai assegnata) sia per capacità momentaneamente piena.
       if (/quota/i.test(error.message)) {
         throw new PlanAnalysisError(
-          `Google dice che la quota del progetto per Claude è esaurita o non ancora assegnata: va chiesto un aumento in Google Cloud → IAM e amministrazione → Quote (istruzioni in COME-LAVORIAMO.md).${googleDetail(error)}`,
+          `Google dice che la quota del progetto per Claude è esaurita o non ancora assegnata: va chiesto un aumento in Google Cloud → IAM e amministrazione → Quote (istruzioni in COME-LAVORIAMO.md).${serviceDetail(error, provider)}`,
         );
       }
-      throw new PlanAnalysisError(`Il servizio di analisi è momentaneamente occupato: riprova tra qualche minuto.${googleDetail(error)}`);
+      throw new PlanAnalysisError(`Il servizio di analisi è momentaneamente occupato: riprova tra qualche minuto.${serviceDetail(error, provider)}`);
     }
-    if (error instanceof Anthropic.APIError && (error.status === 401 || error.status === 403 || error.status === 404)) {
+    if (provider === "vertex" && error instanceof Anthropic.APIError && (error.status === 401 || error.status === 403 || error.status === 404)) {
       throw new PlanAnalysisError(
-        `Google ha rifiutato la richiesta: controlla che Claude sia abilitato in Vertex AI e che l'app abbia il permesso di usarlo (istruzioni in COME-LAVORIAMO.md).${googleDetail(error)}`,
+        `Google ha rifiutato la richiesta: controlla che Claude sia abilitato in Vertex AI e che l'app abbia il permesso di usarlo (istruzioni in COME-LAVORIAMO.md).${serviceDetail(error, provider)}`,
       );
     }
     if (error instanceof Anthropic.APIConnectionTimeoutError) throw new PlanAnalysisError("L'analisi ha impiegato troppo tempo. Riprova.");
