@@ -36,6 +36,13 @@
   --shadow-card: 0 1px 0 rgb(18 40 58 / 0.04), 0 1px 3px rgb(18 40 58 / 0.06);
 }
 
+/*
+ * Schermi bassi (portatili, finestre non a tutto schermo): il menu laterale si compatta per starci intero.
+ * «shorter» viene dopo «short» e lo sostituisce dove valgono entrambi.
+ */
+@custom-variant short (@media (max-height: 820px));
+@custom-variant shorter (@media (max-height: 760px));
+
 @layer base {
   html {
     color-scheme: light;
@@ -179,4 +186,12 @@
   background-color: #d5c9a8;
   background-image: repeating-linear-gradient(90deg, transparent 0 13px, rgb(18 40 58 / 0.1) 13px 14px);
   border: 1px solid #b7a981;
+}
+
+/* Scorre ancora se serve (schermi molto bassi), ma senza barra visibile. */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }

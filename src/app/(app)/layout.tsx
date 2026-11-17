@@ -52,14 +52,16 @@ async function Navigation() {
   return (
     <>
       <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-deep text-white lg:flex">
-        <div className="px-5 pt-6 pb-5">
-          <Link href="/" className="block">
+        <div className="px-5 pt-6 pb-5 short:pt-5 short:pb-4 shorter:pt-4 shorter:pb-3">
+          <Link href="/" className="block shorter:w-[170px]">
             <BrandWide onDark />
           </Link>
-          <div className="mt-4 border-t border-white/10 pt-4">
-            <p className="text-[11px] font-semibold tracking-widest text-white/45 uppercase">Porto</p>
-            {logo && <PortLogoTile logo={logo} alt="" className="mt-2 max-w-full" imageClassName="h-12 w-auto max-w-[11.5rem]" />}
-            <p className={`${logo ? "mt-2" : "mt-0.5"} leading-snug font-medium text-white`}>{ctx.marinaName}</p>
+          <div className="mt-4 border-t border-white/10 pt-4 short:mt-3 short:pt-3">
+            <p className="text-[11px] font-semibold tracking-widest text-white/45 uppercase shorter:hidden">Porto</p>
+            {logo && (
+              <PortLogoTile logo={logo} alt="" className="mt-2 max-w-full shorter:mt-0" imageClassName="h-12 w-auto max-w-[11.5rem] short:h-10 shorter:h-8" />
+            )}
+            <p className={`${logo ? "mt-2 shorter:mt-1.5" : "mt-0.5 shorter:mt-0"} leading-snug font-medium text-white`}>{ctx.marinaName}</p>
             {canSwitch && (
               <Link href="/porti" className="mt-1 inline-flex items-center gap-1 text-xs text-white/60 hover:text-white">
                 <ArrowLeftRight size={12} aria-hidden="true" />
@@ -68,15 +70,15 @@ async function Navigation() {
             )}
           </div>
         </div>
-        <nav className="flex-1 overflow-y-auto px-2" aria-label="Navigazione principale">
+        <nav className="scrollbar-none flex-1 overflow-y-auto px-2" aria-label="Navigazione principale">
           <SidebarLinks items={items} />
         </nav>
-        <div className="border-t border-white/10 px-5 py-4">
+        <div className="border-t border-white/10 px-5 py-4 shorter:py-3">
           <Link href="/account" className="block truncate text-sm font-medium text-white hover:underline">
             {ctx.user.name}
           </Link>
           <p className="text-xs text-white/55">{ROLE_LABEL[ctx.role]}</p>
-          <LogoutButton className="mt-3 inline-flex cursor-pointer items-center gap-1.5 text-sm text-white/70 hover:text-white" />
+          <LogoutButton className="mt-3 inline-flex cursor-pointer items-center gap-1.5 text-sm text-white/70 hover:text-white shorter:mt-1.5" />
         </div>
       </aside>
 

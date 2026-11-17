@@ -47,7 +47,7 @@ function isActive(pathname: string, href: string): boolean {
 export function SidebarLinks({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
   return (
-    <ul className="space-y-0.5">
+    <ul className="space-y-0.5 shorter:space-y-0">
       {items.map((item) => {
         const Icon = ICONS[item.key];
         const active = isActive(pathname, item.href);
@@ -56,7 +56,7 @@ export function SidebarLinks({ items }: { items: NavItem[] }) {
             <Link
               href={item.href}
               aria-current={active ? "page" : undefined}
-              className={`relative flex items-center gap-3 rounded-md px-3 py-2 text-[15px] transition-colors ${
+              className={`relative flex items-center gap-3 rounded-md px-3 py-2 text-[15px] transition-colors short:py-1.5 shorter:py-1 shorter:leading-5 ${
                 active ? "bg-white/10 font-medium text-white" : "text-white/70 hover:bg-white/5 hover:text-white"
               }`}
             >
