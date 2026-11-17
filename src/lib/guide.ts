@@ -44,6 +44,7 @@ export const GUIDE: GuideSection[] = [
     tips: [
       "La «Pianta dal vero» (foto aerea con i posti disegnati sopra) è facoltativa: la mappa funziona anche con lo schema dei pontili.",
       "I testi di contratto e informativa sono modelli: falli controllare dal vostro consulente prima di usarli.",
+      "Nell'informativa lascia una riga vuota tra un paragrafo e l'altro e inizia i titoli con il numero («6. Videosorveglianza»): in stampa vanno in grassetto e restano attaccati al loro testo.",
     ],
     link: { href: "/impostazioni", label: "Apri le impostazioni" },
   },
@@ -187,6 +188,7 @@ export const GUIDE: GuideSection[] = [
         items: [
           "«Attiva il contratto»: scegli il numero di rate, la scadenza della prima e la cadenza. Il contratto prende il numero e nascono gli addebiti nello scadenziario.",
           "«Stampa» apre il contratto pronto da firmare; per avere il file scegli «Salva come PDF» nella finestra di stampa. Poi segna la data in «Firmato il».",
+          "In cima al contratto stampato il riquadro «In sintesi» riassume posto, barca, periodo, scadenza dell'assicurazione, importi e rate: i dati arrivano dalle schede, quindi se lì manca qualcosa compare «—».",
         ],
       },
       {

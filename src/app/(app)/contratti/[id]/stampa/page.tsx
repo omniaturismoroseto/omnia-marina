@@ -13,9 +13,9 @@ import { OFFICE, requireMarina } from "@/lib/context";
 import { SERVICE_ITEM_KIND, itemHasPeriod, itemTitle, sortItems } from "@/lib/contract-items";
 import { formatDate, todayRome } from "@/lib/dates";
 import { auxEngine, describeEngine, mainEngine } from "@/lib/engines";
-import { formatMoney } from "@/lib/format";
+import { formatDimensions, formatMoney } from "@/lib/format";
 import { portLogo } from "@/lib/logo";
-import { CONTRACT_ITEM_LABEL } from "@/lib/labels";
+import { CONTRACT_ITEM_LABEL, CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { uuidOrNull } from "@/lib/params";
 import { marinaAddress } from "@/lib/templates";
 import { listCharges } from "@/server/charges";
@@ -39,7 +39,7 @@ function Terms({ text }: { text: string }) {
         .map((line, i) => {
           const m = /^(\d+\))\s*(.*)$/.exec(line.trim());
           return (
-            <p key={i} className={m ? "mt-1.5" : ""}>
+            <p key={i} className={m ? "mt-2" : "mt-1"}>
               {m ? (
                 <>
                   <strong>{m[1]}</strong> {m[2]}
@@ -59,6 +59,16 @@ function Signatures() {
     <div className="mt-10 grid grid-cols-2 gap-16 text-center text-xs">
       <p className="border-t border-ink pt-1">Il Conduttore</p>
       <p className="border-t border-ink pt-1">Il Locatore</p>
+    </div>
+  );
+}
+
+/** Una voce del riquadro riassuntivo in testa al contratto. */
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[0.8em] tracking-wider text-muted uppercase">{label}</dt>
+      <dd className="mt-0.5 font-semibold">{children}</dd>
     </div>
   );
 }
@@ -106,6 +116,7 @@ export default page(async function ContractPrintPage({ params }: { params: Promi
   // Cauzioni e altri servizi presi dal listino: importo e aliquota propri.
   const services = items.filter((it) => it.kind === SERVICE_ITEM_KIND);
   const rentCents = c.amountCents + spaces.reduce((s, it) => s + it.amountCents, 0);
+  const extrasCents = [gestione, rifiuti, ...services].reduce((s, it) => s + (it?.amountCents ?? 0), 0);
 
   // Scadenze di tutto il contratto (canone, spazi e spese), sommate per data.
   const dueByDate = new Map<string, number>();
@@ -133,18 +144,19 @@ export default page(async function ContractPrintPage({ params }: { params: Promi
         />
       </div>
 
-      <article className="card mx-auto max-w-3xl p-8 text-[12.5px] leading-snug text-justify print:max-w-none print:border-0 print:p-0 print:text-[10px] print:shadow-none">
-        <header className="flex items-start justify-between gap-6 border-b-2 border-ink pb-3 text-left">
-          <div className="flex items-center gap-4">
-            {logo && <PortLogo logo={logo} alt="" className="h-16 w-auto max-w-[10rem] shrink-0 print:h-14" />}
-            <div>
+      {/* Sul telefono il testo va a sinistra (giustificato apre buchi tra le parole); su carta e schermi larghi è giustificato. */}
+      <article className="card mx-auto max-w-3xl p-5 text-[13px] leading-snug sm:p-8 sm:text-[12.5px] sm:text-justify print:max-w-none print:border-0 print:p-0 print:text-[11.5px] print:text-justify print:shadow-none">
+        <header className="flex flex-col gap-3 border-b-2 border-ink pb-3 text-left sm:flex-row sm:items-start sm:justify-between sm:gap-6 print:flex-row print:items-start print:justify-between print:gap-6">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4 print:flex-row print:items-center print:gap-4">
+            {logo && <PortLogo logo={logo} alt="" className="h-14 w-auto max-w-[10rem] shrink-0 sm:h-16 print:h-14" />}
+            <div className="min-w-0">
               <p className="font-display text-xl leading-tight font-semibold">{lessor}</p>
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-xs break-words text-muted">
                 {[marinaAddress(marina), marina.vatNumber ? `P. IVA ${marina.vatNumber}` : null, marina.phone, marina.email].filter(Boolean).join(" · ")}
               </p>
             </div>
           </div>
-          <div className="shrink-0 text-right">
+          <div className="shrink-0 sm:text-right print:text-right">
             <p className="text-xs tracking-widest text-muted uppercase">Contratto n.</p>
             {/* Le bozze non hanno numero: al suo posto si stampa BOZZA. */}
             {c.number ? (
@@ -155,12 +167,40 @@ export default page(async function ContractPrintPage({ params }: { params: Promi
           </div>
         </header>
 
-        <h1 className="mt-4 text-center text-[13.5px] font-bold uppercase print:text-[11.5px]">
+        <h1 className="mt-4 text-center text-[14px] font-bold uppercase print:text-[13px]">
           Contratto di locazione di un tratto di banchina e di specchio acqueo antistante
           {titleExtras.length > 0 && <> – di area all&apos;aperto per {titleExtras.join(", ")}</>}
         </h1>
 
-        <p className="mt-3">Con la presente scrittura privata, redatta in duplice copia,</p>
+        {/* Riepilogo: i dati che il cliente cerca per primi, ripresi dagli articoli 1-3 che restano il testo che vale. */}
+        <section className="mt-4 break-inside-avoid rounded-md border border-ink/40 px-4 py-3 text-left">
+          <p className="text-[0.85em] font-bold tracking-wider uppercase">In sintesi</p>
+          <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4 print:grid-cols-4">
+            <Fact label="Posto barca">{berth?.code ?? "—"}</Fact>
+            <Fact label="Unità">
+              {boat.name}
+              <span className="block font-normal">{formatDimensions(boat.lengthCm, boat.beamCm)}</span>
+            </Fact>
+            <Fact label={`Periodo ${CONTRACT_TYPE_LABEL[c.type].toLowerCase()}`}>
+              <span className="whitespace-nowrap">dal {formatDate(c.startDate)}</span> <span className="whitespace-nowrap">al {formatDate(c.endDate)}</span>
+            </Fact>
+            <Fact label="Assicurazione RC">{boat.insuranceExpiry ? `scade il ${formatDate(boat.insuranceExpiry)}` : "—"}</Fact>
+            <Fact label="Canone (IVA incl.)">
+              <span className="tabular-nums">{formatMoney(rentCents)}</span>
+            </Fact>
+            <Fact label="Spese e servizi">
+              <span className="tabular-nums">{extrasCents > 0 ? formatMoney(extrasCents) : "nessuna"}</span>
+            </Fact>
+            <Fact label="Totale">
+              <span className="tabular-nums">{formatMoney(rentCents + extrasCents)}</span>
+            </Fact>
+            <Fact label={schedule.length > 1 ? "Rate" : "Pagamento"}>
+              {schedule.length > 1 ? `${schedule.length}, la prima il ${formatDate(schedule[0][0])}` : "alla firma"}
+            </Fact>
+          </dl>
+        </section>
+
+        <p className="mt-4">Con la presente scrittura privata, redatta in duplice copia,</p>
         <p className="mt-1.5">
           la Società <strong>{lessor}</strong>
           {marina.address || marina.city ? (

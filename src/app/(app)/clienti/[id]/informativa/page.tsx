@@ -11,7 +11,7 @@ import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, todayRome } from "@/lib/dates";
 import { portLogo } from "@/lib/logo";
 import { uuidOrNull } from "@/lib/params";
-import { fillTemplate } from "@/lib/templates";
+import { fillTemplate, marinaAddress, textSections } from "@/lib/templates";
 
 export const metadata: Metadata = { title: "Informativa privacy" };
 
@@ -24,6 +24,33 @@ function Choice({ label }: { label: string }) {
         <span>☐ Non acconsento</span>
       </p>
     </div>
+  );
+}
+
+/** Testo dell'informativa: il primo blocco è il titolo, i blocchi numerati hanno il titolo in grassetto e non si separano dal loro testo. */
+function NoticeText({ text }: { text: string }) {
+  return (
+    <>
+      {textSections(text).map((section, i) =>
+        i === 0 && !section.heading ? (
+          <div key={i} className="mb-4 text-center">
+            <h1 className="font-bold uppercase">{section.lines[0]}</h1>
+            {section.lines.slice(1).map((line, j) => (
+              <p key={j} className="text-muted">
+                {line}
+              </p>
+            ))}
+          </div>
+        ) : (
+          <section key={i} className="mt-3 break-inside-avoid">
+            {section.heading && <h2 className="font-bold break-after-avoid">{section.heading}</h2>}
+            {section.lines.map((line, j) => (
+              <p key={j}>{line}</p>
+            ))}
+          </section>
+        ),
+      )}
+    </>
   );
 }
 
@@ -52,17 +79,24 @@ export default page(async function PrivacyNoticePage({ params }: { params: Promi
         />
       </div>
 
-      <article className="card mx-auto max-w-3xl p-8 text-[13.5px] leading-relaxed print:max-w-none print:border-0 print:p-0 print:shadow-none">
-        <header className="mb-5 flex items-center justify-between gap-4 border-b border-line pb-3">
-          <div className="flex items-center gap-4">
-            {logo && <PortLogo logo={logo} alt="" className="h-14 w-auto max-w-[9rem] shrink-0" />}
-            <p className="font-display text-xl font-semibold">{marina.legalName || marina.name}</p>
+      <article className="card mx-auto max-w-3xl p-5 text-[13.5px] leading-relaxed sm:p-8 print:max-w-none print:border-0 print:p-0 print:text-[12px] print:leading-normal print:shadow-none">
+        {/* Stessa intestazione del contratto: su telefono logo, nome e versione vanno uno sotto l'altro. */}
+        <header className="mb-5 flex flex-col gap-3 border-b-2 border-ink pb-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6 print:flex-row print:items-start print:justify-between print:gap-6">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4 print:flex-row print:items-center print:gap-4">
+            {logo && <PortLogo logo={logo} alt="" className="h-14 w-auto max-w-[10rem] shrink-0" />}
+            <div className="min-w-0">
+              <p className="font-display text-xl leading-tight font-semibold">{marina.legalName || marina.name}</p>
+              <p className="mt-1 text-xs break-words text-muted">{[marinaAddress(marina), marina.email].filter(Boolean).join(" · ")}</p>
+            </div>
           </div>
-          <p className="text-xs text-muted">Informativa v. {marina.privacyPolicyVersion}</p>
+          <div className="shrink-0 sm:text-right print:text-right">
+            <p className="text-xs tracking-widest text-muted uppercase">Informativa privacy</p>
+            <p className="font-display text-lg font-semibold">versione {marina.privacyPolicyVersion}</p>
+          </div>
         </header>
 
         {text ? (
-          <div className="whitespace-pre-line">{text}</div>
+          <NoticeText text={text} />
         ) : (
           <p className="text-bad">Il testo dell&apos;informativa non è stato ancora inserito: aggiungilo in Impostazioni → Porto.</p>
         )}
@@ -74,7 +108,7 @@ export default page(async function PrivacyNoticePage({ params }: { params: Promi
           </p>
           <Choice label="Invio di comunicazioni commerciali e promozionali:" />
           <Choice label="Comunicazione dei dati a cantieri e fornitori di assistenza da me indicati:" />
-          <div className="mt-10 grid grid-cols-2 gap-10">
+          <div className="mt-10 grid grid-cols-1 gap-10 sm:grid-cols-2 print:grid-cols-2">
             <p>Data: {formatDate(todayRome())}</p>
             <p className="border-t border-ink pt-1 text-center text-xs">Firma dell&apos;interessato</p>
           </div>
