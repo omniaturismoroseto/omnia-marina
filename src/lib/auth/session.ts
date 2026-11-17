@@ -14,10 +14,11 @@ function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export async function createSession(userId: string, marinaId: string | null): Promise<void> {
+/** Apre una sessione. Con `ownerAccessId` la sessione è nell'area diportista di quel cliente (e `marinaId` è il suo porto). */
+export async function createSession(userId: string, marinaId: string | null, ownerAccessId: string | null = null): Promise<void> {
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + MAX_AGE_SECONDS * 1000);
-  await db.insert(sessions).values({ id: hashToken(token), userId, marinaId, expiresAt });
+  await db.insert(sessions).values({ id: hashToken(token), userId, marinaId, ownerAccessId, expiresAt });
   // Pulizia opportunistica delle sessioni scadute dello stesso utente.
   await db.delete(sessions).where(and(eq(sessions.userId, userId), lt(sessions.expiresAt, new Date())));
 
@@ -44,6 +45,8 @@ export async function destroySession(): Promise<void> {
 export interface SessionInfo {
   sessionId: string;
   marinaId: string | null;
+  // Area diportista: l'accesso del cliente su cui si sta lavorando. Null nel gestionale.
+  ownerAccessId: string | null;
   user: { id: string; name: string; email: string };
 }
 
@@ -58,6 +61,7 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
     .select({
       sessionId: sessions.id,
       marinaId: sessions.marinaId,
+      ownerAccessId: sessions.ownerAccessId,
       userId: users.id,
       name: users.name,
       email: users.email,
@@ -67,11 +71,17 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
     .where(and(eq(sessions.id, hashToken(token)), gt(sessions.expiresAt, new Date())))
     .limit(1);
   if (!row) return null;
-  return { sessionId: row.sessionId, marinaId: row.marinaId, user: { id: row.userId, name: row.name, email: row.email } };
+  return { sessionId: row.sessionId, marinaId: row.marinaId, ownerAccessId: row.ownerAccessId, user: { id: row.userId, name: row.name, email: row.email } };
 });
 
+/** Porta la sessione nel gestionale di un porto (esce dall'area diportista, se c'era). */
 export async function setSessionMarina(sessionId: string, marinaId: string): Promise<void> {
-  await db.update(sessions).set({ marinaId }).where(eq(sessions.id, sessionId));
+  await db.update(sessions).set({ marinaId, ownerAccessId: null }).where(eq(sessions.id, sessionId));
+}
+
+/** Porta la sessione nell'area diportista di un cliente. */
+export async function setSessionOwnerArea(sessionId: string, marinaId: string, ownerAccessId: string): Promise<void> {
+  await db.update(sessions).set({ marinaId, ownerAccessId }).where(eq(sessions.id, sessionId));
 }
 
 // Invalida tutte le sessioni di un utente (cambio password, rimozione).

@@ -62,7 +62,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   API REST con `FIREBASE_API_KEY` per l'accesso); senza, valgono le password locali. Un account locale passa su Firebase
   da solo (stesso uid = `users.id`) al primo accesso riuscito o alla prima richiesta di nuova password. Dopo l'accesso
   la sessione resta quella dell'app (`src/lib/auth/session.ts`). Test: `tests/credentials.test.ts` con l'emulatore
-  (`npx firebase-tools emulators:start --only auth --project demo-omnia`). Area diportista: `docs/area-diportista.md`.
+  (`npx firebase-tools emulators:start --only auth --project demo-omnia`).
+- Area diportista (`docs/area-diportista.md`): pagine in `src/app/(diportista)/`, che iniziano con `requireOwner()` e
+  filtrano **sempre** per `ctx.ownerId` e `ctx.marinaId`. Una sessione con `sessions.owner_access_id` è nell'area
+  diportista e non apre il gestionale (`requireMarina` la rimanda a `/diportista`). Inviti, attivazione e revoca in
+  `src/server/owner-access.ts`; codici, codice fiscale e messaggio in `src/lib/owner-access.ts`; attivazione pubblica
+  su `/attiva`; riquadro «Accesso all'app» nella scheda cliente. L'area si apre solo con l'email confermata
+  (`isEmailVerified`); anonimizzare un cliente cancella inviti e accessi.
 - Produzione: `output: "standalone"` + `Dockerfile` (Cloud Run). Le migrazioni si applicano all'avvio con
   `AUTO_MIGRATE=true`; ogni modifica allo schema richiede `pnpm db:generate` e la migrazione va committata.
 - Pubblicazione: `main` NON va online da solo. L'utente pubblica dal PC Windows (PowerShell), dalla cartella

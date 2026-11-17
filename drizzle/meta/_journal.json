@@ -99,6 +99,13 @@
       "when": 1794948546443,
       "tag": "0013_accesso_firebase",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794950470069,
+      "tag": "0014_area_diportista",
+      "breakpoints": true
     }
   ]
 }

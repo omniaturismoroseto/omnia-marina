@@ -140,6 +140,15 @@ export const GUIDE: GuideSection[] = [
           "Chi non ha più un contratto attivo si può spostare nella categoria «Ex cliente»: esce dall'elenco normale ma resta consultabile nella sua linguetta. Se torna con un nuovo contratto, esce da solo dalla categoria.",
         ],
       },
+      {
+        title: "Accesso all'app per il diportista",
+        items: [
+          "Nella scheda del cliente, riquadro «Accesso all'app» → «Invita una persona»: il titolare, un familiare o lo skipper. Serve il codice fiscale o la partita IVA nella scheda: è la prova che chiediamo a chi attiva.",
+          "Nasce un codice di 8 caratteri, valido 30 giorni e una volta sola. Consegnalo con il «Foglio di benvenuto» (da stampare, con il QR code), con «Copia messaggio» o con «WhatsApp».",
+          "La persona apre il collegamento o inquadra il QR, scrive il codice fiscale dell'intestatario (per le società la partita IVA), sceglie email e password e conferma l'email. Da lì entra dalla normale pagina di accesso e vede solo l'area del suo cliente, mai il gestionale.",
+          "Nello stesso riquadro vedi chi ha l'accesso e quando è entrato l'ultima volta. «Revoca» lo toglie subito; «Nuovo codice» sostituisce un codice perso, scaduto o bloccato dopo troppi tentativi sbagliati.",
+        ],
+      },
     ],
     tips: [
       "Su richiesta del cliente: «Esportazione completa dei dati» oppure «Anonimizza i dati personali» (contratti e contabilità restano, ma non più riconducibili a lui).",

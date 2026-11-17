@@ -179,3 +179,30 @@ export async function requestPasswordReset(email: string): Promise<void> {
     console.error(`Email per la nuova password non inviata a ${email}`, error);
   }
 }
+
+/** Vero se l'email dell'utente è confermata. Senza Firebase non si controlla. */
+export async function isEmailVerified(userId: string): Promise<boolean> {
+  if (!firebaseEnabled()) return true;
+  const [user] = await db.select({ firebaseUid: users.firebaseUid }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!user?.firebaseUid) return false;
+  try {
+    return (await adminAuth().getUser(user.firebaseUid)).emailVerified;
+  } catch (error) {
+    console.error("Stato dell'email non leggibile da Firebase", error);
+    return false;
+  }
+}
+
+/**
+ * Fa inviare da Firebase l'email per confermare l'indirizzo. Serve la password appena verificata (Firebase
+ * chiede che a farlo sia l'utente stesso). Restituisce false se l'invio non è riuscito.
+ */
+export async function sendVerificationEmail(email: string, password: string): Promise<boolean> {
+  if (!firebaseEnabled()) return true;
+  const signIn = await identityToolkit<{ idToken: string }>("signInWithPassword", { email, password, returnSecureToken: true });
+  if (!signIn.ok) return false;
+  const continueUrl = process.env.APP_URL ? `${process.env.APP_URL.replace(/\/$/, "")}/login` : undefined;
+  const res = await identityToolkit("sendOobCode", { requestType: "VERIFY_EMAIL", idToken: signIn.data.idToken, ...(continueUrl ? { continueUrl } : {}) });
+  if (!res.ok) console.error(`Email di conferma non inviata a ${email}: ${res.code}`);
+  return res.ok;
+}

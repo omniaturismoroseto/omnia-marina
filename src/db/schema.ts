@@ -151,10 +151,12 @@ export const sessions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     marinaId: uuid("marina_id").references(() => marinas.id, { onDelete: "set null" }),
+    // Valorizzato quando la sessione è nell'area diportista: vale solo per quel cliente, mai per il gestionale.
+    ownerAccessId: uuid("owner_access_id").references(() => ownerAccess.id, { onDelete: "cascade" }),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: createdAt(),
   },
-  (t) => [index("sessions_user_idx").on(t.userId)],
+  (t) => [index("sessions_user_idx").on(t.userId), index("sessions_owner_access_idx").on(t.ownerAccessId)],
 );
 
 // ───────────────────────── Anagrafiche ─────────────────────────
@@ -220,6 +222,53 @@ export const owners = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index("owners_marina_name_idx").on(t.marinaId, t.displayName), index("owners_marina_fiscal_idx").on(t.marinaId, t.fiscalCode)],
+);
+
+// Area diportista. Un invito nasce dalla scheda del cliente: il codice (8 caratteri) si consegna su carta o con un
+// messaggio, vale 30 giorni e una volta sola. Resta leggibile all'ufficio finché è in attesa, poi si cancella.
+export const ownerInvites = pgTable(
+  "owner_invites",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => owners.id, { onDelete: "cascade" }),
+    // Persona invitata (il titolare, un familiare, uno skipper): diventa il nome del nuovo account.
+    name: text("name").notNull(),
+    code: text("code").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    // Tentativi con codice fiscale / partita IVA sbagliati: oltre il limite l'invito si blocca.
+    failedAttempts: integer("failed_attempts").notNull().default(0),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("owner_invites_owner_idx").on(t.ownerId)],
+);
+
+// Chi può entrare nell'area diportista di un cliente. Revocare non cancella: resta la storia e si può riattivare
+// con un nuovo invito.
+export const ownerAccess = pgTable(
+  "owner_access",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => owners.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("owner_access_owner_user_uq").on(t.ownerId, t.userId), index("owner_access_user_idx").on(t.userId)],
 );
 
 // Registro dei consensi: ogni riga è un evento (concesso o revocato). Non si modifica mai,

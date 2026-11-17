@@ -18,6 +18,7 @@ import { listCharges } from "@/server/charges";
 import { latestConsents, type ConsentKind } from "@/server/owners";
 import { ActionButton } from "@/components/form";
 import { setOwnerFormerAction } from "@/server/owner-actions";
+import { AppAccessCard } from "./app-access";
 import { ConsentForm, EraseOwnerButton } from "./privacy-forms";
 
 export const metadata: Metadata = { title: "Scheda cliente" };
@@ -324,6 +325,8 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
               )}
             </Card>
           )}
+
+          {!anonymized && <AppAccessCard marinaId={ctx.marinaId} marinaName={ctx.marinaName} owner={owner} />}
 
           <Card title="Privacy e consensi">
             {anonymized ? (

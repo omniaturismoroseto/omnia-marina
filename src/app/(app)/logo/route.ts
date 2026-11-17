@@ -3,17 +3,25 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { marinaLogos, marinas } from "@/db/schema";
 import { audit } from "@/lib/audit";
-import { requireMarina } from "@/lib/context";
+import { requireMarina, requireUser } from "@/lib/context";
 import { checkLogo, LOGO_MAX_BYTES } from "@/lib/logo";
 import { sameOrigin } from "@/lib/same-origin";
 
-// Il logo della società di gestione: lo vedono tutti i ruoli (menu e stampe), lo carica e lo rimuove solo la direzione.
+// Il logo della società di gestione: lo vedono tutti i ruoli (menu e stampe) e i diportisti nella loro area;
+// lo carica e lo rimuove solo la direzione.
 
 const fail = (status: number, message: string) => Response.json({ ok: false, message }, { status });
 
+async function viewerMarinaId(): Promise<string | null> {
+  const user = await requireUser();
+  if (user.activeOwnerAccessId) return user.ownerAreas.find((a) => a.accessId === user.activeOwnerAccessId)?.marinaId ?? null;
+  return (await requireMarina()).marinaId;
+}
+
 export async function GET() {
-  const ctx = await requireMarina();
-  const [logo] = await db.select().from(marinaLogos).where(eq(marinaLogos.marinaId, ctx.marinaId)).limit(1);
+  const marinaId = await viewerMarinaId();
+  if (!marinaId) return new Response("Nessun logo caricato", { status: 404 });
+  const [logo] = await db.select().from(marinaLogos).where(eq(marinaLogos.marinaId, marinaId)).limit(1);
   if (!logo) return new Response("Nessun logo caricato", { status: 404 });
   return new Response(new Uint8Array(logo.data), {
     headers: {

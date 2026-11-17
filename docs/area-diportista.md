@@ -21,19 +21,28 @@ successive (contratto, pagamenti, documenti, telecamere).
 
 ## Percorsi
 
+Stato: passo 1 (Firebase e «Password dimenticata?») e passo 2 (inviti, attivazione, revoca) **fatti**. Passo 3: la
+prima pagina vera dell'area («La mia barca», contratto e scadenze).
+
 ### 1. L'ufficio invita
 Scheda cliente → **«Accesso all'app»** → «Invita una persona»: un nome (il titolare è proposto dalla scheda; si può
 scrivere quello di un familiare o di uno skipper). L'app crea un **invito** valido 30 giorni e utilizzabile una sola
 volta, con un **codice di 8 caratteri** (senza caratteri ambigui come 0/O e 1/I). Il codice si consegna:
 - con il **foglio di benvenuto** stampabile (codice, QR code e istruzioni), insieme al contratto;
 - oppure copiando un messaggio già pronto (WhatsApp, SMS, email dell'ufficio) con il collegamento `/attiva/<codice>`.
+  Il pulsante «WhatsApp» apre la chat con il telefono della scheda, se c'è.
+
+Il codice resta **leggibile all'ufficio** finché l'invito è in attesa, così il foglio si può ristampare. Da solo non
+basta: serve anche il codice fiscale o la partita IVA. Dopo 5 tentativi sbagliati l'invito si blocca. All'attivazione
+l'invito si cancella.
 
 ### 2. Il diportista attiva l'accesso
 Su `/attiva` (o dal QR o dal collegamento, che compilano il codice) inserisce:
 1. il codice e, come seconda prova, il **codice fiscale o la partita IVA** del cliente presente nella scheda;
 2. email e password: l'app crea l'account su Firebase e Firebase invia l'**email di conferma dell'indirizzo**.
 
-L'area diportista si apre solo dopo che l'email è stata confermata. Il codice, intanto, è già usato.
+L'area diportista si apre solo dopo che l'email è stata confermata. Il codice, intanto, è già usato. Se si prova ad
+accedere senza aver confermato, Firebase rimanda l'email di conferma.
 Se l'email ha già un account (per esempio un dipendente che ha anche la barca nel porto), non se ne crea un altro:
 chiede la password che usa già e collega l'accesso a quell'account.
 
@@ -80,11 +89,11 @@ giorni. Le chiude invece il cambio dal proprio account o la password provvisoria
 ## Modello dei dati (proposta)
 
 - `users`: aggiunge `firebase_uid` (unico), e `password_hash` diventa facoltativa (fatto). `email_verified` si legge da Firebase.
-- `owner_invites`: porto, cliente, nome, hash del codice, scadenza, usato il, creato da.
-- `owner_access`: porto, cliente, utente, creato il, creato da, revocato il, ultimo ingresso. Ha un vincolo unico
-  (cliente, utente).
-- `sessions`: aggiunge `owner_access_id`. Se è valorizzato, la sessione è nell'area diportista.
-- Codici e token si salvano solo come hash SHA-256, come le sessioni.
+- `owner_invites` (fatto): porto, cliente, nome, codice (unico), scadenza, tentativi sbagliati, creato da.
+- `owner_access` (fatto): porto, cliente, utente, creato il, creato da, revocato il, ultimo ingresso. Ha un vincolo
+  unico (cliente, utente): un nuovo invito alla stessa persona riattiva l'accesso revocato.
+- `sessions` (fatto): aggiunge `owner_access_id`. Se è valorizzato, la sessione è nell'area diportista e
+  `requireMarina` la rimanda a `/diportista`.
 - Nuovo controllo `requireOwner()` (gemello di `requireMarina`): restituisce porto e cliente della sessione, verifica
   che l'accesso non sia revocato, e ogni lettura filtra per `ownerId` **e** `marinaId`.
 
