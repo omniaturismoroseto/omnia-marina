@@ -57,7 +57,10 @@ export const users = pgTable("users", {
   id: id(),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
-  passwordHash: text("password_hash").notNull(),
+  // Password dell'accesso locale (scrypt). Vuota per chi è passato a Firebase Authentication.
+  passwordHash: text("password_hash"),
+  // Identificativo dell'account su Firebase Authentication, quando gli accessi passano da lì.
+  firebaseUid: text("firebase_uid").unique(),
   createdAt: createdAt(),
 });
 

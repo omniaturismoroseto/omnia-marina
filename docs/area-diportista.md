@@ -66,15 +66,20 @@ Inviti, attivazioni e revoche finiscono nel registro attività. Un cliente elimi
   pubblica di Firebase è una variabile d'ambiente (non è un segreto).
 - **Sviluppo e test:** l'emulatore di Firebase Authentication. Nell'anteprima, nessuna chiamata a Firebase vero.
 
-### Spostare gli account di oggi
-Le password attuali sono in scrypt (N=2^15, r=8, p=3, chiave da 64 byte, sale per utente), un formato che Firebase
-importa (`STANDARD_SCRYPT`). Uno script importa una volta tutti gli utenti con lo **stesso identificativo**, così il
-personale entra con la password che ha già. Se un account non si importasse, la persona usa «Password dimenticata?».
-Dopo l'importazione la colonna `users.password_hash` non serve più e si toglie con una migrazione successiva.
+### Spostare gli account di oggi (fatto: passo 1)
+Non c'è un'importazione in blocco: ogni account passa su Firebase **da solo**, con lo stesso identificativo
+(`users.id` = uid Firebase):
+- al primo accesso riuscito con la password di oggi, che viene verificata nell'app e poi data a Firebase;
+- oppure alla prima richiesta di «Password dimenticata?» (l'account nasce su Firebase e l'email fa scegliere la password);
+- oppure quando la direzione imposta una password provvisoria o la persona la cambia dal proprio account.
+
+Dopo il passaggio `users.password_hash` resta vuota. Si potrà togliere la colonna quando tutti saranno passati.
+Una nuova password scelta dal collegamento dell'email non chiude le sessioni già aperte, che scadono da sole dopo 30
+giorni. Le chiude invece il cambio dal proprio account o la password provvisoria della direzione.
 
 ## Modello dei dati (proposta)
 
-- `users`: aggiunge `firebase_uid` (unico). `email_verified` si legge da Firebase.
+- `users`: aggiunge `firebase_uid` (unico), e `password_hash` diventa facoltativa (fatto). `email_verified` si legge da Firebase.
 - `owner_invites`: porto, cliente, nome, hash del codice, scadenza, usato il, creato da.
 - `owner_access`: porto, cliente, utente, creato il, creato da, revocato il, ultimo ingresso. Ha un vincolo unico
   (cliente, utente).

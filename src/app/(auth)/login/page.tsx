@@ -38,6 +38,11 @@ export default function LoginPage() {
       <Form action={login} className="mt-6 space-y-4">
         <Field name="email" label="Email" type="email" autoComplete="username" required />
         <Field name="password" label="Password" type="password" autoComplete="current-password" required />
+        <p className="-mt-2 text-right text-sm">
+          <Link href="/password-dimenticata" className="link">
+            Password dimenticata?
+          </Link>
+        </p>
         <FormMessage />
         <Submit className="w-full">Accedi</Submit>
       </Form>

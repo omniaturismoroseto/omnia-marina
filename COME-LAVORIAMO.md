@@ -137,6 +137,51 @@ novembre 2026). Se in futuro la si vuole usare, senza chiave Anthropic collegata
    `base_model: anthropic-claude-opus`, chiedi un aumento (per esempio 10 al minuto) e controlla l'esito nella scheda
    «Richieste di aumento».
 
+## Accessi con Firebase (una volta sola)
+
+Con Firebase Authentication le password le custodisce Google, e chi la dimentica se ne sceglie una nuova da solo con
+«Password dimenticata?» nella pagina di accesso. Finché i passi qui sotto non sono fatti, l'app funziona come prima.
+Nessuno deve cambiare la password: ognuno passa su Firebase da solo, al primo accesso, con la password che ha già.
+
+Prima **pubblica la nuova versione** (vedi «Pubblicare»), poi:
+
+1. Apri la [console di Firebase](https://console.firebase.google.com) → **Crea un progetto** → in basso scegli
+   **«Aggiungi Firebase a un progetto Google Cloud esistente»** e seleziona `omnia-marina` (non crearne uno nuovo).
+   Google Analytics non serve.
+2. Menu **Build → Authentication → Inizia** → scheda **Metodo di accesso** → **Email/password** → attiva solo la prima
+   levetta (non «Link via email») → **Salva**.
+3. Scheda **Modelli**: in basso «Lingua dei modelli» → **Italiano**. Poi «Reimpostazione della password» → matita →
+   **Nome mittente**: `Omnia Marina` → Salva.
+4. Copia l'indirizzo dell'app:
+
+   ```powershell
+   gcloud run services describe omnia-marina --region europe-west1 --project omnia-marina --format "value(status.url)"
+   ```
+
+   Scheda **Impostazioni → Domini autorizzati → Aggiungi dominio**: incolla l'indirizzo **senza** `https://`.
+5. Ingranaggio in alto a sinistra → **Impostazioni progetto** → **Generali** → copia la **Chiave API web**. Se non
+   c'è, nella stessa pagina aggiungi un'app web (icona `</>`), nome `Omnia Marina`, senza Hosting, e ricomincia da qui.
+6. Dai all'app il permesso di gestire gli account:
+
+   ```powershell
+   gcloud projects add-iam-policy-binding omnia-marina --member "serviceAccount:omnia-marina-run@omnia-marina.iam.gserviceaccount.com" --role roles/firebaseauth.admin --condition=None
+   ```
+
+7. Accendi Firebase nell'app (metti la chiave del passo 5 e l'indirizzo del passo 4, questa volta **con** `https://`):
+
+   ```powershell
+   gcloud run services update omnia-marina --update-env-vars "FIREBASE_PROJECT_ID=omnia-marina,FIREBASE_API_KEY=LA-CHIAVE,APP_URL=https://L-INDIRIZZO" --region europe-west1 --project omnia-marina
+   ```
+
+Per provare: esci, rientra con la tua password di sempre, poi da un'altra finestra prova «Password dimenticata?».
+Gli account si vedono nella console di Firebase, Authentication → **Utenti**, man mano che le persone entrano.
+
+Se l'accesso dice «Il servizio di accesso non risponde», guarda il registro dell'app (sezione «Controllare»): di solito
+manca il permesso del passo 6 o la chiave del passo 5 è sbagliata.
+
+**Non spegnere Firebase dopo averlo usato** (togliendo `FIREBASE_PROJECT_ID`): chi è già passato su Firebase non ha
+più la password nell'app e non riuscirebbe a entrare finché la direzione non gli imposta una password provvisoria.
+
 ---
 
 ## Controllare
