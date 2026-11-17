@@ -59,7 +59,7 @@ export default page(async function PlanSettingsPage() {
 
   return (
     <>
-      <PageHeader title="Impostazioni" description="La mappa può mostrare i posti barca sopra una foto aerea del porto, nelle posizioni e nelle misure reali." />
+      <PageHeader help="impostazioni" title="Impostazioni" description="La mappa può mostrare i posti barca sopra una foto aerea del porto, nelle posizioni e nelle misure reali." />
       <SettingsTabs current="pianta" />
 
       <div className="space-y-5">

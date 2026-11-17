@@ -20,7 +20,7 @@ export default page(async function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="Impostazioni" description="Dati del porto, struttura dei pontili, categorie e persone che vi lavorano." />
+      <PageHeader help="impostazioni" title="Impostazioni" description="Dati del porto, struttura dei pontili, categorie e persone che vi lavorano." />
       <SettingsTabs current="porto" />
       <div className="space-y-5">
         <Card title="Dati del porto">

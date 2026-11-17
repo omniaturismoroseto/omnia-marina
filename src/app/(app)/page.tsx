@@ -95,16 +95,19 @@ export default page(async function DashboardPage() {
   if (counts.total === 0) {
     return (
       <>
-        <PageHeader title="Cruscotto" description={`Benvenuto in ${ctx.marinaName}.`} />
+        <PageHeader help="cruscotto" title="Cruscotto" description={`Benvenuto in ${ctx.marinaName}.`} />
         <div className="card">
           <EmptyState
             title="Il porto è ancora da configurare"
             description="Per iniziare servono i pontili con i posti barca e le tariffe. Poi potrai inserire clienti, barche e contratti."
             action={
               ctx.role === "admin" ? (
-                <ButtonLink href="/impostazioni/pontili" variant="primary">
-                  Configura pontili e posti
-                </ButtonLink>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <ButtonLink href="/guida#primi-passi">Leggi i primi passi</ButtonLink>
+                  <ButtonLink href="/impostazioni/pontili" variant="primary">
+                    Configura pontili e posti
+                  </ButtonLink>
+                </div>
               ) : undefined
             }
           />
@@ -115,7 +118,7 @@ export default page(async function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Cruscotto" description={<span className="inline-block first-letter:uppercase">{formatDateLong(today)}</span>} />
+      <PageHeader help="cruscotto" title="Cruscotto" description={<span className="inline-block first-letter:uppercase">{formatDateLong(today)}</span>} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat

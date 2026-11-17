@@ -27,7 +27,7 @@ export default page(async function ImportLedgerPage() {
 
   return (
     <>
-      <PageHeader
+      <PageHeader help="contabilita"
         title="Contabilità"
         description="Importa una prima nota tenuta in Excel. Prima di salvare vedi l'anteprima, con le righe da controllare e le correzioni proposte."
         back={{ href: "/contabilita/prima-nota", label: "Prima nota" }}

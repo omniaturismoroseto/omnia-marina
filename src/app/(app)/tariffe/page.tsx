@@ -84,7 +84,7 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
 
   return (
     <>
-      <PageHeader
+      <PageHeader help="tariffe"
         title="Tariffe"
         description="Listini per categoria di posto e stagione. Servono a proporre l'importo quando si crea un contratto: l'importo resta sempre modificabile."
       />

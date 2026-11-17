@@ -36,7 +36,7 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
 
   return (
     <>
-      <PageHeader title="Impostazioni" description="Pontili, banchine e posti barca: è la struttura che compare sulla mappa." />
+      <PageHeader help="impostazioni" title="Impostazioni" description="Pontili, banchine e posti barca: è la struttura che compare sulla mappa." />
       <SettingsTabs current="pontili" />
 
       {welcome && (

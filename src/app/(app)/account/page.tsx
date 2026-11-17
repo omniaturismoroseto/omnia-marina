@@ -11,7 +11,7 @@ export default page(async function AccountPage() {
   const ctx = await requireMarina();
   return (
     <>
-      <PageHeader title="Il mio account" />
+      <PageHeader help="account" title="Il mio account" />
       <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
         <Card title="Profilo">
           <Details

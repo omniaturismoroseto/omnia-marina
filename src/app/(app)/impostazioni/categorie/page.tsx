@@ -24,7 +24,7 @@ export default page(async function CategoriesPage() {
 
   return (
     <>
-      <PageHeader title="Impostazioni" description="Le categorie raggruppano i posti per dimensione: a ogni categoria corrisponde una riga del listino." />
+      <PageHeader help="impostazioni" title="Impostazioni" description="Le categorie raggruppano i posti per dimensione: a ogni categoria corrisponde una riga del listino." />
       <SettingsTabs current="categorie" />
       <div className="space-y-5">
         <Card title={`Categorie (${rows.length})`}>

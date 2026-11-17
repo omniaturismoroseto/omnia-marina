@@ -22,7 +22,7 @@ export default page(async function AuditPage() {
 
   return (
     <>
-      <PageHeader title="Impostazioni" description="Chi ha creato, modificato, esportato o cancellato dati personali e contabili. Sono mostrate le ultime 300 operazioni." />
+      <PageHeader help="impostazioni" title="Impostazioni" description="Chi ha creato, modificato, esportato o cancellato dati personali e contabili. Sono mostrate le ultime 300 operazioni." />
       <SettingsTabs current="registro" />
       <Card flush>
         {rows.length === 0 ? (

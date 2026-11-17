@@ -41,7 +41,7 @@ export default page(async function NewContractPage({ searchParams }: { searchPar
 
   return (
     <>
-      <PageHeader title="Nuovo contratto" description="Assegna un posto barca a un cliente per un periodo, con importo e scadenze di pagamento." back={{ href: "/contratti", label: "Contratti" }} />
+      <PageHeader help="contratti" title="Nuovo contratto" description="Assegna un posto barca a un cliente per un periodo, con importo e scadenze di pagamento." back={{ href: "/contratti", label: "Contratti" }} />
       {ownerList.length === 0 ? (
         <div className="card">
           <EmptyState

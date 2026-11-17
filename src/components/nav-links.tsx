@@ -8,6 +8,7 @@ import {
   Ellipsis,
   FileText,
   LayoutDashboard,
+  LifeBuoy,
   Map,
   Sailboat,
   Settings,
@@ -29,6 +30,7 @@ const ICONS = {
   contabilita: Wallet,
   tariffe: Tags,
   impostazioni: Settings,
+  guida: LifeBuoy,
 } satisfies Record<string, LucideIcon>;
 
 export type NavKey = keyof typeof ICONS;

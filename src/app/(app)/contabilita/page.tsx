@@ -31,7 +31,7 @@ export default page(async function ChargesPage({ searchParams }: { searchParams:
 
   return (
     <>
-      <PageHeader
+      <PageHeader help="contabilita"
         title="Contabilità"
         description="Addebiti ai clienti e relativi incassi. È una contabilità interna di gestione: non sostituisce la fatturazione elettronica."
         actions={

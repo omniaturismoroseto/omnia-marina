@@ -51,7 +51,7 @@ export default page(async function LedgerPage({ searchParams }: { searchParams: 
 
   return (
     <>
-      <PageHeader
+      <PageHeader help="contabilita"
         title="Contabilità"
         description="Prima nota: tutte le entrate e le uscite di cassa e banca, in ordine di data."
         actions={

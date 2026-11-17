@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, LifeBuoy } from "lucide-react";
 
 type Tone = "neutral" | "sea" | "ok" | "warn" | "bad" | "buoy";
 
@@ -22,11 +22,14 @@ export function PageHeader({
   description,
   actions,
   back,
+  help,
 }: {
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   back?: { href: string; label: string };
+  // Sezione della Guida che spiega la pagina (/guida#help).
+  help?: string;
 }) {
   return (
     <header className="mb-6">
@@ -38,7 +41,19 @@ export function PageHeader({
       )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="font-display text-[28px] leading-tight font-semibold text-ink sm:text-[32px]">{title}</h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h1 className="font-display text-[28px] leading-tight font-semibold text-ink sm:text-[32px]">{title}</h1>
+            {help && (
+              <Link
+                href={`/guida#${help}`}
+                className="no-print inline-flex items-center gap-1 rounded-full border border-line px-2.5 py-0.5 text-xs font-medium text-muted hover:border-sea hover:text-sea-dark"
+                title="Come si usa questa pagina"
+              >
+                <LifeBuoy size={13} aria-hidden="true" />
+                Guida
+              </Link>
+            )}
+          </div>
           {description && <p className="mt-1 max-w-2xl text-[15px] text-muted">{description}</p>}
         </div>
         {actions && <div className="no-print flex flex-wrap items-center gap-2">{actions}</div>}

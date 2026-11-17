@@ -56,7 +56,7 @@ export default page(async function BoatsPage({ searchParams }: { searchParams: S
 
   return (
     <>
-      <PageHeader
+      <PageHeader help="barche"
         title="Barche"
         description="Unità da diporto registrate, con dimensioni, proprietario e posto assegnato."
         actions={

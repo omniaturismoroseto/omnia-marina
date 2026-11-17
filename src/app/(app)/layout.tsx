@@ -23,6 +23,7 @@ const NAV: (NavItem & { roles: Role[] })[] = [
   { key: "contabilita", href: "/contabilita", label: "Contabilità", roles: ["admin", "ufficio"] },
   { key: "tariffe", href: "/tariffe", label: "Tariffe", roles: ["admin", "ufficio"] },
   { key: "impostazioni", href: "/impostazioni", label: "Impostazioni", roles: ["admin"] },
+  { key: "guida", href: "/guida", label: "Guida", roles: ["admin", "ufficio", "banchina"] },
 ];
 
 function LogoutButton({ className }: { className: string }) {

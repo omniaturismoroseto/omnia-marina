@@ -254,7 +254,7 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
 
   return (
     <>
-      <PageHeader
+      <PageHeader help="mappa"
         title="Mappa dei posti barca"
         description={date === today ? `Situazione di oggi, ${formatDateLong(today)}.` : `Posti assegnati il ${formatDateLong(date)}.`}
         actions={

@@ -83,7 +83,7 @@ export default page(async function ContractsPage({ searchParams }: { searchParam
 
   return (
     <>
-      <PageHeader
+      <PageHeader help="contratti"
         title="Contratti"
         description="Contratti di ormeggio annuali, stagionali, mensili e transiti."
         actions={

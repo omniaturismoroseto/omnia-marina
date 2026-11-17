@@ -75,7 +75,7 @@ export default page(async function OwnersPage({ searchParams }: { searchParams: 
 
   return (
     <>
-      <PageHeader
+      <PageHeader help="clienti"
         title="Clienti"
         description="Proprietari e intestatari dei posti barca, con dati di contatto e consensi privacy."
         actions={

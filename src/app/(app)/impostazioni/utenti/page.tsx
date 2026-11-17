@@ -22,7 +22,7 @@ export default page(async function UsersPage() {
 
   return (
     <>
-      <PageHeader title="Impostazioni" description="Chi può accedere al porto e con quale ruolo." />
+      <PageHeader help="impostazioni" title="Impostazioni" description="Chi può accedere al porto e con quale ruolo." />
       <SettingsTabs current="utenti" />
       <div className="space-y-5">
         <Card title={`Persone con accesso (${rows.length})`} flush>

@@ -32,6 +32,9 @@ lavorare per più porti con ruoli diversi.
 - **Contabilità interna** – scadenziario, incassi anche parziali, prima nota di cassa e banca, riepilogo annuale,
   esportazione CSV per il commercialista. Non sostituisce la fatturazione elettronica.
 
+La **Guida** (voce di menu per tutti) spiega in poche righe pratiche ogni sezione, secondo il ruolo di chi la apre; ogni
+pagina principale ha accanto al titolo il collegamento alla parte giusta. Si stampa o si salva in PDF dalla pagina stessa.
+
 Ogni porto può caricare il **logo della propria società di gestione** (Impostazioni → Porto): compare nel menu accanto al
 nome del porto e in testa al contratto e all'informativa privacy stampati.
 

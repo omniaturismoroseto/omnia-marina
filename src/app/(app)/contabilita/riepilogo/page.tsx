@@ -135,7 +135,7 @@ export default page(async function SummaryPage({ searchParams }: { searchParams:
 
   return (
     <>
-      <PageHeader
+      <PageHeader help="contabilita"
         title="Contabilità"
         description="Riepilogo dell'anno: entrate e uscite registrate in prima nota e crediti ancora da incassare."
         actions={

@@ -20,7 +20,7 @@ export default page(async function ImportOwnersPage() {
 
   return (
     <>
-      <PageHeader
+      <PageHeader help="clienti"
         title="Importa clienti"
         description="Carica l'elenco dei clienti e delle barche tenuto in Excel. Prima di salvare vedi l'anteprima: doppioni uniti, clienti già presenti, dati da correggere."
         back={{ href: "/clienti", label: "Clienti" }}

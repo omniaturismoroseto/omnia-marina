@@ -1,0 +1,325 @@
+import type { Role } from "@/db/schema";
+
+// Testi della Guida (/guida): poche istruzioni pratiche per sezione, mostrate secondo il ruolo.
+// Nei testi i nomi di pulsanti, campi e pagine stanno tra «»: la pagina li mette in evidenza.
+// Quando cambia un pulsante o un percorso dell'app, aggiornare anche qui.
+
+export type GuideIcon = "start" | "dashboard" | "dock" | "map" | "owners" | "boats" | "contracts" | "accounting" | "tariffs" | "settings" | "account" | "help";
+
+export interface GuideSection {
+  id: string; // ancora: /guida#id
+  title: string;
+  icon: GuideIcon;
+  roles: Role[];
+  purpose: string; // a cosa serve, in una riga
+  steps: { title: string; items: string[] }[];
+  tips?: string[];
+  link?: { href: string; label: string };
+}
+
+const ALL: Role[] = ["admin", "ufficio", "banchina"];
+const OFFICE: Role[] = ["admin", "ufficio"];
+const ADMIN: Role[] = ["admin"];
+
+export const GUIDE: GuideSection[] = [
+  {
+    id: "primi-passi",
+    title: "Primi passi: preparare il porto",
+    icon: "start",
+    roles: ADMIN,
+    purpose: "L'ordine giusto per mettere in funzione l'app la prima volta. Ogni passo serve a quello dopo.",
+    steps: [
+      {
+        title: "In quest'ordine",
+        items: [
+          "«Impostazioni» → «Porto»: dati della società, aliquota IVA abituale, logo della società di gestione, testi del contratto e dell'informativa privacy.",
+          "«Impostazioni» → «Categorie»: le classi dei posti per misura (es. fino a 8 m, fino a 10 m…). A ogni categoria corrisponde una riga di prezzi.",
+          "«Impostazioni» → «Pontili e posti»: crea pontili e banchine, poi «Aggiungi posti» in serie (es. da A1 ad A20) con categoria e misure.",
+          "«Tariffe»: crea il listino dell'anno con i prezzi per categoria, le stagioni, i servizi e le cauzioni.",
+          "«Impostazioni» → «Utenti»: aggiungi chi lavora in porto, con il ruolo giusto e una password provvisoria.",
+          "«Clienti» → «Importa da Excel»: carica l'elenco dei clienti e delle barche che avete già. Poi crea i contratti.",
+        ],
+      },
+    ],
+    tips: [
+      "La «Pianta dal vero» (foto aerea con i posti disegnati sopra) è facoltativa: la mappa funziona anche con lo schema dei pontili.",
+      "I testi di contratto e informativa sono modelli: falli controllare dal vostro consulente prima di usarli.",
+    ],
+    link: { href: "/impostazioni", label: "Apri le impostazioni" },
+  },
+  {
+    id: "cruscotto",
+    title: "Cruscotto",
+    icon: "dashboard",
+    roles: OFFICE,
+    purpose: "La situazione del porto a colpo d'occhio, ogni mattina.",
+    steps: [
+      {
+        title: "Cosa guardare",
+        items: [
+          "In alto: posti occupati, movimenti attesi oggi e importi scaduti da incassare. Tocca un riquadro per aprire il dettaglio.",
+          "«Da tenere d'occhio»: addebiti scaduti, contratti in bozza da attivare, contratti in scadenza, assicurazioni scadute, clienti senza informativa firmata, segnalazioni aperte, numeri di contratto rimasti liberi.",
+          "«Banchina oggi», «Prossimi incassi» e «Occupazione per pontile» completano il quadro.",
+        ],
+      },
+    ],
+    tips: ["Quando una voce di «Da tenere d'occhio» è risolta, sparisce da sola."],
+    link: { href: "/", label: "Apri il cruscotto" },
+  },
+  {
+    id: "banchina",
+    title: "Banchina",
+    icon: "dock",
+    roles: ALL,
+    purpose: "La pagina per il telefono di chi lavora in banchina: arrivi, uscite, partenze e segnalazioni del giorno.",
+    steps: [
+      {
+        title: "Arrivi e partenze",
+        items: [
+          "Quando arriva una barca attesa, tocca «Registra arrivo».",
+          "Se esce per una giornata in mare, tocca «Uscita in mare»; al ritorno «Registra rientro». Il posto resta suo.",
+          "L'ultimo giorno del contratto tocca «Registra partenza»: il contratto si chiude e il posto torna libero.",
+          "Se la barca va via per sempre prima della scadenza usa «Partenza anticipata» (chiede conferma).",
+        ],
+      },
+      {
+        title: "Segnalazioni",
+        items: [
+          "«Nuova segnalazione»: scegli posto barca, tipo (manutenzione, servizio richiesto…) e priorità, e scrivi cosa succede.",
+          "Quando è risolta, «Chiudi segnalazione», con una nota facoltativa su com'è andata.",
+        ],
+      },
+    ],
+    tips: [
+      "«Saldo da regolare in ufficio» accanto a una barca: il cliente ha importi da pagare, mandalo in ufficio.",
+      "Sul telefono puoi aggiungere l'app alla schermata Home dal menu del browser («Aggiungi a schermata Home»): si apre come un'app.",
+    ],
+    link: { href: "/banchina", label: "Apri la banchina" },
+  },
+  {
+    id: "mappa",
+    title: "Mappa dei posti barca",
+    icon: "map",
+    roles: ALL,
+    purpose: "Ogni posto con il suo stato: libero, occupato, barca fuori, in arrivo, in partenza, oltre scadenza, non disponibile.",
+    steps: [
+      {
+        title: "Come si usa",
+        items: [
+          "Tocca un posto per vedere barca, proprietario, telefono, contratto e prossime assegnazioni.",
+          "Cambia la data in alto per vedere il porto in un altro giorno (per esempio a ferragosto).",
+          "Passa da «Schema» a «Pianta dal vero» per vedere i posti sopra la foto aerea, se è stata caricata.",
+          "Su un posto libero l'ufficio trova «Assegna il posto»: apre un contratto nuovo già con posto e data.",
+        ],
+      },
+    ],
+    tips: ["Un posto in manutenzione o fuori servizio si imposta da «Impostazioni» → «Pontili e posti», toccando il posto."],
+    link: { href: "/mappa", label: "Apri la mappa" },
+  },
+  {
+    id: "clienti",
+    title: "Clienti",
+    icon: "owners",
+    roles: OFFICE,
+    purpose: "L'anagrafica dei proprietari: dati, barche, contratti, estratto conto e privacy.",
+    steps: [
+      {
+        title: "Inserire i clienti",
+        items: [
+          "Uno alla volta: «Nuovo cliente», persona fisica o azienda.",
+          "Tutti insieme da un file Excel: «Importa da Excel». Vedi l'anteprima prima di salvare: doppioni uniti, clienti già presenti (si completano solo i campi vuoti), righe da correggere o escludere. Un'importazione si può annullare.",
+        ],
+      },
+      {
+        title: "Nella scheda del cliente",
+        items: [
+          "«Aggiungi barca» e «Nuovo contratto» partono già con il cliente scelto.",
+          "Privacy: stampa l'informativa, falla firmare e registra i consensi nella scheda.",
+          "«Estratto conto»: addebiti e incassi del cliente.",
+          "Chi non ha più un contratto attivo si può spostare nella categoria «Ex cliente»: esce dall'elenco normale ma resta consultabile nella sua linguetta. Se torna con un nuovo contratto, esce da solo dalla categoria.",
+        ],
+      },
+    ],
+    tips: [
+      "Su richiesta del cliente: «Esportazione completa dei dati» oppure «Anonimizza i dati personali» (contratti e contabilità restano, ma non più riconducibili a lui).",
+      "Il nome della categoria «Ex cliente» si cambia in «Impostazioni» → «Porto».",
+    ],
+    link: { href: "/clienti", label: "Apri i clienti" },
+  },
+  {
+    id: "barche",
+    title: "Barche",
+    icon: "boats",
+    roles: ALL,
+    purpose: "Le unità da diporto, con misure, proprietario, assicurazione e posto assegnato.",
+    steps: [
+      {
+        title: "Come si usa",
+        items: [
+          "Ogni barca appartiene a un cliente: si aggiunge dalla scheda del cliente («Aggiungi barca») o da «Barche» → «Nuova barca».",
+          "Lunghezza fuori tutto e larghezza massima sono obbligatorie: servono a proporre solo i posti in cui la barca entra.",
+          "Inserisci compagnia, polizza e scadenza dell'assicurazione: le scadenze compaiono nel cruscotto.",
+          "La scheda della barca mostra contratto, posto e ultimi movimenti in banchina.",
+        ],
+      },
+    ],
+    tips: ["Le misure si scrivono in metri, con la virgola (es. 9,50).", "L'operatore di banchina consulta le barche ma non le modifica."],
+    link: { href: "/barche", label: "Apri le barche" },
+  },
+  {
+    id: "contratti",
+    title: "Contratti",
+    icon: "contracts",
+    roles: OFFICE,
+    purpose: "Assegnare un posto a una barca per un periodo, con importo, rate e stampa del contratto.",
+    steps: [
+      {
+        title: "Creare un contratto",
+        items: [
+          "«Nuovo contratto»: scegli cliente, barca, tipo (annuale, stagionale, mensile, transito) e date.",
+          "L'app propone solo i posti liberi in cui la barca entra e calcola l'importo dal listino. L'importo resta modificabile.",
+          "Salvato, il contratto è una bozza: non ha numero e in stampa porta la scritta «BOZZA». Si modifica con «Modifica».",
+          "In «Altri spazi e spese» aggiungi spazio a terra, posti auto, carrello, spese fisse e i servizi o le cauzioni del listino. Accanto alle date, la casella «Annuale» copre l'anno intero.",
+        ],
+      },
+      {
+        title: "Attivare e stampare",
+        items: [
+          "«Attiva il contratto»: scegli il numero di rate, la scadenza della prima e la cadenza. Il contratto prende il numero e nascono gli addebiti nello scadenziario.",
+          "«Stampa» apre il contratto pronto da firmare; per avere il file scegli «Salva come PDF» nella finestra di stampa. Poi segna la data in «Firmato il».",
+        ],
+      },
+      {
+        title: "Correggere o chiudere",
+        items: [
+          "Errore su un contratto attivo: «Torna in bozza», correggi e riattiva. Il numero liberato viene segnalato e lo riprende il primo contratto attivato.",
+          "«Annulla il contratto»: il posto torna libero e gli addebiti non incassati vengono annullati.",
+          "Il contratto si chiude quando in banchina si registra la partenza della barca.",
+        ],
+      },
+    ],
+    tips: ["I numeri dei contratti sono progressivi per anno e senza buchi: per questo le bozze non hanno numero."],
+    link: { href: "/contratti", label: "Apri i contratti" },
+  },
+  {
+    id: "contabilita",
+    title: "Contabilità",
+    icon: "accounting",
+    roles: OFFICE,
+    purpose: "Quanto devono i clienti, quanto è stato incassato e le entrate e uscite di cassa e banca. Non sostituisce la fatturazione elettronica.",
+    steps: [
+      {
+        title: "Scadenziario e incassi",
+        items: [
+          "Le rate dei contratti compaiono da sole. Per altri importi (servizi, utenze…) usa «Nuovo addebito».",
+          "Apri un addebito e premi «Registra incasso»: data, importo (anche parziale) e metodo di pagamento.",
+          "Ogni incasso finisce da solo in prima nota: i contanti in cassa, tutto il resto in banca.",
+          "Incasso sbagliato? «Storna» lo toglie anche dalla prima nota.",
+        ],
+      },
+      {
+        title: "Prima nota e riepilogo",
+        items: [
+          "«Prima nota»: entrate e uscite di cassa e banca mese per mese. «Registra movimento» per spese e altre entrate che non sono addebiti.",
+          "Se tenevate la prima nota in Excel, importala con «Importa da Excel», con anteprima e annullamento.",
+          "«Riepilogo»: l'anno mese per mese, con i crediti ancora da incassare.",
+          "«Esporta CSV» salva scadenziario o prima nota in un file per il commercialista, che si apre con Excel.",
+        ],
+      },
+    ],
+    link: { href: "/contabilita", label: "Apri la contabilità" },
+  },
+  {
+    id: "tariffe",
+    title: "Tariffe",
+    icon: "tariffs",
+    roles: OFFICE,
+    purpose: "I listini dei prezzi: servono a proporre l'importo dei contratti, che resta sempre modificabile.",
+    steps: [
+      {
+        title: "Come si usa",
+        items: [
+          "Un listino ha un periodo di validità e i prezzi per ogni categoria di posto e tipo di contratto (annuale, stagionale, mensile, transito).",
+          "«Stagioni»: indica i periodi di media e alta stagione; il resto dell'anno è bassa stagione.",
+          "«Zone tariffarie»: se una darsena costa di più, crea una zona con i suoi prezzi e assegnala ai pontili. I campi lasciati vuoti usano la tariffa base.",
+          "«Servizi e cauzioni»: le voci a prezzo fisso da aggiungere ai contratti; le cauzioni senza IVA.",
+          "«Simulatore»: prova quanto costa un posto per una barca e un periodo.",
+        ],
+      },
+    ],
+    tips: ["L'ufficio consulta le tariffe; le modifica solo la direzione."],
+    link: { href: "/tariffe", label: "Apri le tariffe" },
+  },
+  {
+    id: "impostazioni",
+    title: "Impostazioni",
+    icon: "settings",
+    roles: ADMIN,
+    purpose: "Dati del porto, struttura dei pontili, categorie, persone che lavorano in porto e registro delle operazioni.",
+    steps: [
+      {
+        title: "Le linguette",
+        items: [
+          "«Porto»: dati della società, logo della società di gestione (compare nel menu e nelle stampe), spese di gestione e quota rifiuti, nome della categoria «Ex cliente», testi del contratto e dell'informativa.",
+          "«Pontili e posti»: pontili, banchine e posti. Tocca un posto per cambiarne misure, categoria o stato (in servizio, in manutenzione, fuori servizio).",
+          "«Pianta dal vero»: carica la foto aerea, imposta la scala misurando una distanza nota, poi disponi i posti. «Riconoscimento automatico» propone pontili e banchine dalla foto.",
+          "«Categorie»: le classi dei posti per misura.",
+          "«Utenti»: aggiungi persone, cambia il ruolo, reimposta la password.",
+          "«Registro»: chi ha creato, modificato, esportato o cancellato dati personali e contabili.",
+        ],
+      },
+      {
+        title: "I ruoli",
+        items: [
+          "Direzione: tutto, comprese impostazioni, tariffe e utenti.",
+          "Ufficio: clienti, barche, contratti e contabilità.",
+          "Operatore di banchina: mappa, arrivi e partenze, segnalazioni; vede solo nome e telefono del proprietario e nessun dato contabile.",
+        ],
+      },
+    ],
+    link: { href: "/impostazioni", label: "Apri le impostazioni" },
+  },
+  {
+    id: "account",
+    title: "Il mio account",
+    icon: "account",
+    roles: ALL,
+    purpose: "Il tuo nome e la tua password.",
+    steps: [
+      {
+        title: "Come si usa",
+        items: [
+          "Tocca il tuo nome in fondo al menu (sul telefono: «Altro» → «Il mio account»).",
+          "Al primo accesso cambia la password provvisoria con una tua, di almeno 10 caratteri.",
+          "Password dimenticata: chiedi alla direzione di reimpostarla da «Impostazioni» → «Utenti».",
+        ],
+      },
+    ],
+    tips: ["Chi lavora in più porti trova «Cambia porto» nel menu."],
+    link: { href: "/account", label: "Apri il mio account" },
+  },
+  {
+    id: "problemi",
+    title: "Se qualcosa va storto",
+    icon: "help",
+    roles: ALL,
+    purpose: "Le correzioni più comuni.",
+    steps: [
+      {
+        title: "Casi frequenti",
+        items: [
+          "Ho registrato un'uscita in mare per sbaglio: registra subito il rientro (e viceversa).",
+          "Ho registrato una partenza per sbaglio: la partenza chiude il contratto e non si annulla. Avvisa subito l'ufficio.",
+          "Ho registrato un incasso sbagliato: apri l'addebito e premi «Storna», poi registralo di nuovo.",
+          "Ho attivato un contratto con un errore: «Torna in bozza», correggi e riattiva.",
+          "Una pagina mostra dati vecchi: ricarica la pagina.",
+          "Non trovo una sezione nel menu: non è prevista per il tuo ruolo. Se ti serve, chiedi alla direzione di cambiarlo.",
+        ],
+      },
+    ],
+  },
+];
+
+export function guideFor(role: Role): GuideSection[] {
+  return GUIDE.filter((s) => s.roles.includes(role));
+}

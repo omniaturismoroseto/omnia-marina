@@ -84,7 +84,7 @@ export default page(async function DockPage() {
 
   return (
     <>
-      <PageHeader
+      <PageHeader help="banchina"
         title="Banchina"
         description={
           <>
