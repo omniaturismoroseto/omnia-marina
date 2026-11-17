@@ -7,12 +7,14 @@ import { z } from "zod";
 import { db } from "@/db";
 import { berthCategories, berths, marinas, memberships, piers, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
-import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { requireMarina, requireUser } from "@/lib/context";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
 import { ROLE_LABEL } from "@/lib/labels";
 import { berthSlots } from "@/lib/plan";
+import { checkPassword, createAccount, setPassword } from "./credentials";
 import { toFormState } from "./errors";
+
+const ACCOUNT_SERVICE_DOWN = "Il servizio di accesso non risponde: riprova tra qualche minuto.";
 
 const ADMIN = ["admin" as const];
 const password = (message = "Almeno 10 caratteri") => z.preprocess((v) => (typeof v === "string" ? v : ""), z.string().min(10, message).max(200));
@@ -320,12 +322,16 @@ export async function addMember(_prev: FormState, formData: FormData): Promise<F
     return { ok: true, message: "L'email aveva già un account: è stata collegata al porto e accede con la password che già usa." };
   }
 
-  const passwordHash = await hashPassword(d.password);
-  await db.transaction(async (tx) => {
-    const [user] = await tx.insert(users).values({ email: d.email, name: d.name, passwordHash }).returning({ id: users.id });
-    await tx.insert(memberships).values({ userId: user.id, marinaId: ctx.marinaId, role: d.role });
-    await audit(ctx, "aggiunta utente", "utente", user.id, `${d.email} · ${ROLE_LABEL[d.role]}`, tx);
-  });
+  try {
+    await db.transaction(async (tx) => {
+      const userId = await createAccount(tx, { email: d.email, name: d.name, password: d.password });
+      await tx.insert(memberships).values({ userId, marinaId: ctx.marinaId, role: d.role });
+      await audit(ctx, "aggiunta utente", "utente", userId, `${d.email} · ${ROLE_LABEL[d.role]}`, tx);
+    });
+  } catch (error) {
+    console.error("Creazione dell'account non riuscita", error);
+    return fail(ACCOUNT_SERVICE_DOWN);
+  }
   revalidatePath("/", "layout");
   return { ok: true, message: "Utente creato. Comunicagli la password provvisoria: potrà cambiarla dal proprio account." };
 }
@@ -392,10 +398,12 @@ export async function resetMemberPassword(_prev: FormState, formData: FormData):
     .where(and(eq(memberships.userId, m.userId), ne(memberships.marinaId, ctx.marinaId)));
   if (elsewhere > 0) return fail("Questa persona lavora anche per altri porti: deve cambiare la password dal proprio account.");
 
-  await db
-    .update(users)
-    .set({ passwordHash: await hashPassword(parsed.data.password) })
-    .where(eq(users.id, m.userId));
+  try {
+    await setPassword(m.userId, parsed.data.password);
+  } catch (error) {
+    console.error("Reimpostazione della password non riuscita", error);
+    return fail(ACCOUNT_SERVICE_DOWN);
+  }
   // Chiude le sessioni aperte dell'utente (tranne quella di chi sta operando, se è lui stesso).
   await db.execute(sql`delete from sessions where user_id = ${m.userId} and id <> ${ctx.sessionId}`);
   await audit(ctx, "reimpostazione password", "utente", m.userId);
@@ -411,14 +419,15 @@ export async function changeOwnPassword(_prev: FormState, formData: FormData): P
   const ctx = await requireUser();
   const parsed = parseForm(ownPasswordSchema, formData);
   if (!parsed.ok) return parsed.state;
-  const [user] = await db.select().from(users).where(eq(users.id, ctx.user.id)).limit(1);
-  if (!user || !(await verifyPassword(parsed.data.current, user.passwordHash))) {
+  if (!(await checkPassword(ctx.user.id, parsed.data.current))) {
     return fail("Controlla i campi evidenziati.", { current: "Password attuale non corretta." });
   }
-  await db
-    .update(users)
-    .set({ passwordHash: await hashPassword(parsed.data.password) })
-    .where(eq(users.id, user.id));
-  await db.execute(sql`delete from sessions where user_id = ${user.id} and id <> ${ctx.sessionId}`);
+  try {
+    await setPassword(ctx.user.id, parsed.data.password);
+  } catch (error) {
+    console.error("Cambio della password non riuscito", error);
+    return fail(ACCOUNT_SERVICE_DOWN);
+  }
+  await db.execute(sql`delete from sessions where user_id = ${ctx.user.id} and id <> ${ctx.sessionId}`);
   return { ok: true, message: "Password aggiornata. Le altre sessioni aperte sono state chiuse." };
 }

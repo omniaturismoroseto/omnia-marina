@@ -92,6 +92,13 @@
       "when": 1794832917949,
       "tag": "0012_clienti_ex_e_importazioni",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794948546443,
+      "tag": "0013_accesso_firebase",
+      "breakpoints": true
     }
   ]
 }

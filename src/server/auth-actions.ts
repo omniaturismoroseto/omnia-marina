@@ -5,11 +5,11 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { memberships, users } from "@/db/schema";
-import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { createSession, destroySession, setSessionMarina } from "@/lib/auth/session";
 import { homeFor, requireUser } from "@/lib/context";
 import { todayRome, yearOf } from "@/lib/dates";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { createAccount, requestPasswordReset as sendPasswordReset, verifyLogin } from "./credentials";
 import { createMarinaWithDefaults } from "./marina-setup";
 
 function signupAllowed(): boolean {
@@ -42,16 +42,42 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
 
   if (tooManyAttempts(email)) return fail("Troppi tentativi. Riprova tra qualche minuto.");
 
-  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    recordFailure(email);
-    return fail("Email o password non corretti.");
+  const result = await verifyLogin(email, password);
+  if (!result.ok) {
+    if (result.reason === "credentials") {
+      recordFailure(email);
+      return fail("Email o password non corretti.");
+    }
+    if (result.reason === "disabled") return fail("Questo account è stato disattivato. Rivolgiti alla direzione del porto.");
+    if (result.reason === "throttled") return fail("Troppi tentativi. Riprova tra qualche minuto, oppure scegli una nuova password con «Password dimenticata?».");
+    return fail("Il servizio di accesso non risponde. Riprova tra qualche minuto.");
   }
   attempts.delete(email);
 
-  const mems = await db.select({ marinaId: memberships.marinaId, role: memberships.role }).from(memberships).where(eq(memberships.userId, user.id));
-  await createSession(user.id, mems.length === 1 ? mems[0].marinaId : null);
+  const mems = await db.select({ marinaId: memberships.marinaId, role: memberships.role }).from(memberships).where(eq(memberships.userId, result.userId));
+  await createSession(result.userId, mems.length === 1 ? mems[0].marinaId : null);
   redirect(mems.length === 1 ? homeFor(mems[0].role) : "/porti");
+}
+
+// Freno alle richieste di «password dimenticata»: al massimo 3 email per indirizzo ogni 15 minuti.
+const resetRequests = new Map<string, { count: number; resetAt: number }>();
+
+const resetSchema = z.object({ email: f.email() });
+
+export async function requestPasswordReset(_prev: FormState, formData: FormData): Promise<FormState> {
+  const parsed = parseForm(resetSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const { email } = parsed.data;
+  const now = Date.now();
+  const entry = resetRequests.get(email);
+  if (!entry || entry.resetAt <= now) resetRequests.set(email, { count: 1, resetAt: now + WINDOW_MS });
+  else entry.count++;
+  if ((resetRequests.get(email)?.count ?? 0) <= 3) await sendPasswordReset(email);
+  // Stessa risposta in ogni caso: non si rivela se l'email ha un account.
+  return {
+    ok: true,
+    message: "Se l'indirizzo ha un account, tra poco riceverai un'email con il collegamento per scegliere una nuova password. Controlla anche la posta indesiderata.",
+  };
 }
 
 export async function logout(): Promise<void> {
@@ -75,12 +101,18 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
   if (existing) return fail("Controlla i campi evidenziati.", { email: "Esiste già un account con questa email: accedi." });
 
-  const passwordHash = await hashPassword(password);
-  const { userId, marinaId } = await db.transaction(async (tx) => {
-    const [user] = await tx.insert(users).values({ email, name, passwordHash }).returning({ id: users.id });
-    const marinaId = await createMarinaWithDefaults(tx, { name: marinaName, userId: user.id, year: yearOf(todayRome()) });
-    return { userId: user.id, marinaId };
-  });
+  let created: { userId: string; marinaId: string };
+  try {
+    created = await db.transaction(async (tx) => {
+      const userId = await createAccount(tx, { email, name, password });
+      const marinaId = await createMarinaWithDefaults(tx, { name: marinaName, userId, year: yearOf(todayRome()) });
+      return { userId, marinaId };
+    });
+  } catch (error) {
+    console.error("Registrazione non riuscita", error);
+    return fail("Il servizio di accesso non risponde: riprova tra qualche minuto.");
+  }
+  const { userId, marinaId } = created;
 
   await createSession(userId, marinaId);
   redirect("/impostazioni/pontili?benvenuto=1");

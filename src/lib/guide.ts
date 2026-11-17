@@ -293,7 +293,7 @@ export const GUIDE: GuideSection[] = [
         items: [
           "Tocca il tuo nome in fondo al menu (sul telefono: «Altro» → «Il mio account»).",
           "Al primo accesso cambia la password provvisoria con una tua, di almeno 10 caratteri.",
-          "Password dimenticata: chiedi alla direzione di reimpostarla da «Impostazioni» → «Utenti».",
+          "Password dimenticata: nella pagina di accesso tocca «Password dimenticata?» e scrivi la tua email. Ti arriva un collegamento per sceglierne una nuova (guarda anche nella posta indesiderata). In alternativa la direzione può darti una password provvisoria da «Impostazioni» → «Utenti».",
         ],
       },
     ],
