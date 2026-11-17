@@ -8,7 +8,8 @@ import { marinas } from "@/db/schema";
 import { requireMarina } from "@/lib/context";
 import { portLogo } from "@/lib/logo";
 import { LogoUploader } from "./logo-uploader";
-import { LegalTextsForm, MarinaForm } from "./settings-forms";
+import { formatCoordinates } from "@/lib/weather";
+import { BoaterSettingsForm, LegalTextsForm, MarinaForm } from "./settings-forms";
 import { SettingsTabs } from "./tabs";
 
 export const metadata: Metadata = { title: "Impostazioni" };
@@ -43,6 +44,15 @@ export default page(async function SettingsPage() {
               <LogoUploader hasLogo={logo !== null} />
             </div>
           </div>
+        </Card>
+        <Card title="Area diportisti e meteo">
+          <BoaterSettingsForm
+            officeHours={marina.officeHours ?? ""}
+            boaterInfo={marina.boaterInfo ?? ""}
+            coordinates={formatCoordinates(marina.latitude, marina.longitude)}
+            windAlertKnots={marina.windAlertKnots}
+            windAlertAuto={marina.windAlertAuto}
+          />
         </Card>
         <Card title="Privacy e condizioni di contratto">
           <div className="mb-4">

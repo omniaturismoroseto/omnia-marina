@@ -21,8 +21,8 @@ successive (contratto, pagamenti, documenti, telecamere).
 
 ## Percorsi
 
-Stato: passo 1 (Firebase e «Password dimenticata?») e passo 2 (inviti, attivazione, revoca) **fatti**. Passo 3: la
-prima pagina vera dell'area («La mia barca», contratto e scadenze).
+Stato: passo 1 (Firebase e «Password dimenticata?») e passo 2 (inviti, attivazione, revoca) **fatti**, e la prima
+versione dell'area (vedi «Funzioni dell'area» in fondo).
 
 ### 1. L'ufficio invita
 Scheda cliente → **«Accesso all'app»** → «Invita una persona»: un nome (il titolare è proposto dalla scheda; si può
@@ -110,3 +110,23 @@ Il porto non invia altre email: l'invito viaggia con il codice.
 3. Authentication → Modelli: lingua italiana, nome mittente «Omnia Marina».
 4. Authentication → Impostazioni → Domini autorizzati: aggiungere l'indirizzo dell'app su Cloud Run.
 5. Impostazioni progetto → copiare la chiave web pubblica, che diventa una variabile di Cloud Run.
+
+## Funzioni dell'area
+
+Fatte (prima versione):
+- **La mia barca** (`/diportista`): posto e pontile, contratto attivo da scaricare (stesso documento della stampa
+  dell'ufficio), scadenze (rate da pagare, fine contratto entro 60 giorni, assicurazione entro 30), barche, contatti e
+  orari del porto, informazioni utili, contratti passati. **Estratto conto** su `/diportista/conto`.
+- **Messaggi** (`/messaggi` per il personale, `/diportista/messaggi` per il diportista): a un cliente, a un pontile,
+  a un tipo di contratto, a chi è in porto o a tutti; urgenti in evidenza finché non letti; chi ha letto e quando;
+  notifiche web push (chiavi VAPID, vedi COME-LAVORIAMO.md).
+- **Meteo** (`/diportista/meteo` e cruscotto): vento, raffiche, onda da Open-Meteo; allerta vento oltre la soglia,
+  da inviare con un clic o in automatico ogni 3 ore (Cloud Scheduler).
+
+In lista per dopo:
+- Richieste e segnalazioni dal diportista (con foto), collegate alle segnalazioni della banchina.
+- «Esco in mare / rientro alle…» e assenze lunghe (posto libero per i transiti).
+- Promemoria automatici delle scadenze (rate, assicurazione) come notifiche.
+- Caricamento della nuova polizza dal telefono.
+- Pagamento online, prenotazione dei servizi, ospiti.
+- Telecamere (da decidere: condivisione DMSS oppure piccolo computer in porto con go2rtc e tunnel sicuro).

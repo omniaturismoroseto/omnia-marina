@@ -4,7 +4,7 @@ import { auditLog } from "@/db/schema";
 
 export async function audit(
   // Chi agisce: il personale del porto o, nell'area diportista, il diportista stesso.
-  ctx: { marinaId: string; user: { id: string } },
+  ctx: { marinaId: string; user: { id: string | null } },
   action: string,
   entity: string,
   entityId: string | null,

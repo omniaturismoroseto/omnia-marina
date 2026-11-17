@@ -15,6 +15,7 @@ import {
   removeMember,
   resetMemberPassword,
   saveBerth,
+  saveBoaterSettings,
   saveCategory,
   saveLegalTexts,
   saveMarina,
@@ -95,6 +96,60 @@ function RestoreTemplate({ field, text }: { field: string; text: string }) {
     >
       Usa il testo modello
     </button>
+  );
+}
+
+export function BoaterSettingsForm({
+  officeHours,
+  boaterInfo,
+  coordinates,
+  windAlertKnots,
+  windAlertAuto,
+}: {
+  officeHours: string;
+  boaterInfo: string;
+  coordinates: string;
+  windAlertKnots: number;
+  windAlertAuto: boolean;
+}) {
+  return (
+    <Form action={saveBoaterSettings} className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <TextareaField
+          name="officeHours"
+          label="Orari dell'ufficio"
+          defaultValue={officeHours}
+          rows={3}
+          placeholder={"Lun-sab 8:30-12:30 e 15:00-18:00\nDomenica chiuso"}
+        />
+        <TextareaField
+          name="boaterInfo"
+          label="Informazioni per i diportisti"
+          defaultValue={boaterInfo}
+          rows={3}
+          hint="Servizi, numeri utili, regole principali. Compare nell'area diportista."
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Field
+          name="coordinates"
+          label="Posizione del porto"
+          defaultValue={coordinates}
+          placeholder="42.65890, 14.02560"
+          hint="Su Google Maps: tasto destro (o tieni premuto) sul porto e copia i numeri."
+          wrapperClassName="sm:col-span-2"
+        />
+        <Field name="windAlertKnots" label="Allerta vento oltre (nodi)" defaultValue={String(windAlertKnots)} inputMode="numeric" hint="Raffiche previste." />
+      </div>
+      <CheckboxField
+        name="windAlertAuto"
+        label="Invia l'allerta vento da sola"
+        defaultChecked={windAlertAuto}
+        hint="Se spento, l'allerta compare nel cruscotto e la invii tu con un clic. L'invio automatico richiede il controllo periodico (vedi la guida)."
+      />
+      <FormMessage />
+      <Submit>Salva</Submit>
+    </Form>
   );
 }
 

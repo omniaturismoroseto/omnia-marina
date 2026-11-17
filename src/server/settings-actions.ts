@@ -11,6 +11,7 @@ import { requireMarina, requireUser } from "@/lib/context";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
 import { ROLE_LABEL } from "@/lib/labels";
 import { berthSlots } from "@/lib/plan";
+import { parseCoordinates } from "@/lib/weather";
 import { checkPassword, createAccount, setPassword } from "./credentials";
 import { toFormState } from "./errors";
 
@@ -50,6 +51,33 @@ export async function saveMarina(_prev: FormState, formData: FormData): Promise<
   await audit(ctx, "modifica", "porto", ctx.marinaId, "Dati del porto");
   revalidatePath("/", "layout");
   return { ok: true, message: "Dati salvati." };
+}
+
+const boaterSettingsSchema = z.object({
+  officeHours: f.optText(),
+  boaterInfo: f.optText(),
+  coordinates: f.optText(),
+  windAlertKnots: f.int(10, 80, "Scegli una soglia tra 10 e 80 nodi"),
+  windAlertAuto: f.checkbox(),
+});
+
+// Area diportisti e meteo: orari, informazioni utili, posizione del porto e allerta vento.
+export async function saveBoaterSettings(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = parseForm(boaterSettingsSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const { coordinates, ...data } = parsed.data;
+  const position = coordinates ? parseCoordinates(coordinates) : null;
+  if (coordinates && !position) {
+    return fail("Controlla i campi evidenziati.", { coordinates: "Scrivi latitudine e longitudine, per esempio 42.6589, 14.0256" });
+  }
+  await db
+    .update(marinas)
+    .set({ ...data, latitude: position?.latitude ?? null, longitude: position?.longitude ?? null })
+    .where(eq(marinas.id, ctx.marinaId));
+  await audit(ctx, "modifica", "porto", ctx.marinaId, "Area diportisti e meteo");
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Impostazioni salvate." };
 }
 
 const textsSchema = z.object({

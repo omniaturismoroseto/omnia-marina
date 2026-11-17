@@ -4,7 +4,7 @@ import type { Role } from "@/db/schema";
 // Nei testi i nomi di pulsanti, campi e pagine stanno tra «»: la pagina li mette in evidenza.
 // Quando cambia un pulsante o un percorso dell'app, aggiornare anche qui.
 
-export type GuideIcon = "start" | "dashboard" | "dock" | "map" | "owners" | "boats" | "contracts" | "accounting" | "tariffs" | "settings" | "account" | "help";
+export type GuideIcon = "start" | "dashboard" | "dock" | "map" | "owners" | "boats" | "contracts" | "messages" | "accounting" | "tariffs" | "settings" | "account" | "help";
 
 export interface GuideSection {
   id: string; // ancora: /guida#id
@@ -61,6 +61,14 @@ export const GUIDE: GuideSection[] = [
           "In alto: posti occupati, movimenti attesi oggi e importi scaduti da incassare. Tocca un riquadro per aprire il dettaglio.",
           "«Da tenere d'occhio»: addebiti scaduti, contratti in bozza da attivare, contratti in scadenza, assicurazioni scadute, clienti senza informativa firmata, segnalazioni aperte, numeri di contratto rimasti liberi.",
           "«Banchina oggi», «Prossimi incassi» e «Occupazione per pontile» completano il quadro.",
+        ],
+      },
+      {
+        title: "Meteo e allerta vento",
+        items: [
+          "«Meteo del porto»: vento, raffiche e onda adesso e nei prossimi tre giorni. Serve la posizione del porto in «Impostazioni» → «Porto».",
+          "Se nelle prossime 48 ore le raffiche superano la soglia scelta dalla direzione, compare la striscia rossa con «Avvisa i clienti»: apre un messaggio urgente già scritto per tutti i clienti con contratto attivo. Controllalo e premi «Invia».",
+          "Inviata l'allerta, per 24 ore non viene riproposta. Se la direzione ha scelto l'invio automatico, l'allerta parte da sola.",
         ],
       },
     ],
@@ -213,6 +221,33 @@ export const GUIDE: GuideSection[] = [
     link: { href: "/contratti", label: "Apri i contratti" },
   },
   {
+    id: "messaggi",
+    title: "Messaggi",
+    icon: "messages",
+    roles: ALL,
+    purpose: "Avvisi ai diportisti: arrivano nella loro area dell'app e come notifica sul telefono, se l'hanno attivata.",
+    steps: [
+      {
+        title: "Scrivere",
+        items: [
+          "«Nuovo messaggio» → scegli a chi: tutti i clienti con contratto attivo, un pontile, un tipo di contratto (annuali, stagionali…), chi è in porto adesso, oppure un singolo cliente.",
+          "L'operatore di banchina scrive a un pontile, a chi è in porto o a un cliente; a tutti scrivono direzione e ufficio.",
+          "Tipo: «Informazione», «Lavori o disservizio» oppure «Urgente» (meteo, sicurezza). Gli urgenti restano in evidenza nell'app del cliente finché non li apre.",
+          "Dalla scheda del cliente, riquadro «Accesso all'app» → «Scrivi un messaggio», il destinatario è già scelto.",
+        ],
+      },
+      {
+        title: "Chi l'ha letto",
+        items: [
+          "Aprendo un messaggio vedi, cliente per cliente, chi l'ha letto e quando. Per gli urgenti non letti c'è il pulsante «Chiama».",
+          "I clienti senza app attiva non ricevono niente subito: vedranno il messaggio quando attiveranno l'accesso.",
+        ],
+      },
+    ],
+    tips: ["Un messaggio inviato non si modifica: per una correzione mandane un altro allo stesso gruppo."],
+    link: { href: "/messaggi", label: "Apri i messaggi" },
+  },
+  {
     id: "contabilita",
     title: "Contabilità",
     icon: "accounting",
@@ -272,6 +307,7 @@ export const GUIDE: GuideSection[] = [
         title: "Le linguette",
         items: [
           "«Porto»: dati della società, logo della società di gestione (compare nel menu e nelle stampe), spese di gestione e quota rifiuti, nome della categoria «Ex cliente», testi del contratto e dell'informativa.",
+          "«Porto» → «Area diportisti e meteo»: orari dell'ufficio e informazioni utili che i diportisti vedono nell'app, posizione del porto (da Google Maps) per il meteo, soglia delle raffiche per l'allerta vento e, se volete, l'invio automatico dell'allerta.",
           "«Pontili e posti»: pontili, banchine e posti. Tocca un posto per cambiarne misure, categoria o stato (in servizio, in manutenzione, fuori servizio).",
           "«Pianta dal vero»: carica la foto aerea, imposta la scala misurando una distanza nota, poi disponi i posti. «Riconoscimento automatico» propone pontili e banchine dalla foto.",
           "«Categorie»: le classi dei posti per misura.",

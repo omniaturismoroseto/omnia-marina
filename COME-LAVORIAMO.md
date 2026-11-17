@@ -182,6 +182,59 @@ manca il permesso del passo 6 o la chiave del passo 5 è sbagliata.
 **Non spegnere Firebase dopo averlo usato** (togliendo `FIREBASE_PROJECT_ID`): chi è già passato su Firebase non ha
 più la password nell'app e non riuscirebbe a entrare finché la direzione non gli imposta una password provvisoria.
 
+## Notifiche sul telefono per i diportisti (una volta sola)
+
+Senza questi passi i messaggi del porto arrivano lo stesso nell'area diportista, ma senza la notifica sul telefono.
+Servono due chiavi (una pubblica e una segreta). Si fa tutto da **Cloud Shell**: apri https://shell.cloud.google.com,
+incolla i comandi uno alla volta.
+
+1. Crea le chiavi e conserva la segreta in Secret Manager:
+
+   ```bash
+   KEYS=$(npx --yes web-push generate-vapid-keys --json); PUB=$(echo "$KEYS" | python3 -c "import json,sys;print(json.load(sys.stdin)['publicKey'])"); echo "$KEYS" | python3 -c "import json,sys;print(json.load(sys.stdin)['privateKey'],end='')" | gcloud secrets create vapid-private-key --data-file=- --project omnia-marina; echo "Chiave pubblica: $PUB"
+   ```
+
+2. Permesso all'app di leggerla:
+
+   ```bash
+   gcloud secrets add-iam-policy-binding vapid-private-key --project omnia-marina --member "serviceAccount:omnia-marina-run@omnia-marina.iam.gserviceaccount.com" --role roles/secretmanager.secretAccessor
+   ```
+
+3. Accendi le notifiche (nella **stessa** finestra di Cloud Shell, che ricorda `$PUB` dal passo 1):
+
+   ```bash
+   gcloud run services update omnia-marina --region europe-west1 --project omnia-marina --update-env-vars "VAPID_PUBLIC_KEY=$PUB" --update-secrets "VAPID_PRIVATE_KEY=vapid-private-key:latest"
+   ```
+
+Per provare: entra nell'area diportista da un telefono (con un invito di prova), apri «Messaggi» → «Attiva le notifiche»,
+poi manda un messaggio a quel cliente dal gestionale. Su iPhone le notifiche funzionano solo dopo aver aggiunto l'app
+alla schermata Home (Condividi → Aggiungi alla schermata Home) e averla aperta da lì.
+
+Le chiavi non vanno cambiate: con chiavi nuove tutti i diportisti dovrebbero riattivare le notifiche.
+
+## Allerta vento automatica (facoltativa, una volta sola)
+
+L'allerta vento compare comunque nel cruscotto, da inviare con un clic. Per farla partire da sola anche quando nessuno
+guarda il cruscotto, Google controlla le previsioni ogni 3 ore. Sempre da **Cloud Shell**:
+
+1. Crea la chiave del controllo e passala all'app:
+
+   ```bash
+   TOKEN=$(openssl rand -hex 24); printf %s "$TOKEN" | gcloud secrets create meteo-check-token --data-file=- --project omnia-marina; gcloud secrets add-iam-policy-binding meteo-check-token --project omnia-marina --member "serviceAccount:omnia-marina-run@omnia-marina.iam.gserviceaccount.com" --role roles/secretmanager.secretAccessor; gcloud run services update omnia-marina --region europe-west1 --project omnia-marina --update-secrets "METEO_CHECK_TOKEN=meteo-check-token:latest"
+   ```
+
+2. Programma il controllo ogni 3 ore (nella stessa finestra, che ricorda `$TOKEN`):
+
+   ```bash
+   gcloud services enable cloudscheduler.googleapis.com --project omnia-marina; URL=$(gcloud run services describe omnia-marina --region europe-west1 --project omnia-marina --format "value(status.url)"); gcloud scheduler jobs create http omnia-marina-meteo --location europe-west1 --project omnia-marina --schedule "7 */3 * * *" --time-zone "Europe/Rome" --uri "$URL/api/meteo/controllo" --http-method POST --headers "Authorization=Bearer $TOKEN"
+   ```
+
+3. Nell'app: **Impostazioni → Porto → Area diportisti e meteo** → spunta «Invia l'allerta vento da sola» → Salva.
+
+Per provarlo subito: `gcloud scheduler jobs run omnia-marina-meteo --location europe-west1 --project omnia-marina`.
+La stessa allerta non parte due volte entro 24 ore. Per fermarlo: togli la spunta in Impostazioni, oppure
+`gcloud scheduler jobs pause omnia-marina-meteo --location europe-west1 --project omnia-marina`.
+
 ---
 
 ## Controllare

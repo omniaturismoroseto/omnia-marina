@@ -1,5 +1,5 @@
 import { and, asc, eq } from "drizzle-orm";
-import { MessageCircle, Printer } from "lucide-react";
+import { Mail, MessageCircle, Printer } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { ActionButton, Field, Form, FormMessage, Submit } from "@/components/form";
 import { Badge, ButtonLink, Card } from "@/components/ui";
@@ -54,6 +54,13 @@ export async function AppAccessCard({ marinaId, marinaName, owner }: { marinaId:
       <p className="text-sm text-muted">
         Le persone invitate entrano nell&apos;area diportista di questo cliente: titolare, familiari, skipper.
       </p>
+
+      {active.length > 0 && (
+        <ButtonLink href={`/messaggi/nuovo?cliente=${owner.id}`} size="sm" className="mt-3">
+          <Mail size={14} aria-hidden="true" />
+          Scrivi un messaggio
+        </ButtonLink>
+      )}
 
       {active.length > 0 && (
         <ul className="mt-4 space-y-3">

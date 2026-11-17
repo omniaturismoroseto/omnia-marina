@@ -50,6 +50,8 @@ export const ledgerAccountEnum = pgEnum("ledger_account", ["cassa", "banca"]);
 export const taskKindEnum = pgEnum("task_kind", ["assistenza", "manutenzione", "segnalazione", "servizio"]);
 export const taskPriorityEnum = pgEnum("task_priority", ["bassa", "normale", "alta"]);
 export const taskStatusEnum = pgEnum("task_status", ["aperta", "in_corso", "chiusa"]);
+// Messaggi ai diportisti: urgente (meteo, sicurezza: si chiede la conferma di lettura), lavori e disservizi, informazioni.
+export const messageKindEnum = pgEnum("message_kind", ["urgente", "lavori", "info"]);
 
 // ───────────────────────── Piattaforma ─────────────────────────
 
@@ -99,6 +101,16 @@ export const marinas = pgTable("marinas", {
   logoWidth: integer("logo_width"),
   logoHeight: integer("logo_height"),
   logoVersion: integer("logo_version").notNull().default(0),
+  // Area diportista: orari dell'ufficio e informazioni utili (regolamento, servizi, numeri), scritti dalla direzione.
+  officeHours: text("office_hours"),
+  boaterInfo: text("boater_info"),
+  // Meteo: posizione del porto (gradi decimali) e soglia delle raffiche, in nodi, oltre la quale si propone l'allerta.
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  windAlertKnots: integer("wind_alert_knots").notNull().default(30),
+  // Invio automatico dell'allerta (serve il controllo periodico, vedi COME-LAVORIAMO.md) e ultimo invio, per non ripeterla.
+  windAlertAuto: boolean("wind_alert_auto").notNull().default(false),
+  windAlertSentAt: timestamp("wind_alert_sent_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
 
@@ -222,6 +234,61 @@ export const owners = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index("owners_marina_name_idx").on(t.marinaId, t.displayName), index("owners_marina_fiscal_idx").on(t.marinaId, t.fiscalCode)],
+);
+
+// Messaggi dal porto ai diportisti. I destinatari (clienti) si fissano all'invio in message_recipients: chi arriva
+// dopo non riceve i messaggi vecchi. `audience` descrive a chi è andato («Pontile A», «Tutti i clienti»).
+export const messages = pgTable(
+  "messages",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    senderId: uuid("sender_id").references(() => users.id, { onDelete: "set null" }),
+    kind: messageKindEnum("kind").notNull().default("info"),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    audience: text("audience").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("messages_marina_created_idx").on(t.marinaId, t.createdAt)],
+);
+
+// Un destinatario per cliente: basta che una delle persone con accesso lo legga.
+export const messageRecipients = pgTable(
+  "message_recipients",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => owners.id, { onDelete: "cascade" }),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    readBy: uuid("read_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (t) => [uniqueIndex("message_recipients_uq").on(t.messageId, t.ownerId), index("message_recipients_owner_idx").on(t.ownerId)],
+);
+
+// Notifiche sul telefono (web push): un'iscrizione per dispositivo e browser in cui la persona le ha attivate.
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: id(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("push_subscriptions_user_idx").on(t.userId)],
 );
 
 // Area diportista. Un invito nasce dalla scheda del cliente: il codice (8 caratteri) si consegna su carta o con un

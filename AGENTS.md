@@ -69,6 +69,16 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   `src/server/owner-access.ts`; codici, codice fiscale e messaggio in `src/lib/owner-access.ts`; attivazione pubblica
   su `/attiva`; riquadro «Accesso all'app» nella scheda cliente. L'area si apre solo con l'email confermata
   (`isEmailVerified`); anonimizzare un cliente cancella inviti e accessi.
+  Dati del diportista in `src/server/owner-area.ts` (contratti attivi e conclusi, barche, addebiti, scadenze); il contratto
+  stampato è un componente unico (`src/components/contract-document.tsx`) per ufficio e diportista.
+- Messaggi ai diportisti (`/messaggi`, `src/server/messages.ts`): destinatari fissati all'invio in `message_recipients`
+  (un cliente = letto se una sua persona lo apre); la banchina non scrive a «tutti» né per tipo di contratto (`canSendTo`).
+  Notifiche web push in `src/server/push.ts` (`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`, service worker `public/sw.js`):
+  senza chiavi sono spente. Il diportista segna letto aprendo il messaggio (`MarkRead`, mai durante il precaricamento).
+- Meteo (`src/lib/weather.ts` funzioni pure, `src/server/weather.ts` con Open-Meteo e memoria di 30 minuti):
+  coordinate e soglia in `marinas`; il cruscotto propone l'allerta (`PortWeatherCard`), l'invio automatico passa da
+  `/api/meteo/controllo` (Cloud Scheduler, `METEO_CHECK_TOKEN`) e non si ripete entro 24 ore (`wind_alert_sent_at`).
+  Nei collaudi locali `WEATHER_FIXTURE` sostituisce la chiamata (da qui Open-Meteo non è raggiungibile).
 - Produzione: `output: "standalone"` + `Dockerfile` (Cloud Run). Le migrazioni si applicano all'avvio con
   `AUTO_MIGRATE=true`; ogni modifica allo schema richiede `pnpm db:generate` e la migrazione va committata.
 - Pubblicazione: `main` NON va online da solo. L'utente pubblica dal PC Windows (PowerShell), dalla cartella
