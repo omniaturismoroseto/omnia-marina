@@ -38,8 +38,8 @@ pagina principale ha accanto al titolo il collegamento alla parte giusta. Si sta
 Ogni porto può caricare il **logo della propria società di gestione** (Impostazioni → Porto): compare nel menu accanto al
 nome del porto e in testa al contratto e all'informativa privacy stampati.
 
-Il marchio (logo con la scritta e solo simbolo, a colori e in negativo per gli sfondi scuri) è nella cartella
-[`marchio/`](marchio/), a piena risoluzione.
+Il marchio (logo verticale, logo orizzontale e solo simbolo, a colori e in negativo per gli sfondi scuri) è nella cartella
+[`marchio/`](marchio/), a piena risoluzione. Installata su PC, telefono o tablet, l'app si chiama «Omnia Marina Gestionale».
 
 ## Avvio in locale
 

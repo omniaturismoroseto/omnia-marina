@@ -4,10 +4,10 @@ import "@fontsource-variable/fraunces";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "Omnia Marina", template: "%s · Omnia Marina" },
+  title: { default: "Omnia Marina Gestionale", template: "%s · Omnia Marina" },
   description: "Gestione del porto turistico: posti barca, contratti, banchina e contabilità interna.",
-  applicationName: "Omnia Marina",
-  appleWebApp: { capable: true, title: "Omnia Marina", statusBarStyle: "default" },
+  applicationName: "Omnia Marina Gestionale",
+  appleWebApp: { capable: true, title: "Omnia Marina Gestionale", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

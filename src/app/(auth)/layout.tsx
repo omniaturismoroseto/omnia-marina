@@ -25,7 +25,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               Posti barca, contratti, arrivi e partenze, tariffe e contabilità interna in un unico posto, dall&apos;ufficio e dal telefono.
             </p>
           </div>
-          <p className="text-xs text-white/40">Omnia Marina · gestione del porto turistico</p>
+          <p className="text-xs text-white/40">Omnia Marina Gestionale · app di gestione portuale</p>
         </div>
       </div>
       <div className="flex flex-col justify-center px-5 py-10 sm:px-10">

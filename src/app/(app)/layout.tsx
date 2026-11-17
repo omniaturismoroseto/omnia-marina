@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowLeftRight, LogOut } from "lucide-react";
 import { eq } from "drizzle-orm";
-import { Brand, BrandMark } from "@/components/brand";
+import { BrandMark, BrandWide } from "@/components/brand";
 import { BottomBar, SidebarLinks, type NavItem } from "@/components/nav-links";
 import { PortLogoTile } from "@/components/port-logo";
 import { db } from "@/db";
@@ -53,8 +53,8 @@ async function Navigation() {
     <>
       <aside className="no-print fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-deep text-white lg:flex">
         <div className="px-5 pt-6 pb-5">
-          <Link href="/" className="text-white">
-            <Brand onDark />
+          <Link href="/" className="block">
+            <BrandWide onDark />
           </Link>
           <div className="mt-4 border-t border-white/10 pt-4">
             <p className="text-[11px] font-semibold tracking-widest text-white/45 uppercase">Porto</p>
@@ -121,7 +121,7 @@ function NavigationFallback() {
   return (
     <>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 bg-deep px-5 pt-6 text-white lg:block">
-        <Brand onDark />
+        <BrandWide onDark />
       </aside>
       <header className="sticky top-0 z-30 flex h-[52px] items-center bg-deep px-4 text-white lg:hidden">
         <BrandMark size={28} onDark />

@@ -1,6 +1,8 @@
 import Image from "next/image";
 import logo from "@/assets/brand/logo.png";
 import logoOnDark from "@/assets/brand/logo-on-dark.png";
+import logoWide from "@/assets/brand/logo-wide.png";
+import logoWideOnDark from "@/assets/brand/logo-wide-on-dark.png";
 import mark from "@/assets/brand/mark.png";
 import markOnDark from "@/assets/brand/mark-on-dark.png";
 
@@ -15,13 +17,19 @@ export function BrandMark({ size = 32, onDark = false, className }: { size?: num
   return <Image src={onDark ? markOnDark : mark} alt="" width={size} height={size} unoptimized className={className} />;
 }
 
-/** Simbolo e nome, in orizzontale: barra laterale e intestazioni. */
-export function Brand({ onDark = false, className }: { onDark?: boolean; className?: string }) {
+/**
+ * Logo completo in orizzontale: simbolo a sinistra, OMNIA / MARINA / APP DI GESTIONE PORTUALE a destra.
+ * In alto nel menu dell'app. Composto dagli originali in /marchio (omnia-marina-logo-orizzontale*.png).
+ */
+export function BrandWide({ onDark = false, className }: { onDark?: boolean; className?: string }) {
   return (
-    <span className={`inline-flex items-center gap-2.5 ${className ?? ""}`}>
-      <BrandMark size={36} onDark={onDark} />
-      <span className="font-display text-xl font-semibold">Omnia Marina</span>
-    </span>
+    <Image
+      src={onDark ? logoWideOnDark : logoWide}
+      alt="Omnia Marina Gestionale"
+      unoptimized
+      priority
+      className={`h-auto w-full ${className ?? ""}`}
+    />
   );
 }
 

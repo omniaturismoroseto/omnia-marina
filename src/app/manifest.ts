@@ -2,8 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Omnia Marina — gestione del porto",
-    short_name: "Omnia Marina",
+    // Il nome con cui l'app compare quando la si installa su PC, telefono o tablet.
+    name: "Omnia Marina Gestionale",
+    short_name: "Omnia Marina Gestionale",
     description: "Posti barca, contratti, banchina e contabilità del porto turistico.",
     lang: "it",
     start_url: "/",

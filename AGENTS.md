@@ -23,8 +23,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   sottoquery correlate scrivere il riferimento esterno per esteso (es. `"owners"."id"`).
 - Tariffe: una riga di `rates` per listino × categoria × zona (`zone_id` vuoto = tariffa base, vincolo unico NULLS NOT DISTINCT);
   la zona sta sul pontile (`piers.tariff_zone_id`) e `zoneRate` (`src/lib/pricing.ts`) unisce zona e base campo per campo. `rates.waste` non entra nel canone: precompila la voce «rifiuti» degli annuali.
-- Marchio: originali (a colori e in negativo per sfondi scuri) in `marchio/`; per l'interfaccia `src/components/brand.tsx` con le
-  immagini di `src/assets/brand/` (già alla misura giusta, `unoptimized`); icone in `src/app` (favicon, icon, apple-icon) e `public/`.
+- Marchio: originali (a colori e in negativo per sfondi scuri) in `marchio/`, anche in orizzontale (`omnia-marina-logo-orizzontale*.png`,
+  composto dai pezzi del logo verticale); per l'interfaccia `src/components/brand.tsx` con le immagini di `src/assets/brand/` (già alla
+  misura giusta, `unoptimized`): `BrandWide` in alto nel menu, `BrandLogo` nelle pagine di accesso. Icone in `src/app` (favicon, icon,
+  apple-icon) e `public/`. Nome dell'app installata: «Omnia Marina Gestionale» (`src/app/manifest.ts` e metadati in `src/app/layout.tsx`).
 - Logo della società di gestione: caricato da Impostazioni → Porto, salvato in `marina_logos` (PNG/JPEG, mai SVG) e servito da
   `/logo?v=<marinas.logo_version>`; `portLogo` (`src/lib/logo.ts`) e `PortLogo`/`PortLogoTile` (`src/components/port-logo.tsx`) lo mostrano
   nel menu (su riquadro bianco) e nelle intestazioni di contratto e informativa. Il logo di Omnia Marina resta quello dell'app.
