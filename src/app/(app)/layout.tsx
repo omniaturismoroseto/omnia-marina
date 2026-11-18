@@ -21,6 +21,7 @@ const NAV: (NavItem & { roles: Role[] })[] = [
   { key: "barche", href: "/barche", label: "Barche", roles: ["admin", "ufficio", "banchina"] },
   { key: "contratti", href: "/contratti", label: "Contratti", roles: ["admin", "ufficio"] },
   { key: "messaggi", href: "/messaggi", label: "Messaggi", roles: ["admin", "ufficio", "banchina"] },
+  { key: "meteo", href: "/meteo", label: "Meteo", roles: ["admin", "ufficio", "banchina"] },
   { key: "contabilita", href: "/contabilita", label: "Contabilità", roles: ["admin", "ufficio"] },
   { key: "tariffe", href: "/tariffe", label: "Tariffe", roles: ["admin", "ufficio"] },
   { key: "impostazioni", href: "/impostazioni", label: "Impostazioni", roles: ["admin"] },

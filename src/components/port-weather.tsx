@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { ArrowUp, TriangleAlert, Waves } from "lucide-react";
 import { ButtonLink, Card } from "@/components/ui";
 import { db } from "@/db";
-import { marinas } from "@/db/schema";
+import { marinas, type Role } from "@/db/schema";
 import { formatDateTime } from "@/lib/dates";
 import { alertMessage, currentHour, dailySummary, weatherLabel, whenLabel, windAlert, windName, type DaySummary, type WeatherHour } from "@/lib/weather";
 import { alertSentRecently, nowRomeLocal, portForecast } from "@/server/weather";
@@ -77,10 +77,68 @@ export function DaysRow({ days, today, threshold }: { days: DaySummary[]; today:
   );
 }
 
-/** Cruscotto: meteo del porto e, se le raffiche superano la soglia, l'allerta pronta da inviare. */
-export async function PortWeatherCard({ marinaId, isAdmin }: { marinaId: string; isAdmin: boolean }) {
+/** Ora per ora (una riga ogni 3 ore) a partire da adesso; in rosso le ore con raffiche oltre la soglia. */
+export function HourlyTable({ hours, now, threshold, hoursAhead = 24 }: { hours: WeatherHour[]; now: string; threshold: number; hoursAhead?: number }) {
+  const today = now.slice(0, 10);
+  const start = Math.max(
+    0,
+    hours.findIndex((h) => h.time >= `${now.slice(0, 13)}:00`),
+  );
+  const rows = hours.slice(start, start + hoursAhead).filter((_, i) => i % 3 === 0);
+  return (
+    <>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs text-muted">
+            <th className="px-4 py-2 font-medium">Ora</th>
+            <th className="px-2 py-2 font-medium">Vento</th>
+            <th className="px-2 py-2 font-medium">Raffiche</th>
+            <th className="px-2 py-2 font-medium">Onda (m)</th>
+            <th className="px-4 py-2 font-medium">Tempo</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line-soft">
+          {rows.map((h) => (
+            <tr key={h.time} className={h.gustKn >= threshold ? "bg-bad-soft" : undefined}>
+              <td className="px-4 py-2 text-ink">
+                {h.time.slice(0, 10) !== today && <span className="block text-xs text-muted">{dayName(h.time.slice(0, 10), today)}</span>}
+                {h.time.slice(11, 16)}
+              </td>
+              <td className="px-2 py-2 whitespace-nowrap">
+                <span className="inline-flex items-center gap-1">
+                  <WindArrow deg={h.windDir} size={14} />
+                  {windName(h.windDir).short} {h.windKn}
+                </span>
+              </td>
+              <td className={`px-2 py-2 tabular-nums ${h.gustKn >= threshold ? "font-semibold text-bad" : ""}`}>{h.gustKn}</td>
+              <td className="px-2 py-2 tabular-nums">{h.waveM === null ? "—" : h.waveM.toFixed(1).replace(".", ",")}</td>
+              <td className="px-4 py-2 whitespace-nowrap text-muted">
+                {h.tempC}° <span className="hidden sm:inline">· {weatherLabel(h.code)}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="px-4 pt-1 pb-3 text-xs text-faint">Vento e raffiche in nodi.</p>
+    </>
+  );
+}
+
+/**
+ * Meteo del porto per il personale (cruscotto, banchina e pagina «Meteo»): vento adesso, prossimi giorni e, se le
+ * raffiche superano la soglia, l'allerta pronta da inviare. Con `full` aggiunge l'andamento ora per ora.
+ * La banchina non scrive a tutti: per lei l'avviso va a chi è in porto (lo può cambiare prima di inviare).
+ */
+export async function PortWeatherCard({ marinaId, role, full = false }: { marinaId: string; role: Role; full?: boolean }) {
+  const isAdmin = role === "admin";
   const [marina] = await db
-    .select({ latitude: marinas.latitude, longitude: marinas.longitude, threshold: marinas.windAlertKnots, auto: marinas.windAlertAuto, sentAt: marinas.windAlertSentAt })
+    .select({
+      latitude: marinas.latitude,
+      longitude: marinas.longitude,
+      threshold: marinas.windAlertKnots,
+      auto: marinas.windAlertAuto,
+      sentAt: marinas.windAlertSentAt,
+    })
     .from(marinas)
     .where(eq(marinas.id, marinaId));
   if (marina.latitude === null || marina.longitude === null) {
@@ -118,31 +176,53 @@ export async function PortWeatherCard({ marinaId, isAdmin }: { marinaId: string;
   const alert = windAlert(hours, marina.threshold, now);
   const recentlySent = alertSentRecently(marina.sentAt);
   const proposal = alert ? alertMessage(alert, today) : null;
+  const audience = role === "banchina" ? "in_porto" : "tutti";
   const href = proposal
-    ? `/messaggi/nuovo?${new URLSearchParams({ a: "tutti", tipo: "urgente", titolo: proposal.title, testo: proposal.body, allerta: "1" })}`
+    ? `/messaggi/nuovo?${new URLSearchParams({ a: audience, tipo: "urgente", titolo: proposal.title, testo: proposal.body, allerta: "1" })}`
     : null;
+  const sendLabel = recentlySent ? "Manda un altro avviso" : audience === "tutti" ? "Avvisa i clienti" : "Avvisa chi è in porto";
 
   return (
-    <Card title="Meteo del porto" actions={<span className="text-xs text-faint">Open-Meteo · indicativo</span>}>
-      {alert && (
-        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-md bg-bad-soft px-3 py-2.5 text-bad">
-          <TriangleAlert size={18} aria-hidden="true" className="shrink-0" />
-          <p className="min-w-0 flex-1 text-sm">
-            <strong>Raffiche fino a {alert.maxGustKn} nodi</strong> da {windName(alert.dir).name}, {whenLabel(alert.at, today)} (soglia {marina.threshold}).
-            {recentlySent && ` Allerta inviata il ${formatDateTime(marina.sentAt)}.`}
-            {!recentlySent && marina.auto && " L'allerta parte da sola al prossimo controllo."}
-          </p>
-          {href && !recentlySent && (
-            <ButtonLink href={href} size="sm" variant="danger">
-              Avvisa i clienti
-            </ButtonLink>
-          )}
+    <Card
+      title="Meteo del porto"
+      actions={
+        full ? (
+          <span className="text-xs text-faint">Open-Meteo · indicativo</span>
+        ) : (
+          <Link href="/meteo" className="link text-sm">
+            Apri il meteo
+          </Link>
+        )
+      }
+      flush={full}
+    >
+      <div className={full ? "p-4" : undefined}>
+        {alert && (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-md bg-bad-soft px-3 py-2.5 text-bad">
+            <TriangleAlert size={18} aria-hidden="true" className="shrink-0" />
+            <p className="min-w-0 flex-1 text-sm">
+              <strong>Raffiche fino a {alert.maxGustKn} nodi</strong> da {windName(alert.dir).name}, {whenLabel(alert.at, today)} (soglia {marina.threshold}).
+              {recentlySent && ` Allerta inviata il ${formatDateTime(marina.sentAt)}.`}
+              {!recentlySent && marina.auto && " L'allerta parte da sola al prossimo controllo."}
+            </p>
+            {href && (
+              <ButtonLink href={href} size="sm" variant={recentlySent ? "secondary" : "danger"}>
+                {sendLabel}
+              </ButtonLink>
+            )}
+          </div>
+        )}
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+          {current && <NowBlock hour={current} />}
+          <DaysRow days={dailySummary(hours)} today={today} threshold={marina.threshold} />
+        </div>
+      </div>
+      {full && (
+        <div className="border-t border-line-soft">
+          <p className="px-4 pt-3 text-sm font-semibold text-ink">Prossime 48 ore</p>
+          <HourlyTable hours={hours} now={now} threshold={marina.threshold} hoursAhead={48} />
         </div>
       )}
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
-        {current && <NowBlock hour={current} />}
-        <DaysRow days={dailySummary(hours)} today={today} threshold={marina.threshold} />
-      </div>
     </Card>
   );
 }

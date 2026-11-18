@@ -4,6 +4,7 @@ import { Fragment, type ReactNode } from "react";
 import {
   Anchor,
   ArrowRight,
+  CloudSun,
   FileText,
   Flag,
   LayoutDashboard,
@@ -37,6 +38,7 @@ const ICONS: Record<GuideIcon, LucideIcon> = {
   boats: Sailboat,
   contracts: FileText,
   messages: Mail,
+  weather: CloudSun,
   accounting: Wallet,
   tariffs: Tags,
   settings: Settings,

@@ -76,7 +76,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Notifiche web push in `src/server/push.ts` (`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`, service worker `public/sw.js`):
   senza chiavi sono spente. Il diportista segna letto aprendo il messaggio (`MarkRead`, mai durante il precaricamento).
 - Meteo (`src/lib/weather.ts` funzioni pure, `src/server/weather.ts` con Open-Meteo e memoria di 30 minuti):
-  coordinate e soglia in `marinas`; il cruscotto propone l'allerta (`PortWeatherCard`), l'invio automatico passa da
+  coordinate e soglia in `marinas`; pagina `/meteo` per tutti i ruoli e riquadro compatto in cruscotto e banchina
+  (`PortWeatherCard`, con l'avviso pronto: a «tutti» per direzione e ufficio, a «chi è in porto» per la banchina); l'invio automatico passa da
   `/api/meteo/controllo` (Cloud Scheduler, `METEO_CHECK_TOKEN`) e non si ripete entro 24 ore (`wind_alert_sent_at`).
   Nei collaudi locali `WEATHER_FIXTURE` sostituisce la chiamata (da qui Open-Meteo non è raggiungibile).
 - Produzione: `output: "standalone"` + `Dockerfile` (Cloud Run). Le migrazioni si applicano all'avvio con

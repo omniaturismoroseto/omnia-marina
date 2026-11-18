@@ -4,7 +4,7 @@ import type { Role } from "@/db/schema";
 // Nei testi i nomi di pulsanti, campi e pagine stanno tra «»: la pagina li mette in evidenza.
 // Quando cambia un pulsante o un percorso dell'app, aggiornare anche qui.
 
-export type GuideIcon = "start" | "dashboard" | "dock" | "map" | "owners" | "boats" | "contracts" | "messages" | "accounting" | "tariffs" | "settings" | "account" | "help";
+export type GuideIcon = "start" | "dashboard" | "dock" | "map" | "owners" | "boats" | "contracts" | "messages" | "weather" | "accounting" | "tariffs" | "settings" | "account" | "help";
 
 export interface GuideSection {
   id: string; // ancora: /guida#id
@@ -68,7 +68,7 @@ export const GUIDE: GuideSection[] = [
         items: [
           "«Meteo del porto»: vento, raffiche e onda adesso e nei prossimi tre giorni. Serve la posizione del porto in «Impostazioni» → «Porto».",
           "Se nelle prossime 48 ore le raffiche superano la soglia scelta dalla direzione, compare la striscia rossa con «Avvisa i clienti»: apre un messaggio urgente già scritto per tutti i clienti con contratto attivo. Controllalo e premi «Invia».",
-          "Inviata l'allerta, per 24 ore non viene riproposta. Se la direzione ha scelto l'invio automatico, l'allerta parte da sola.",
+          "Inviata l'allerta, il pulsante diventa «Manda un altro avviso» per 24 ore. Se la direzione ha scelto l'invio automatico, l'allerta parte da sola. Più dettagli nella voce «Meteo».",
         ],
       },
     ],
@@ -246,6 +246,33 @@ export const GUIDE: GuideSection[] = [
     ],
     tips: ["Un messaggio inviato non si modifica: per una correzione mandane un altro allo stesso gruppo."],
     link: { href: "/messaggi", label: "Apri i messaggi" },
+  },
+  {
+    id: "meteo",
+    title: "Meteo",
+    icon: "weather",
+    roles: ALL,
+    purpose: "Vento, raffiche e onda per il porto, e l'avviso ai diportisti quando arriva vento forte.",
+    steps: [
+      {
+        title: "Guardare le previsioni",
+        items: [
+          "«Meteo»: vento adesso, prossimi tre giorni e, ora per ora, le prossime 48 ore. Le ore con raffiche oltre la soglia sono in rosso.",
+          "Lo stesso riquadro, più piccolo, è nel «Cruscotto» e nella «Banchina».",
+          "Le previsioni arrivano solo se la direzione ha inserito la posizione del porto in «Impostazioni» → «Porto».",
+        ],
+      },
+      {
+        title: "Mandare l'avviso",
+        items: [
+          "Se le raffiche previste nelle prossime 48 ore superano la soglia, compare la striscia rossa con il pulsante per avvisare: apre un messaggio urgente già scritto. Controllalo, cambia se vuoi i destinatari, e premi «Invia».",
+          "Direzione e ufficio avvisano tutti i clienti con contratto attivo; l'operatore di banchina chi è in porto adesso, oppure un pontile.",
+          "Dopo l'invio il pulsante diventa «Manda un altro avviso» per 24 ore, così si vede che l'avviso è già partito.",
+        ],
+      },
+    ],
+    tips: ["Le previsioni sono indicative: per la navigazione fanno fede i bollettini ufficiali."],
+    link: { href: "/meteo", label: "Apri il meteo" },
   },
   {
     id: "contabilita",

@@ -151,7 +151,7 @@ export default page(async function DashboardPage() {
 
       <div className="mt-5">
         <Suspense fallback={null}>
-          <PortWeatherCard marinaId={ctx.marinaId} isAdmin={ctx.role === "admin"} />
+          <PortWeatherCard marinaId={ctx.marinaId} role={ctx.role} />
         </Suspense>
       </div>
 

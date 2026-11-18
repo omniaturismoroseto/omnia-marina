@@ -6,7 +6,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { marinas } from "@/db/schema";
-import { EVERYONE, OFFICE, requireMarina, requireOwner } from "@/lib/context";
+import { EVERYONE, requireMarina, requireOwner } from "@/lib/context";
 import { f, parseForm, type FormState } from "@/lib/forms";
 import { toFormState } from "./errors";
 import { markRead, sendMessage, type Audience } from "./messages";
@@ -49,10 +49,12 @@ export async function sendMessageAction(_prev: FormState, formData: FormData): P
   } catch (error) {
     return toFormState(error);
   }
-  // Allerta vento inviata dal cruscotto: non la si ripropone per 24 ore.
-  if (formData.get("windAlert") === "1" && OFFICE.includes(ctx.role)) {
+  // Allerta vento inviata dal riquadro meteo: per 24 ore il pulsante diventa «Manda un altro avviso».
+  if (formData.get("windAlert") === "1") {
     await db.update(marinas).set({ windAlertSentAt: new Date() }).where(eq(marinas.id, ctx.marinaId));
     revalidatePath("/");
+    revalidatePath("/meteo");
+    revalidatePath("/banchina");
   }
   revalidatePath("/messaggi");
   redirect(`/messaggi/${sent.messageId}?inviato=1`);
