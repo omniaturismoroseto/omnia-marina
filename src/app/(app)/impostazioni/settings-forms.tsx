@@ -104,12 +104,21 @@ export function BoaterSettingsForm({
   boaterInfo,
   coordinates,
   windAlertKnots,
+  waveAlertM,
   windAlertAuto,
+  alertZone,
+  zoneNames,
+  detectedZone,
 }: {
   officeHours: string;
   boaterInfo: string;
   coordinates: string;
   windAlertKnots: number;
+  waveAlertM: number;
+  alertZone: string;
+  // Zone di allerta dell'ultimo bollettino della Protezione Civile (vuoto se non raggiungibile) e quella trovata dal Comune.
+  zoneNames: string[];
+  detectedZone: string | null;
   windAlertAuto: boolean;
 }) {
   return (
@@ -139,13 +148,41 @@ export function BoaterSettingsForm({
           hint="Su Google Maps: tasto destro (o tieni premuto) sul porto e copia i numeri."
           wrapperClassName="sm:col-span-2"
         />
-        <Field name="windAlertKnots" label="Allerta vento oltre (nodi)" defaultValue={String(windAlertKnots)} inputMode="numeric" hint="Raffiche previste." />
+        <Field name="windAlertKnots" label="Avviso raffiche oltre (nodi)" defaultValue={String(windAlertKnots)} inputMode="numeric" hint="Burrasca (forza 8) sempre." />
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Field
+          name="waveAlertM"
+          label="Avviso onda oltre (m)"
+          defaultValue={String(waveAlertM).replace(".", ",")}
+          inputMode="decimal"
+          hint="Onda significativa prevista. 2,5 m = mare molto mosso."
+        />
+        {zoneNames.length > 0 ? (
+          <SelectField
+            name="alertZone"
+            label="Zona di allerta (Protezione Civile)"
+            defaultValue={alertZone}
+            placeholder={detectedZone ? `Dal Comune del porto: ${detectedZone}` : "Scegli la zona…"}
+            options={zoneNames.map((z) => ({ value: z, label: z }))}
+            hint={detectedZone ? "Lascia la prima voce per usare la zona del Comune." : "Il Comune del porto non è in nessuna zona: scegli quella giusta."}
+            wrapperClassName="sm:col-span-2"
+          />
+        ) : (
+          <>
+            <input type="hidden" name="alertZone" value={alertZone} />
+            <p className="text-sm text-muted sm:col-span-2">
+              Zona di allerta della Protezione Civile: {alertZone || detectedZone || "non ancora individuata"}. L&apos;elenco delle zone non è raggiungibile in questo
+              momento.
+            </p>
+          </>
+        )}
       </div>
       <CheckboxField
         name="windAlertAuto"
-        label="Invia l'allerta vento da sola"
+        label="Invia l'avviso meteo da solo"
         defaultChecked={windAlertAuto}
-        hint="Se spento, l'allerta compare nel cruscotto e la invii tu con un clic. L'invio automatico richiede il controllo periodico (vedi la guida)."
+        hint="Burrasca, raffiche od onda oltre soglia, allerta arancione o rossa della Protezione Civile. Se spento, l'avviso compare in «Meteo» e lo invii tu con un clic. L'invio automatico richiede il controllo periodico (vedi la guida)."
       />
       <FormMessage />
       <Submit>Salva</Submit>

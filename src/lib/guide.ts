@@ -64,11 +64,11 @@ export const GUIDE: GuideSection[] = [
         ],
       },
       {
-        title: "Meteo e allerta vento",
+        title: "Meteo e mare",
         items: [
-          "«Meteo del porto»: vento, raffiche e onda adesso e nei prossimi tre giorni. Serve la posizione del porto in «Impostazioni» → «Porto».",
-          "Se nelle prossime 48 ore le raffiche superano la soglia scelta dalla direzione, compare la striscia rossa con «Avvisa i clienti»: apre un messaggio urgente già scritto per tutti i clienti con contratto attivo. Controllalo e premi «Invia».",
-          "Inviata l'allerta, il pulsante diventa «Manda un altro avviso» per 24 ore. Se la direzione ha scelto l'invio automatico, l'allerta parte da sola. Più dettagli nella voce «Meteo».",
+          "«Meteo e mare»: vento (con la forza Beaufort), onda, mare lungo, corrente, livello del mare e l'allerta della Protezione Civile per la zona del porto, adesso e nei prossimi giorni.",
+          "Con burrasca, raffiche od onda oltre soglia, o allerta arancione o rossa della Protezione Civile, compare la striscia rossa con «Avvisa i clienti»: apre il messaggio urgente già scritto. Controllalo e premi «Invia».",
+          "Dopo l'invio il pulsante diventa «Manda un altro avviso» per 24 ore. Se la direzione ha scelto l'invio automatico, l'avviso parte da solo. Più dettagli nella voce «Meteo».",
         ],
       },
     ],
@@ -252,12 +252,14 @@ export const GUIDE: GuideSection[] = [
     title: "Meteo",
     icon: "weather",
     roles: ALL,
-    purpose: "Vento, raffiche e onda per il porto, e l'avviso ai diportisti quando arriva vento forte.",
+    purpose: "Vento, mare e allerte della Protezione Civile per il porto, e l'avviso ai diportisti quando arriva brutto tempo.",
     steps: [
       {
         title: "Guardare le previsioni",
         items: [
-          "«Meteo»: vento adesso, prossimi tre giorni e, ora per ora, le prossime 48 ore. Le ore con raffiche oltre la soglia sono in rosso.",
+          "«Meteo»: vento medio e raffiche in nodi con la forza Beaufort (dalla forza 8 è burrasca); onda significativa con periodo, provenienza e stato del mare (calmo, mosso, agitato…); mare lungo; corrente con la direzione verso cui va; livello del mare con le prossime alte e basse; temperatura dell'acqua.",
+          "Sotto, i prossimi tre giorni e, ora per ora, le prossime 48 ore: in rosso le ore con burrasca o con raffiche od onda oltre le soglie del porto. Sul telefono la tabella scorre di lato.",
+          "«Protezione Civile»: il bollettino nazionale di criticità (rischio idrogeologico, idraulico e temporali, oggi e domani) per la zona di allerta del porto, trovata dal Comune. Esce ogni giorno nel pomeriggio; per le decisioni fa fede l'allerta della Regione.",
           "Lo stesso riquadro, più piccolo, è nel «Cruscotto» e nella «Banchina».",
           "Le previsioni arrivano solo se la direzione ha inserito la posizione del porto in «Impostazioni» → «Porto».",
         ],
@@ -265,13 +267,16 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Mandare l'avviso",
         items: [
-          "Se le raffiche previste nelle prossime 48 ore superano la soglia, compare la striscia rossa con il pulsante per avvisare: apre un messaggio urgente già scritto. Controllalo, cambia se vuoi i destinatari, e premi «Invia».",
+          "La striscia rossa compare con burrasca prevista, raffiche od onda oltre le soglie nelle prossime 48 ore, oppure allerta arancione o rossa della Protezione Civile. Il pulsante apre il messaggio urgente già scritto con tutte le condizioni: controllalo, cambia se vuoi i destinatari, e premi «Invia».",
           "Direzione e ufficio avvisano tutti i clienti con contratto attivo; l'operatore di banchina chi è in porto adesso, oppure un pontile.",
           "Dopo l'invio il pulsante diventa «Manda un altro avviso» per 24 ore, così si vede che l'avviso è già partito.",
         ],
       },
     ],
-    tips: ["Le previsioni sono indicative: per la navigazione fanno fede i bollettini ufficiali."],
+    tips: [
+      "Le previsioni sono indicative: per la navigazione fanno fede gli avvisi di burrasca e il meteomar dell'Aeronautica Militare e gli avvisi della Capitaneria.",
+      "Le soglie di raffiche e onda, la zona di allerta e l'invio automatico li sceglie la direzione in «Impostazioni» → «Porto».",
+    ],
     link: { href: "/meteo", label: "Apri il meteo" },
   },
   {
@@ -334,7 +339,7 @@ export const GUIDE: GuideSection[] = [
         title: "Le linguette",
         items: [
           "«Porto»: dati della società, logo della società di gestione (compare nel menu e nelle stampe), spese di gestione e quota rifiuti, nome della categoria «Ex cliente», testi del contratto e dell'informativa.",
-          "«Porto» → «Area diportisti e meteo»: orari dell'ufficio e informazioni utili che i diportisti vedono nell'app, posizione del porto (da Google Maps) per il meteo, soglia delle raffiche per l'allerta vento e, se volete, l'invio automatico dell'allerta.",
+          "«Porto» → «Area diportisti e meteo»: orari dell'ufficio e informazioni utili che i diportisti vedono nell'app, posizione del porto (da Google Maps) per il meteo, soglie di raffiche e onda per l'avviso, zona di allerta della Protezione Civile (trovata dal Comune, oppure scelta a mano) e, se volete, l'invio automatico dell'avviso.",
           "«Pontili e posti»: pontili, banchine e posti. Tocca un posto per cambiarne misure, categoria o stato (in servizio, in manutenzione, fuori servizio).",
           "«Pianta dal vero»: carica la foto aerea, imposta la scala misurando una distanza nota, poi disponi i posti. «Riconoscimento automatico» propone pontili e banchine dalla foto.",
           "«Categorie»: le classi dei posti per misura.",

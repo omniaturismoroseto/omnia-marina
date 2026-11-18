@@ -120,8 +120,11 @@ Fatte (prima versione):
 - **Messaggi** (`/messaggi` per il personale, `/diportista/messaggi` per il diportista): a un cliente, a un pontile,
   a un tipo di contratto, a chi è in porto o a tutti; urgenti in evidenza finché non letti; chi ha letto e quando;
   notifiche web push (chiavi VAPID, vedi COME-LAVORIAMO.md).
-- **Meteo** (`/diportista/meteo` e cruscotto): vento, raffiche, onda da Open-Meteo; allerta vento oltre la soglia,
-  da inviare con un clic o in automatico ogni 3 ore (Cloud Scheduler).
+- **Meteo e mare** (`/diportista/meteo`; per il personale `/meteo`, cruscotto e banchina): vento con forza Beaufort,
+  onda e stato del mare, mare lungo, corrente, livello del mare, bollettino di criticità della Protezione Civile per la
+  zona del porto; avviso per burrasca, raffiche od onda oltre soglia o allerta arancione/rossa, con un clic o in
+  automatico ogni 3 ore (Cloud Scheduler). Gli avvisi di burrasca dell'Aeronautica Militare non sono pubblicati in
+  forma leggibile dall'app: la burrasca si calcola dalle previsioni, con il rimando agli avvisi ufficiali.
 
 In lista per dopo:
 - Richieste e segnalazioni dal diportista (con foto), collegate alle segnalazioni della banchina.

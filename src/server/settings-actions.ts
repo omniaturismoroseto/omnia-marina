@@ -58,6 +58,11 @@ const boaterSettingsSchema = z.object({
   boaterInfo: f.optText(),
   coordinates: f.optText(),
   windAlertKnots: f.int(10, 80, "Scegli una soglia tra 10 e 80 nodi"),
+  waveAlertM: z.preprocess(
+    (v) => (typeof v === "string" && /^\d+([.,]\d+)?$/.test(v.trim()) ? Number(v.trim().replace(",", ".")) : Number.NaN),
+    z.number({ error: "Scrivi i metri, per esempio 2,5" }).min(0.5, "Almeno 0,5 m").max(10, "Al massimo 10 m"),
+  ),
+  alertZone: f.optText(),
   windAlertAuto: f.checkbox(),
 });
 

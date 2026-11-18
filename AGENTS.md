@@ -75,11 +75,17 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   (un cliente = letto se una sua persona lo apre); la banchina non scrive a «tutti» né per tipo di contratto (`canSendTo`).
   Notifiche web push in `src/server/push.ts` (`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`, service worker `public/sw.js`):
   senza chiavi sono spente. Il diportista segna letto aprendo il messaggio (`MarkRead`, mai durante il precaricamento).
-- Meteo (`src/lib/weather.ts` funzioni pure, `src/server/weather.ts` con Open-Meteo e memoria di 30 minuti):
-  coordinate e soglia in `marinas`; pagina `/meteo` per tutti i ruoli e riquadro compatto in cruscotto e banchina
-  (`PortWeatherCard`, con l'avviso pronto: a «tutti» per direzione e ufficio, a «chi è in porto» per la banchina); l'invio automatico passa da
-  `/api/meteo/controllo` (Cloud Scheduler, `METEO_CHECK_TOKEN`) e non si ripete entro 24 ore (`wind_alert_sent_at`).
-  Nei collaudi locali `WEATHER_FIXTURE` sostituisce la chiamata (da qui Open-Meteo non è raggiungibile).
+- Meteo e mare (`src/lib/weather.ts` funzioni pure: Beaufort, Douglas, maree, allerte `marineAlerts` per burrasca da
+  forza 8, raffiche e onda oltre `marinas.wind_alert_knots`/`wave_alert_m`; `src/server/weather.ts` con Open-Meteo meteo +
+  marine — onda, mare lungo, corrente, livello del mare — e memoria di 30 minuti). Bollettino di criticità della Protezione
+  Civile in `src/lib/civil-protection.ts` (zone, livelli, zona dal Comune) e `src/server/civil-protection.ts` (ultimo file del
+  repository GitHub `pcm-dpc/DPC-Bollettini-Criticita-Idrogeologica-Idraulica` via API dei commit, memoria di un'ora,
+  `GITHUB_TOKEN` facoltativo); zona scelta a mano in `marinas.alert_zone`. `portConditions` (`src/server/port-conditions.ts`)
+  unisce tutto e prepara l'avviso: lo usano `/meteo` (tutti i ruoli), il riquadro in cruscotto e banchina
+  (`PortWeatherCard`: a «tutti» per direzione e ufficio, a «chi è in porto» per la banchina), `/diportista/meteo` e
+  `/api/meteo/controllo` (Cloud Scheduler, `METEO_CHECK_TOKEN`; non si ripete entro 24 ore, `wind_alert_sent_at`).
+  Nei collaudi locali `WEATHER_FIXTURE` e `DPC_FIXTURE` sostituiscono le chiamate (da qui Open-Meteo e l'API di GitHub non
+  sono raggiungibili); estratto vero del bollettino in `tests/fixtures/`.
 - Produzione: `output: "standalone"` + `Dockerfile` (Cloud Run). Le migrazioni si applicano all'avvio con
   `AUTO_MIGRATE=true`; ogni modifica allo schema richiede `pnpm db:generate` e la migrazione va committata.
 - Pubblicazione: `main` NON va online da solo. L'utente pubblica dal PC Windows (PowerShell), dalla cartella

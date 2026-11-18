@@ -108,6 +108,10 @@ export const marinas = pgTable("marinas", {
   latitude: real("latitude"),
   longitude: real("longitude"),
   windAlertKnots: integer("wind_alert_knots").notNull().default(30),
+  // Soglia dell'onda significativa, in metri, oltre la quale si propone l'avviso.
+  waveAlertM: real("wave_alert_m").notNull().default(2),
+  // Zona di allerta della Protezione Civile scelta a mano; vuota = quella che contiene il Comune del porto.
+  alertZone: text("alert_zone"),
   // Invio automatico dell'allerta (serve il controllo periodico, vedi COME-LAVORIAMO.md) e ultimo invio, per non ripeterla.
   windAlertAuto: boolean("wind_alert_auto").notNull().default(false),
   windAlertSentAt: timestamp("wind_alert_sent_at", { withTimezone: true }),

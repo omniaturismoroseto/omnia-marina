@@ -120,6 +120,13 @@
       "when": 1794952501200,
       "tag": "0016_messaggi_diportisti",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794985931794,
+      "tag": "0017_meteo_marino_protezione_civile",
+      "breakpoints": true
     }
   ]
 }

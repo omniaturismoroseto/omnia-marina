@@ -212,10 +212,11 @@ alla schermata Home (Condividi → Aggiungi alla schermata Home) e averla aperta
 
 Le chiavi non vanno cambiate: con chiavi nuove tutti i diportisti dovrebbero riattivare le notifiche.
 
-## Allerta vento automatica (facoltativa, una volta sola)
+## Avviso meteo automatico (facoltativo, una volta sola)
 
-L'allerta vento compare comunque nel cruscotto, da inviare con un clic. Per farla partire da sola anche quando nessuno
-guarda il cruscotto, Google controlla le previsioni ogni 3 ore. Sempre da **Cloud Shell**:
+L'avviso meteo (burrasca, raffiche od onda oltre soglia, allerta arancione o rossa della Protezione Civile) compare
+comunque in «Meteo», nel cruscotto e in banchina, da inviare con un clic. Per farlo partire da solo anche quando nessuno
+guarda, Google controlla previsioni e bollettino ogni 3 ore. Sempre da **Cloud Shell**:
 
 1. Crea la chiave del controllo e passala all'app:
 
@@ -229,10 +230,10 @@ guarda il cruscotto, Google controlla le previsioni ogni 3 ore. Sempre da **Clou
    gcloud services enable cloudscheduler.googleapis.com --project omnia-marina; URL=$(gcloud run services describe omnia-marina --region europe-west1 --project omnia-marina --format "value(status.url)"); gcloud scheduler jobs create http omnia-marina-meteo --location europe-west1 --project omnia-marina --schedule "7 */3 * * *" --time-zone "Europe/Rome" --uri "$URL/api/meteo/controllo" --http-method POST --headers "Authorization=Bearer $TOKEN"
    ```
 
-3. Nell'app: **Impostazioni → Porto → Area diportisti e meteo** → spunta «Invia l'allerta vento da sola» → Salva.
+3. Nell'app: **Impostazioni → Porto → Area diportisti e meteo** → spunta «Invia l'avviso meteo da solo» → Salva.
 
 Per provarlo subito: `gcloud scheduler jobs run omnia-marina-meteo --location europe-west1 --project omnia-marina`.
-La stessa allerta non parte due volte entro 24 ore. Per fermarlo: togli la spunta in Impostazioni, oppure
+Lo stesso avviso non parte due volte entro 24 ore. Per fermarlo: togli la spunta in Impostazioni, oppure
 `gcloud scheduler jobs pause omnia-marina-meteo --location europe-west1 --project omnia-marina`.
 
 ---

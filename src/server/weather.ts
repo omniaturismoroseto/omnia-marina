@@ -1,9 +1,9 @@
 import "server-only";
 import { readFile } from "node:fs/promises";
-import { parseForecast, type WeatherHour } from "@/lib/weather";
+import { MARINE_VARIABLES, parseForecast, type WeatherHour } from "@/lib/weather";
 
-// Previsioni per il porto da Open-Meteo (gratuito, senza chiave): vento, raffiche e tempo, più l'onda dal servizio
-// marino. Si tengono in memoria 30 minuti per posizione. Per le prove locali WEATHER_FIXTURE (percorso di un JSON
+// Previsioni per il porto da Open-Meteo (gratuito, senza chiave): vento, raffiche e tempo, più onda, mare lungo,
+// corrente, livello del mare e temperatura dell'acqua dal servizio marino. Si tengono in memoria 30 minuti per posizione. Per le prove locali WEATHER_FIXTURE (percorso di un JSON
 // con { forecast, marine }) sostituisce la chiamata.
 
 const TTL_MS = 30 * 60 * 1000;
@@ -42,7 +42,7 @@ export async function portForecast(latitude: number | null, longitude: number | 
       const [forecast, marine] = await Promise.all([
         fetchJson(`https://api.open-meteo.com/v1/forecast?${common}&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m,weather_code,temperature_2m&wind_speed_unit=kn`),
         // Il mare può non esserci (porto su un lago, servizio giù): le previsioni del vento bastano.
-        fetchJson(`https://marine-api.open-meteo.com/v1/marine?${common}&hourly=wave_height`).catch(() => null),
+        fetchJson(`https://marine-api.open-meteo.com/v1/marine?${common}&hourly=${MARINE_VARIABLES}`).catch(() => null),
       ]);
       hours = parseForecast(forecast, marine);
     }

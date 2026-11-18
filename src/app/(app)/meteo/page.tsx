@@ -15,11 +15,12 @@ export default page(async function StaffWeatherPage() {
       <PageHeader
         help="meteo"
         title="Meteo"
-        description="Vento, raffiche e onda per il porto. Se le raffiche previste superano la soglia, da qui mandi l'avviso ai diportisti."
+        description="Vento, mare (onda, mare lungo, corrente, livello) e allerte della Protezione Civile per il porto. Con burrasca, vento o mare oltre soglia, o allerta arancione o rossa, da qui mandi l'avviso ai diportisti."
       />
       <PortWeatherCard marinaId={ctx.marinaId} role={ctx.role} full />
       <p className="mt-4 text-xs text-muted">
-        Previsioni indicative di Open-Meteo. Per la navigazione fanno fede i bollettini ufficiali (meteomar, avvisi della Capitaneria).
+        Previsioni indicative di Open-Meteo e bollettino nazionale di criticità della Protezione Civile. Per la navigazione fanno fede i bollettini
+        ufficiali: avvisi di burrasca e meteomar dell&apos;Aeronautica Militare, avvisi della Capitaneria; per le allerte, quella della Regione.
         {ctx.role === "admin" && (
           <>
             {" "}
