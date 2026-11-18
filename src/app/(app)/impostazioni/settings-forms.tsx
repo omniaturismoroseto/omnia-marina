@@ -109,6 +109,7 @@ export function BoaterSettingsForm({
   alertZone,
   zoneNames,
   detectedZone,
+  forecastEnabled,
 }: {
   officeHours: string;
   boaterInfo: string;
@@ -119,6 +120,8 @@ export function BoaterSettingsForm({
   // Zone di allerta dell'ultimo bollettino della Protezione Civile (vuoto se non raggiungibile) e quella trovata dal Comune.
   zoneNames: string[];
   detectedZone: string | null;
+  // Previsioni Open-Meteo accese (abbonamento): solo allora servono le soglie di raffiche e onda.
+  forecastEnabled: boolean;
   windAlertAuto: boolean;
 }) {
   return (
@@ -145,19 +148,27 @@ export function BoaterSettingsForm({
           label="Posizione del porto"
           defaultValue={coordinates}
           placeholder="42.65890, 14.02560"
-          hint="Su Google Maps: tasto destro (o tieni premuto) sul porto e copia i numeri."
+          hint="Serve a capire se burrasca e mare agitato del bollettino riguardano il porto. Su Google Maps: tasto destro (o tieni premuto) sul porto e copia i numeri."
           wrapperClassName="sm:col-span-2"
         />
-        <Field name="windAlertKnots" label="Avviso raffiche oltre (nodi)" defaultValue={String(windAlertKnots)} inputMode="numeric" hint="Burrasca (forza 8) sempre." />
+        {forecastEnabled ? (
+          <Field name="windAlertKnots" label="Avviso raffiche oltre (nodi)" defaultValue={String(windAlertKnots)} inputMode="numeric" hint="Burrasca (forza 8) sempre." />
+        ) : (
+          <input type="hidden" name="windAlertKnots" value={String(windAlertKnots)} />
+        )}
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Field
-          name="waveAlertM"
-          label="Avviso onda oltre (m)"
-          defaultValue={String(waveAlertM).replace(".", ",")}
-          inputMode="decimal"
-          hint="Onda significativa prevista. 2,5 m = mare molto mosso."
-        />
+        {forecastEnabled ? (
+          <Field
+            name="waveAlertM"
+            label="Avviso onda oltre (m)"
+            defaultValue={String(waveAlertM).replace(".", ",")}
+            inputMode="decimal"
+            hint="Onda significativa prevista. 2,5 m = mare molto mosso."
+          />
+        ) : (
+          <input type="hidden" name="waveAlertM" value={String(waveAlertM)} />
+        )}
         {zoneNames.length > 0 ? (
           <SelectField
             name="alertZone"
@@ -182,7 +193,7 @@ export function BoaterSettingsForm({
         name="windAlertAuto"
         label="Invia l'avviso meteo da solo"
         defaultChecked={windAlertAuto}
-        hint="Burrasca, raffiche od onda oltre soglia, allerta arancione o rossa della Protezione Civile. Se spento, l'avviso compare in «Meteo» e lo invii tu con un clic. L'invio automatico richiede il controllo periodico (vedi la guida)."
+        hint="Burrasca, tempesta o mare agitato vicino al porto, allerta arancione o rossa della Protezione Civile. Se spento, l'avviso compare in «Allerte» e lo invii tu con un clic. L'invio automatico richiede il controllo periodico (vedi la guida)."
       />
       <FormMessage />
       <Submit>Salva</Submit>

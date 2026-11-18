@@ -2,7 +2,7 @@ import "server-only";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { addDays, todayRome } from "@/lib/dates";
-import { zonesFromTopojson, type CivilBulletin } from "@/lib/civil-protection";
+import { bulletinSection, phenomenaFromTopojson, zonesFromTopojson, type CivilBulletin, type VigilanceBulletin } from "@/lib/civil-protection";
 
 // Ultimo bollettino di criticità della Protezione Civile, dal repository pubblico su GitHub. Il nome del file cambia
 // a ogni emissione (files/AAAAMMGG_HHMM.json): lo si trova dall'ultimo commit che ha toccato la cartella. Si tiene in
@@ -75,5 +75,69 @@ export async function latestCivilBulletin(): Promise<CivilBulletin | null> {
     // Si riprova tra 10 minuti, intanto si usa l'ultimo letto.
     cache = { at: Date.now() - TTL_MS + 10 * 60 * 1000, bulletin: cache?.bulletin ?? null };
     return cache.bulletin;
+  }
+}
+
+// ───────────────────────── Bollettino di vigilanza meteorologica ─────────────────────────
+// Un file per giorno (files/AAAAMMGG.json, di norma pubblicato nel primo pomeriggio): si prova quello di oggi e,
+// se non c'è ancora, quelli dei due giorni prima. Nessuna API di GitHub, solo i file. Memoria di un'ora.
+// Per le prove locali DPC_VIGILANCE_FIXTURE (percorso dell'indice, con i TopoJSON in «topojson/» accanto).
+
+const VIGILANCE_REPO = "pcm-dpc/DPC-Bollettini-Vigilanza-Meteorologica";
+let vigilanceCache: { at: number; bulletin: VigilanceBulletin | null } | null = null;
+
+type VigilanceIndexDay = { topo_json: string[]; html_description: string };
+type VigilanceIndex = { date: string; name: string; today: VigilanceIndexDay; tomorrow: VigilanceIndexDay; aftertomorrow?: VigilanceIndexDay };
+
+async function loadVigilance(): Promise<VigilanceBulletin> {
+  let index: VigilanceIndex | null = null;
+  let topo: (url: string) => Promise<Parameters<typeof phenomenaFromTopojson>[0]>;
+  if (process.env.DPC_VIGILANCE_FIXTURE) {
+    const dir = dirname(process.env.DPC_VIGILANCE_FIXTURE);
+    index = JSON.parse(await readFile(process.env.DPC_VIGILANCE_FIXTURE, "utf8"));
+    topo = async (url) => JSON.parse(await readFile(join(dir, "topojson", basename(url)), "utf8"));
+  } else {
+    const today = todayRome();
+    for (const back of [0, 1, 2]) {
+      const day = addDays(today, -back).replaceAll("-", "");
+      try {
+        index = await getJson<VigilanceIndex>(`https://raw.githubusercontent.com/${VIGILANCE_REPO}/master/files/${day}.json`);
+        break;
+      } catch {
+        // Non ancora pubblicato: si prova il giorno prima.
+      }
+    }
+    topo = (url) => getJson(url);
+  }
+  if (!index) throw new Error("Nessun bollettino di vigilanza negli ultimi tre giorni.");
+  const found: VigilanceIndex = index;
+  const first = `${found.date.slice(0, 4)}-${found.date.slice(4, 6)}-${found.date.slice(6, 8)}`;
+  const parts = [found.today, found.tomorrow, found.aftertomorrow];
+  const days = await Promise.all(
+    parts.map(async (part, i) => {
+      if (!part) return null;
+      const url = part.topo_json.find((u) => u.includes("fenomeni"));
+      return {
+        date: addDays(first, i),
+        points: url ? phenomenaFromTopojson(await topo(url)) : [],
+        windText: bulletinSection(part.html_description ?? "", "Venti"),
+        seaText: bulletinSection(part.html_description ?? "", "Mari"),
+      };
+    }),
+  );
+  return { name: found.name, days: days.filter((d): d is NonNullable<typeof d> => d !== null) };
+}
+
+/** L'ultimo bollettino di vigilanza, oppure null se non è raggiungibile (si tiene buono quello già letto). */
+export async function latestVigilance(): Promise<VigilanceBulletin | null> {
+  if (vigilanceCache && Date.now() - vigilanceCache.at < TTL_MS) return vigilanceCache.bulletin;
+  try {
+    const bulletin = await loadVigilance();
+    vigilanceCache = { at: Date.now(), bulletin };
+    return bulletin;
+  } catch (error) {
+    console.error("Bollettino di vigilanza non disponibile", error);
+    vigilanceCache = { at: Date.now() - TTL_MS + 10 * 60 * 1000, bulletin: vigilanceCache?.bulletin ?? null };
+    return vigilanceCache.bulletin;
   }
 }

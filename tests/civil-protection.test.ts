@@ -3,12 +3,19 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  bulletinSection,
   civilAlertText,
   civilAlertWorthSending,
   currentDays,
+  distanceKm,
   findZoneByComune,
   levelFromText,
+  nearbyPhenomena,
   normalizePlace,
+  phenomenaFromTopojson,
+  portVigilance,
+  vigilanceAlertText,
+  vigilanceWorthSending,
   zoneOutlook,
   zonesFromTopojson,
   type CivilBulletin,
@@ -59,5 +66,38 @@ describe("bollettino di criticità", () => {
     expect(civilAlertWorthSending(teramo)).toBe(false);
     expect(civilAlertText(teramo, "2026-11-17")).toBeNull();
     expect(zoneOutlook(bulletin, "2026-11-20", "Serchio-Lucca")).toBeNull();
+  });
+});
+
+describe("bollettino di vigilanza (estratto vero del 18/11/2026, Liguria e Alta Toscana)", () => {
+  const points = phenomenaFromTopojson(read("dpc-vigilanza-fenomeni-oggi.json"));
+  const index = read("dpc-vigilanza-indice.json") as { html: string };
+  const GENOVA = { lat: 44.405, lon: 8.93 };
+  const PESCARA = { lat: 42.465, lon: 14.215 };
+
+  it("trova burrasca e mare agitato vicino a Genova, niente a Pescara", () => {
+    const near = nearbyPhenomena(points, GENOVA.lat, GENOVA.lon);
+    expect(near.filter((p) => p.severe).map((p) => p.label)).toEqual(["Mare agitato o molto agitato", "Burrasca"]);
+    expect(near.find((p) => p.code === 11)?.km).toBe(23);
+    expect(nearbyPhenomena(points, PESCARA.lat, PESCARA.lon)).toEqual([]);
+    expect(Math.round(distanceKm(GENOVA.lat, GENOVA.lon, PESCARA.lat, PESCARA.lon))).toBe(478);
+  });
+
+  it("estrae i testi su venti e mari", () => {
+    expect(bulletinSection(index.html, "Venti")).toMatch(/^di burrasca sud-occidentali/);
+    expect(bulletinSection(index.html, "Mari")).toMatch(/^agitati il Mar Ligure/);
+    expect(bulletinSection(index.html, "Nebbie")).toBe("");
+  });
+
+  it("prepara l'avviso solo per i fenomeni vicini", () => {
+    const bulletin = { name: "Bollettino di Vigilanza Meteo del 18/11/2026", days: [{ date: "2026-11-18", points, windText: "", seaText: "" }] };
+    const genova = portVigilance(bulletin, "2026-11-18", GENOVA.lat, GENOVA.lon);
+    expect(vigilanceWorthSending(genova)).toBe(true);
+    const text = vigilanceAlertText(genova, "2026-11-18");
+    expect(text?.title).toBe("Avviso di burrasca e mare agitato o molto agitato");
+    expect(text?.lines[1]).toContain("• oggi: mare agitato o molto agitato, burrasca");
+    expect(vigilanceWorthSending(portVigilance(bulletin, "2026-11-18", PESCARA.lat, PESCARA.lon))).toBe(false);
+    expect(portVigilance(bulletin, "2026-11-18", null, null)[0].nearby).toEqual([]);
+    expect(portVigilance(bulletin, "2026-11-19", GENOVA.lat, GENOVA.lon)).toEqual([]);
   });
 });

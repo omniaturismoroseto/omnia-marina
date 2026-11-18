@@ -64,11 +64,11 @@ export const GUIDE: GuideSection[] = [
         ],
       },
       {
-        title: "Meteo e mare",
+        title: "Allerte meteo e mare",
         items: [
-          "«Meteo e mare»: vento (con la forza Beaufort), onda, mare lungo, corrente, livello del mare e l'allerta della Protezione Civile per la zona del porto, adesso e nei prossimi giorni.",
-          "Con burrasca, raffiche od onda oltre soglia, o allerta arancione o rossa della Protezione Civile, compare la striscia rossa con «Avvisa i clienti»: apre il messaggio urgente già scritto. Controllalo e premi «Invia».",
-          "Dopo l'invio il pulsante diventa «Manda un altro avviso» per 24 ore. Se la direzione ha scelto l'invio automatico, l'avviso parte da solo. Più dettagli nella voce «Meteo».",
+          "«Allerte meteo e mare»: dai bollettini ufficiali della Protezione Civile, burrasca, tempesta e mare agitato vicino al porto (oggi, domani, dopodomani) e la criticità idrogeologica e temporali della zona.",
+          "Con burrasca, tempesta o mare agitato vicino al porto, o allerta arancione o rossa, compare la striscia rossa con «Avvisa i clienti»: apre il messaggio urgente già scritto. Controllalo e premi «Invia».",
+          "Dopo l'invio il pulsante diventa «Manda un altro avviso» per 24 ore. Se la direzione ha scelto l'invio automatico, l'avviso parte da solo. Più dettagli nella voce «Allerte».",
         ],
       },
     ],
@@ -249,35 +249,34 @@ export const GUIDE: GuideSection[] = [
   },
   {
     id: "meteo",
-    title: "Meteo",
+    title: "Allerte",
     icon: "weather",
     roles: ALL,
-    purpose: "Vento, mare e allerte della Protezione Civile per il porto, e l'avviso ai diportisti quando arriva brutto tempo.",
+    purpose: "Burrasca, mare agitato e criticità della zona dai bollettini della Protezione Civile, e l'avviso ai diportisti.",
     steps: [
       {
-        title: "Guardare le previsioni",
+        title: "Cosa si vede",
         items: [
-          "«Meteo»: vento medio e raffiche in nodi con la forza Beaufort (dalla forza 8 è burrasca); onda significativa con periodo, provenienza e stato del mare (calmo, mosso, agitato…); mare lungo; corrente con la direzione verso cui va; livello del mare con le prossime alte e basse; temperatura dell'acqua.",
-          "Sotto, i prossimi tre giorni e, ora per ora, le prossime 48 ore: in rosso le ore con burrasca o con raffiche od onda oltre le soglie del porto. Sul telefono la tabella scorre di lato.",
-          "«Protezione Civile»: il bollettino nazionale di criticità (rischio idrogeologico, idraulico e temporali, oggi e domani) per la zona di allerta del porto, trovata dal Comune. Esce ogni giorno nel pomeriggio; per le decisioni fa fede l'allerta della Regione.",
-          "Lo stesso riquadro, più piccolo, è nel «Cruscotto» e nella «Banchina».",
-          "Le previsioni arrivano solo se la direzione ha inserito la posizione del porto in «Impostazioni» → «Porto».",
+          "«Vento e mare»: dal bollettino di vigilanza meteorologica, per oggi, domani e dopodomani, i fenomeni previsti vicino al porto (entro 70 km): venti forti, burrasca, tempesta, raffiche frequenti, mare molto mosso, agitato o grosso, moto ondoso in aumento. In rosso quelli per cui avvisare. Sotto ogni giorno c'è il testo nazionale su venti e mari.",
+          "«Criticità idrogeologica e temporali»: dal bollettino di criticità, l'allerta (verde, gialla, arancione, rossa) per la zona di allerta del porto, oggi e domani.",
+          "Lo stesso riquadro, più piccolo, è nel «Cruscotto» e nella «Banchina». I bollettini escono ogni giorno nel primo pomeriggio: la mattina si vede quello del giorno prima.",
+          "Servono la posizione e il Comune del porto, in «Impostazioni» → «Porto».",
         ],
       },
       {
         title: "Mandare l'avviso",
         items: [
-          "La striscia rossa compare con burrasca prevista, raffiche od onda oltre le soglie nelle prossime 48 ore, oppure allerta arancione o rossa della Protezione Civile. Il pulsante apre il messaggio urgente già scritto con tutte le condizioni: controllalo, cambia se vuoi i destinatari, e premi «Invia».",
+          "La striscia rossa compare con burrasca, tempesta o mare agitato vicino al porto, oppure con allerta arancione o rossa. Il pulsante apre il messaggio urgente già scritto: controllalo, cambia se vuoi i destinatari, e premi «Invia».",
           "Direzione e ufficio avvisano tutti i clienti con contratto attivo; l'operatore di banchina chi è in porto adesso, oppure un pontile.",
           "Dopo l'invio il pulsante diventa «Manda un altro avviso» per 24 ore, così si vede che l'avviso è già partito.",
         ],
       },
     ],
     tips: [
-      "Le previsioni sono indicative: per la navigazione fanno fede gli avvisi di burrasca e il meteomar dell'Aeronautica Militare e gli avvisi della Capitaneria.",
-      "Le soglie di raffiche e onda, la zona di allerta e l'invio automatico li sceglie la direzione in «Impostazioni» → «Porto».",
+      "Per la navigazione fanno fede anche gli avvisi di burrasca e il meteomar dell'Aeronautica Militare e gli avvisi della Capitaneria; per le allerte, quella della Regione.",
+      "Zona di allerta e invio automatico li sceglie la direzione in «Impostazioni» → «Porto».",
     ],
-    link: { href: "/meteo", label: "Apri il meteo" },
+    link: { href: "/meteo", label: "Apri le allerte" },
   },
   {
     id: "contabilita",
@@ -339,7 +338,7 @@ export const GUIDE: GuideSection[] = [
         title: "Le linguette",
         items: [
           "«Porto»: dati della società, logo della società di gestione (compare nel menu e nelle stampe), spese di gestione e quota rifiuti, nome della categoria «Ex cliente», testi del contratto e dell'informativa.",
-          "«Porto» → «Area diportisti e meteo»: orari dell'ufficio e informazioni utili che i diportisti vedono nell'app, posizione del porto (da Google Maps) per il meteo, soglie di raffiche e onda per l'avviso, zona di allerta della Protezione Civile (trovata dal Comune, oppure scelta a mano) e, se volete, l'invio automatico dell'avviso.",
+          "«Porto» → «Area diportisti e allerte»: orari dell'ufficio e informazioni utili che i diportisti vedono nell'app, posizione del porto (da Google Maps) per capire se burrasca e mare agitato lo riguardano, zona di allerta della Protezione Civile (trovata dal Comune, oppure scelta a mano) e, se volete, l'invio automatico dell'avviso.",
           "«Pontili e posti»: pontili, banchine e posti. Tocca un posto per cambiarne misure, categoria o stato (in servizio, in manutenzione, fuori servizio).",
           "«Pianta dal vero»: carica la foto aerea, imposta la scala misurando una distanza nota, poi disponi i posti. «Riconoscimento automatico» propone pontili e banchine dalla foto.",
           "«Categorie»: le classi dei posti per misura.",

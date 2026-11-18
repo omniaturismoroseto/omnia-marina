@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { eq } from "drizzle-orm";
-import { ChevronRight, CloudSun, FileText, Mail, Phone, Radio } from "lucide-react";
+import { ChevronRight, FileText, Mail, Phone, Radio } from "lucide-react";
 import { page } from "@/components/page";
 import { Badge, Card } from "@/components/ui";
 import { db } from "@/db";
@@ -12,10 +12,7 @@ import { formatDate, todayRome } from "@/lib/dates";
 import { formatDimensions, formatMoney } from "@/lib/format";
 import { CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { marinaAddress } from "@/lib/templates";
-import { CIVIL_LEVEL_LABEL } from "@/lib/civil-protection";
-import { beaufort, currentHour, formatMeters, seaState, windName } from "@/lib/weather";
 import { ownerBoats, ownerCharges, ownerContracts, ownerDeadlines } from "@/server/owner-area";
-import { portConditions } from "@/server/port-conditions";
 
 export const metadata: Metadata = { title: "La mia barca" };
 
@@ -31,9 +28,6 @@ export default page(async function OwnerHomePage() {
     ownerCharges(scope, today),
     db.select().from(marinas).where(eq(marinas.id, ctx.marinaId)),
   ]);
-  const conditions = await portConditions(ctx.marinaId);
-  const weatherNow = conditions.hours ? currentHour(conditions.hours, conditions.now) : null;
-  const civilToday = conditions.civil?.outlook?.days.find((d) => d.max !== "verde");
   const active = contractRows.filter((c) => c.status === "attivo");
   const past = contractRows.filter((c) => c.status !== "attivo");
   const deadlines = ownerDeadlines({ charges: chargeRows, contracts: contractRows, boats: boatRows }, today);
@@ -86,27 +80,6 @@ export default page(async function OwnerHomePage() {
               </Link>
             </section>
           ))
-        )}
-
-        {weatherNow && (
-          <Link href="/diportista/meteo" className="card flex items-center gap-3 p-4 hover:bg-paper">
-            <CloudSun size={22} className="shrink-0 text-sea" aria-hidden="true" />
-            <span className="min-w-0 flex-1 text-sm text-ink">
-              Vento {windName(weatherNow.windDir).short} {weatherNow.windKn} nodi (forza {beaufort(weatherNow.windKn).force}), raffiche {weatherNow.gustKn}
-              {weatherNow.waveM !== null ? ` · onda ${formatMeters(weatherNow.waveM)} m, mare ${seaState(weatherNow.waveM).label.toLowerCase()}` : ""}
-              {conditions.alerts.length > 0 && (
-                <span className="block font-semibold text-bad">
-                  {conditions.alerts.some((a) => a.kind === "burrasca") ? "Burrasca in arrivo" : conditions.alerts.some((a) => a.kind === "raffiche") ? "Vento forte in arrivo" : "Mare agitato in arrivo"}
-                </span>
-              )}
-              {civilToday && (
-                <span className="block font-semibold text-bad">
-                  Protezione Civile: {CIVIL_LEVEL_LABEL[civilToday.max].toLowerCase()} {civilToday.date === conditions.today ? "oggi" : "domani"}
-                </span>
-              )}
-            </span>
-            <ChevronRight size={16} className="text-muted" aria-hidden="true" />
-          </Link>
         )}
 
         <Card title="Scadenze">

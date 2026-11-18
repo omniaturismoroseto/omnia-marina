@@ -66,7 +66,7 @@ const boaterSettingsSchema = z.object({
   windAlertAuto: f.checkbox(),
 });
 
-// Area diportisti e meteo: orari, informazioni utili, posizione del porto e allerta vento.
+// Area diportisti e allerte: orari, informazioni utili, posizione del porto e allerta vento.
 export async function saveBoaterSettings(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
   const parsed = parseForm(boaterSettingsSchema, formData);
@@ -80,7 +80,7 @@ export async function saveBoaterSettings(_prev: FormState, formData: FormData): 
     .update(marinas)
     .set({ ...data, latitude: position?.latitude ?? null, longitude: position?.longitude ?? null })
     .where(eq(marinas.id, ctx.marinaId));
-  await audit(ctx, "modifica", "porto", ctx.marinaId, "Area diportisti e meteo");
+  await audit(ctx, "modifica", "porto", ctx.marinaId, "Area diportisti e allerte");
   revalidatePath("/", "layout");
   return { ok: true, message: "Impostazioni salvate." };
 }

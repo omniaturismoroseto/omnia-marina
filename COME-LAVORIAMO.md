@@ -214,9 +214,9 @@ Le chiavi non vanno cambiate: con chiavi nuove tutti i diportisti dovrebbero ria
 
 ## Avviso meteo automatico (facoltativo, una volta sola)
 
-L'avviso meteo (burrasca, raffiche od onda oltre soglia, allerta arancione o rossa della Protezione Civile) compare
-comunque in «Meteo», nel cruscotto e in banchina, da inviare con un clic. Per farlo partire da solo anche quando nessuno
-guarda, Google controlla previsioni e bollettino ogni 3 ore. Sempre da **Cloud Shell**:
+L'avviso (burrasca, tempesta o mare agitato vicino al porto, allerta arancione o rossa della Protezione Civile) compare
+comunque in «Allerte», nel cruscotto e in banchina, da inviare con un clic. Per farlo partire da solo anche quando nessuno
+guarda, Google controlla i bollettini ogni 3 ore. Sempre da **Cloud Shell**:
 
 1. Crea la chiave del controllo e passala all'app:
 
@@ -230,7 +230,7 @@ guarda, Google controlla previsioni e bollettino ogni 3 ore. Sempre da **Cloud S
    gcloud services enable cloudscheduler.googleapis.com --project omnia-marina; URL=$(gcloud run services describe omnia-marina --region europe-west1 --project omnia-marina --format "value(status.url)"); gcloud scheduler jobs create http omnia-marina-meteo --location europe-west1 --project omnia-marina --schedule "7 */3 * * *" --time-zone "Europe/Rome" --uri "$URL/api/meteo/controllo" --http-method POST --headers "Authorization=Bearer $TOKEN"
    ```
 
-3. Nell'app: **Impostazioni → Porto → Area diportisti e meteo** → spunta «Invia l'avviso meteo da solo» → Salva.
+3. Nell'app: **Impostazioni → Porto → Area diportisti e allerte** → spunta «Invia l'avviso meteo da solo» → Salva.
 
 Per provarlo subito: `gcloud scheduler jobs run omnia-marina-meteo --location europe-west1 --project omnia-marina`.
 Lo stesso avviso non parte due volte entro 24 ore. Per fermarlo: togli la spunta in Impostazioni, oppure

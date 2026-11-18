@@ -143,3 +143,152 @@ export function civilAlertText(outlook: ZoneOutlook | null, todayLocal: string):
   }
   return { title: `${CIVIL_LEVEL_LABEL[worst.max]} della Protezione Civile ${DAY(worst.date, todayLocal)}`, lines };
 }
+
+// ───────────────────────── Bollettino di vigilanza meteorologica ─────────────────────────
+// Pubblicato ogni giorno (pcm-dpc/DPC-Bollettini-Vigilanza-Meteorologica, CC-BY 4.0) per oggi, domani e dopodomani:
+// testo nazionale per fenomeno (venti, mari…) e simboli sulla mappa, punti con coordinate e codice del fenomeno.
+// Per il porto contano i simboli di vento e mare vicini alla sua posizione.
+
+export type PhenomenonGroup = "vento" | "mare";
+
+/** Codici dei simboli di vento e mare (legenda ufficiale «legenda_bv_verticale.jpg»). `severe`: motivo per avvisare. */
+export const PHENOMENA: Record<number, { label: string; group: PhenomenonGroup; severe: boolean }> = {
+  10: { label: "Venti forti", group: "vento", severe: false },
+  11: { label: "Burrasca", group: "vento", severe: true },
+  12: { label: "Tempesta", group: "vento", severe: true },
+  13: { label: "Frequenti raffiche", group: "vento", severe: false },
+  40: { label: "Mare molto mosso", group: "mare", severe: false },
+  41: { label: "Mare agitato o molto agitato", group: "mare", severe: true },
+  42: { label: "Mare grosso o molto grosso", group: "mare", severe: true },
+  50: { label: "Moto ondoso in aumento", group: "mare", severe: false },
+  51: { label: "Moto ondoso in diminuzione", group: "mare", severe: false },
+};
+
+/** Distanza entro cui un simbolo riguarda il porto: i simboli del mare stanno al largo, sul bacino. */
+export const NEARBY_KM = 70;
+
+export interface PhenomenonPoint {
+  code: number;
+  lat: number;
+  lon: number;
+}
+
+export interface NearbyPhenomenon {
+  code: number;
+  label: string;
+  group: PhenomenonGroup;
+  severe: boolean;
+  km: number;
+}
+
+export interface VigilanceDay {
+  date: string;
+  points: PhenomenonPoint[];
+  /** Testi nazionali del bollettino per venti e mari (vuoti se assenti). */
+  windText: string;
+  seaText: string;
+}
+
+export interface VigilanceBulletin {
+  name: string;
+  days: VigilanceDay[];
+}
+
+/** Punti dei fenomeni di un TopoJSON «fenomeni_…» (servono solo codice e coordinate). */
+export function phenomenaFromTopojson(topo: Topology): PhenomenonPoint[] {
+  const object = Object.values(topo.objects ?? {})[0];
+  return (object?.geometries ?? [])
+    .map((g) => g.properties ?? {})
+    .map((p) => ({ code: Number(p["id_fenomeno"]), lat: Number(p["lat"]), lon: Number(p["lon"]) }))
+    .filter((p) => Number.isFinite(p.code) && Number.isFinite(p.lat) && Number.isFinite(p.lon));
+}
+
+/** Distanza in chilometri tra due punti (formula dell'emisenoverso). */
+export function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const a = Math.sin(rad(lat2 - lat1) / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(rad(lon2 - lon1) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(a));
+}
+
+/** Fenomeni di vento e mare entro `km` dal porto: uno per tipo, il più vicino, prima i più gravi. */
+export function nearbyPhenomena(points: PhenomenonPoint[], lat: number, lon: number, km = NEARBY_KM): NearbyPhenomenon[] {
+  const best = new Map<number, NearbyPhenomenon>();
+  for (const p of points) {
+    const info = PHENOMENA[p.code];
+    if (!info) continue;
+    const d = Math.round(distanceKm(lat, lon, p.lat, p.lon));
+    if (d > km) continue;
+    const prev = best.get(p.code);
+    if (!prev || d < prev.km) best.set(p.code, { code: p.code, ...info, km: d });
+  }
+  return [...best.values()].sort((a, b) => Number(b.severe) - Number(a.severe) || a.group.localeCompare(b.group) || b.code - a.code);
+}
+
+/** Testo di una sezione del bollettino («Venti», «Mari»), senza HTML. */
+export function bulletinSection(html: string, heading: string): string {
+  const paragraphs = html
+    .split(/<\/p>/i)
+    .map((p) =>
+      p
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter(Boolean);
+  const out: string[] = [];
+  let inside = false;
+  for (const p of paragraphs) {
+    const head = /^([A-ZÀ-Úa-zà-ú ]+):\s*(.*)$/.exec(p);
+    if (head && !p.startsWith("-")) {
+      inside = head[1].trim().toLowerCase() === heading.toLowerCase();
+      if (inside && head[2]) out.push(head[2]);
+    } else if (inside) out.push(p);
+  }
+  return out.join(" ").trim();
+}
+
+export interface PortVigilanceDay {
+  date: string;
+  nearby: NearbyPhenomenon[];
+  windText: string;
+  seaText: string;
+}
+
+/** Giorni del bollettino da oggi in poi, con i fenomeni vicini al porto. */
+export function portVigilance(bulletin: VigilanceBulletin, todayLocal: string, lat: number | null, lon: number | null): PortVigilanceDay[] {
+  return bulletin.days
+    .filter((d) => d.date >= todayLocal)
+    .map((d) => ({
+      date: d.date,
+      nearby: lat === null || lon === null ? [] : nearbyPhenomena(d.points, lat, lon),
+      windText: d.windText,
+      seaText: d.seaText,
+    }));
+}
+
+export function vigilanceWorthSending(days: PortVigilanceDay[]): boolean {
+  return days.some((d) => d.nearby.some((p) => p.severe));
+}
+
+const DAY3 = (date: string, today: string) => {
+  const diff = Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
+  return diff === 0 ? "oggi" : diff === 1 ? "domani" : "dopodomani";
+};
+
+/** Righe per il messaggio ai diportisti (giorni con vento o mare vicino al porto). Null se non c'è niente. */
+export function vigilanceAlertText(days: PortVigilanceDay[], todayLocal: string): { title: string; lines: string[] } | null {
+  const withNearby = days.filter((d) => d.nearby.length > 0);
+  if (withNearby.length === 0) return null;
+  const all = withNearby.flatMap((d) => d.nearby);
+  const gale = all.find((p) => p.code === 12) ?? all.find((p) => p.code === 11);
+  const sea = all.find((p) => p.code === 42) ?? all.find((p) => p.code === 41);
+  const title = gale ? `Avviso di ${gale.label.toLowerCase()}${sea ? ` e ${sea.label.toLowerCase()}` : ""}` : sea ? sea.label : "Avviso vento e mare";
+  return {
+    title,
+    lines: [
+      "Protezione Civile, bollettino di vigilanza meteorologica (vento e mare nella zona del porto):",
+      ...withNearby.map((d) => `• ${DAY3(d.date, todayLocal)}: ${d.nearby.map((p) => p.label.toLowerCase()).join(", ")}.`),
+    ],
+  };
+}

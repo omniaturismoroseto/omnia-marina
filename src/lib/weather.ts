@@ -320,10 +320,15 @@ export function alertLine(alert: MarineAlert, todayLocal: string): string {
 }
 
 /**
- * Testo proposto per l'avviso ai diportisti: condizioni del mare e del vento e, se c'è, l'allerta della Protezione
- * Civile (righe già pronte, da src/lib/civil-protection.ts).
+ * Testo proposto per l'avviso ai diportisti: condizioni previste di mare e vento e i bollettini della Protezione
+ * Civile (righe già pronte, da src/lib/civil-protection.ts; il primo dà il titolo se non ci sono previsioni).
  */
-export function alertMessage(alerts: MarineAlert[], todayLocal: string, civil: { title: string; lines: string[] } | null = null): { title: string; body: string } {
+export function alertMessage(
+  alerts: MarineAlert[],
+  todayLocal: string,
+  extras: { title: string; lines: string[] }[] | { title: string; lines: string[] } | null = null,
+): { title: string; body: string } {
+  const list = extras === null ? [] : Array.isArray(extras) ? extras : [extras];
   const gale = alerts.find((a) => a.kind === "burrasca");
   const gust = alerts.find((a) => a.kind === "raffiche");
   const wave = alerts.find((a) => a.kind === "onda");
@@ -333,15 +338,16 @@ export function alertMessage(alerts: MarineAlert[], todayLocal: string, civil: {
       ? `Allerta vento: raffiche fino a ${gust.peak} nodi`
       : wave
         ? `Mare agitato: onde fino a ${formatMeters(wave.peak)} m`
-        : (civil?.title ?? "Avviso meteo");
-  const advice = alerts.length
+        : (list[0]?.title ?? "Avviso meteo");
+  const windOrSea = alerts.length > 0 || list.some((x) => x.lines[0]?.includes("vigilanza"));
+  const advice = windOrSea
     ? ["Controllate ormeggi, cime e parabordi, raddoppiate le cime se serve, chiudete tendalini e capottine. Sconsigliate le uscite in mare."]
     : [];
   return {
     title,
     body: [
       ...(alerts.length ? ["Previsioni per il porto:", ...alerts.map((a) => `• ${alertLine(a, todayLocal)}`)] : []),
-      ...(civil ? [...(alerts.length ? [""] : []), ...civil.lines] : []),
+      ...list.flatMap((x, i) => [...(alerts.length || i > 0 ? [""] : []), ...x.lines]),
       "",
       ...advice,
       "Per qualsiasi necessità contattate il porto.",

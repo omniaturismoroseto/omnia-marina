@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { ArrowUp, ShieldAlert, TriangleAlert } from "lucide-react";
+import { ArrowUp, ShieldAlert, TriangleAlert, Waves, Wind } from "lucide-react";
 import { ButtonLink, Card } from "@/components/ui";
 import type { Role } from "@/db/schema";
-import { CIVIL_LEVEL_LABEL, CIVIL_RISKS, type CivilLevel, type ZoneOutlook } from "@/lib/civil-protection";
+import { CIVIL_LEVEL_LABEL, CIVIL_RISKS, NEARBY_KM, type CivilLevel, type PortVigilanceDay, type ZoneOutlook } from "@/lib/civil-protection";
 import { formatDateTime } from "@/lib/dates";
 import {
   GALE_KN,
@@ -146,13 +146,89 @@ export function SeaPanel({ hour, hours, now }: { hour: WeatherHour; hours: Weath
   );
 }
 
+/** Bollettino di vigilanza: vento e mare vicino al porto (simboli entro NEARBY_KM) e testi nazionali. */
+export function VigilancePanel({ vigilance, today, hasPosition, isAdmin = false }: { vigilance: PortConditions["vigilance"]; today: string; hasPosition: boolean; isAdmin?: boolean }) {
+  return (
+    <section>
+      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-ink">
+        <Wind size={16} aria-hidden="true" />
+        Vento e mare · Protezione Civile
+      </h3>
+      {!hasPosition ? (
+        <p className="text-sm text-muted">
+          Per sapere se burrasca e mare agitato riguardano il porto serve la sua posizione
+          {isAdmin ? (
+            <>
+              {" "}
+              (
+              <Link href="/impostazioni" className="link">
+                Impostazioni → Porto
+              </Link>
+              )
+            </>
+          ) : (
+            " (la inserisce la direzione in Impostazioni → Porto)"
+          )}
+          .
+        </p>
+      ) : !vigilance ? (
+        <p className="text-sm text-muted">Bollettino di vigilanza non disponibile in questo momento.</p>
+      ) : (
+        <ul className="space-y-3">
+          {vigilance.days.map((d: PortVigilanceDay) => (
+            <li key={d.date}>
+              <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                <span className="w-16 font-medium text-ink">{dayName(d.date, today)}</span>
+                {d.nearby.length === 0 ? (
+                  <span className="inline-flex rounded-full bg-ok-soft px-2 py-0.5 text-xs font-semibold text-ok">Niente di rilevante vicino al porto</span>
+                ) : (
+                  d.nearby.map((p) => (
+                    <span
+                      key={p.code}
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${p.severe ? "bg-bad-soft text-bad" : "bg-yellow-100 text-yellow-900"}`}
+                      title={`A ${p.km} km dal porto`}
+                    >
+                      {p.group === "vento" ? <Wind size={12} aria-hidden="true" /> : <Waves size={12} aria-hidden="true" />}
+                      {p.label}
+                    </span>
+                  ))
+                )}
+              </div>
+              {(d.windText || d.seaText) && (
+                <details className="mt-1 pl-[4.375rem]">
+                  <summary className="cursor-pointer text-xs text-muted">Testo nazionale su venti e mari</summary>
+                  {d.windText && (
+                    <p className="mt-1 text-xs text-ink">
+                      <strong>Venti:</strong> {d.windText}
+                    </p>
+                  )}
+                  {d.seaText && (
+                    <p className="mt-1 text-xs text-ink">
+                      <strong>Mari:</strong> {d.seaText}
+                    </p>
+                  )}
+                </details>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {vigilance && (
+        <p className="mt-2 text-xs text-faint">
+          {vigilance.name}. Simboli di vento e mare entro {NEARBY_KM} km dal porto. Fonte: Dipartimento della Protezione Civile (CC BY 4.0).
+        </p>
+      )}
+    </section>
+  );
+}
+
 /** Bollettino di criticità della Protezione Civile per la zona del porto. */
 export function CivilPanel({ civil, today, isAdmin = false }: { civil: PortConditions["civil"]; today: string; isAdmin?: boolean }) {
   return (
     <section>
       <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-ink">
         <ShieldAlert size={16} aria-hidden="true" />
-        Protezione Civile
+        Criticità idrogeologica e temporali · Protezione Civile
       </h3>
       {!civil ? (
         <p className="text-sm text-muted">Bollettino di criticità non disponibile in questo momento.</p>
@@ -187,7 +263,9 @@ export function CivilPanel({ civil, today, isAdmin = false }: { civil: PortCondi
           </ul>
         </>
       )}
-      {civil && <p className="mt-2 text-xs text-faint">{civil.bulletin.name}. Fonte: Dipartimento della Protezione Civile; fa fede l&apos;allerta della Regione.</p>}
+      {civil && (
+        <p className="mt-2 text-xs text-faint">{civil.bulletin.name}. Fonte: Dipartimento della Protezione Civile (CC BY 4.0); fa fede l&apos;allerta della Regione.</p>
+      )}
     </section>
   );
 }
@@ -301,6 +379,7 @@ export function HourlyTable({ hours, now, thresholds, hoursAhead = 24 }: { hours
 /** Striscia d'allerta: burrasca, raffiche, onda e Protezione Civile, con il pulsante per avvisare (personale). */
 export function AlertStrip({ c, role }: { c: PortConditions; role?: Role }) {
   const civilAlert = c.civil?.outlook?.days.filter((d) => d.max === "arancione" || d.max === "rossa") ?? [];
+  const seaWind = c.vigilance?.days.filter((d) => d.nearby.some((p) => p.severe)) ?? [];
   if (!c.worthSending) return null;
   const audience = role === "banchina" ? "in_porto" : "tutti";
   const href =
@@ -316,6 +395,16 @@ export function AlertStrip({ c, role }: { c: PortConditions; role?: Role }) {
           {c.alerts.map((a) => (
             <li key={a.kind}>
               <strong>{a.kind === "burrasca" ? "Burrasca" : a.kind === "raffiche" ? "Vento forte" : "Mare agitato"}:</strong> {lowerFirst(alertLine(a, c.today).replace(/^Burrasca: /, ""))}
+            </li>
+          ))}
+          {seaWind.map((d) => (
+            <li key={`v-${d.date}`}>
+              <strong>Vento e mare {d.date === c.today ? "oggi" : dayName(d.date, c.today)}:</strong>{" "}
+              {d.nearby
+                .filter((p) => p.severe)
+                .map((p) => p.label.toLowerCase())
+                .join(", ")}{" "}
+              vicino al porto (Protezione Civile).
             </li>
           ))}
           {civilAlert.map((d) => (
@@ -338,8 +427,9 @@ export function AlertStrip({ c, role }: { c: PortConditions; role?: Role }) {
 }
 
 /**
- * Meteo del porto per il personale (cruscotto, banchina e pagina «Meteo»): vento e mare adesso, Protezione Civile,
- * prossimi giorni e, se serve, l'avviso pronto da inviare. Con `full` aggiunge l'andamento ora per ora.
+ * Allerte del porto per il personale (cruscotto, banchina e pagina «Allerte»): bollettini della Protezione Civile
+ * (vento e mare vicino al porto, criticità della zona) e, se serve, l'avviso pronto da inviare. Con le previsioni
+ * Open-Meteo accese (abbonamento) aggiunge vento e mare previsti e, con `full`, l'andamento ora per ora.
  * La banchina non scrive a tutti: per lei l'avviso va a chi è in porto (lo può cambiare prima di inviare).
  */
 export async function PortWeatherCard({ marinaId, role, full = false }: { marinaId: string; role: Role; full?: boolean }) {
@@ -348,13 +438,13 @@ export async function PortWeatherCard({ marinaId, role, full = false }: { marina
   const current = c.hours ? currentHour(c.hours, c.now) : null;
   return (
     <Card
-      title="Meteo e mare"
+      title="Allerte meteo e mare"
       actions={
         full ? (
-          <span className="text-xs text-faint">Open-Meteo · Protezione Civile</span>
+          <span className="text-xs text-faint">Protezione Civile{c.forecastEnabled ? " · Open-Meteo" : ""}</span>
         ) : (
           <Link href="/meteo" className="link text-sm">
-            Apri il meteo
+            Apri le allerte
           </Link>
         )
       }
@@ -362,36 +452,22 @@ export async function PortWeatherCard({ marinaId, role, full = false }: { marina
     >
       <div className={`space-y-5 ${full ? "p-4" : ""}`}>
         <AlertStrip c={c} role={role} />
-        {!c.hasPosition ? (
-          <p className="text-sm text-muted">
-            Per le previsioni di vento e mare inserisci la posizione del porto
-            {isAdmin ? (
-              <>
-                {" "}
-                in{" "}
-                <Link href="/impostazioni" className="link">
-                  Impostazioni → Porto
-                </Link>
-              </>
-            ) : (
-              " (lo fa la direzione, da Impostazioni → Porto)"
-            )}
-            .
-          </p>
-        ) : !c.hours || !current ? (
-          <p className="text-sm text-muted">Previsioni non disponibili in questo momento: riprova più tardi.</p>
-        ) : (
-          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.6fr)]">
-            <WindPanel hour={current} />
-            <SeaPanel hour={current} hours={c.hours} now={c.now} />
-          </div>
-        )}
-        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
+          <VigilancePanel vigilance={c.vigilance} today={c.today} hasPosition={c.hasPosition} isAdmin={isAdmin} />
           <CivilPanel civil={c.civil} today={c.today} isAdmin={isAdmin} />
-          {c.hours && <DaysRow days={dailySummary(c.hours)} today={c.today} thresholds={c.thresholds} outlook={c.civil?.outlook} />}
         </div>
+        {/* Previsioni orarie (Open-Meteo): solo con l'abbonamento commerciale. */}
+        {c.forecastEnabled && c.hours && current && (
+          <>
+            <div className="grid grid-cols-1 items-start gap-5 border-t border-line-soft pt-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.6fr)]">
+              <WindPanel hour={current} />
+              <SeaPanel hour={current} hours={c.hours} now={c.now} />
+            </div>
+            <DaysRow days={dailySummary(c.hours)} today={c.today} thresholds={c.thresholds} outlook={c.civil?.outlook} />
+          </>
+        )}
       </div>
-      {full && c.hours && (
+      {full && c.forecastEnabled && c.hours && (
         <div className="border-t border-line-soft">
           <p className="px-4 pt-3 text-sm font-semibold text-ink">Prossime 48 ore</p>
           <HourlyTable hours={c.hours} now={c.now} thresholds={c.thresholds} hoursAhead={48} />

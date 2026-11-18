@@ -11,6 +11,7 @@ import { LogoUploader } from "./logo-uploader";
 import { findZoneByComune } from "@/lib/civil-protection";
 import { formatCoordinates } from "@/lib/weather";
 import { latestCivilBulletin } from "@/server/civil-protection";
+import { weatherEnabled } from "@/server/weather";
 import { BoaterSettingsForm, LegalTextsForm, MarinaForm } from "./settings-forms";
 import { SettingsTabs } from "./tabs";
 
@@ -49,7 +50,7 @@ export default page(async function SettingsPage() {
             </div>
           </div>
         </Card>
-        <Card title="Area diportisti e meteo">
+        <Card title="Area diportisti e allerte">
           <BoaterSettingsForm
             officeHours={marina.officeHours ?? ""}
             boaterInfo={marina.boaterInfo ?? ""}
@@ -60,6 +61,7 @@ export default page(async function SettingsPage() {
             alertZone={marina.alertZone ?? ""}
             zoneNames={[...new Set(zones.map((z) => z.name))].sort((a, b) => a.localeCompare(b, "it"))}
             detectedZone={findZoneByComune(zones, marina.city)?.name ?? null}
+            forecastEnabled={weatherEnabled()}
           />
         </Card>
         <Card title="Privacy e condizioni di contratto">

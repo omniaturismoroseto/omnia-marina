@@ -25,9 +25,18 @@ async function fetchJson(url: string) {
   return res.json();
 }
 
-/** Previsioni orarie per 3 giorni, oppure null se il servizio non risponde o mancano le coordinate. */
+/**
+ * Previsioni accese? L'uso gratuito di Open-Meteo è solo per scopi non commerciali: per un'azienda serve l'abbonamento,
+ * con la sua chiave in OPEN_METEO_API_KEY (indirizzi «customer-…»). Senza chiave le previsioni sono spente e restano
+ * solo i bollettini della Protezione Civile.
+ */
+export function weatherEnabled(): boolean {
+  return !!process.env.OPEN_METEO_API_KEY || !!process.env.WEATHER_FIXTURE;
+}
+
+/** Previsioni orarie per 3 giorni, oppure null se spente, se il servizio non risponde o se mancano le coordinate. */
 export async function portForecast(latitude: number | null, longitude: number | null): Promise<WeatherHour[] | null> {
-  if (latitude === null || longitude === null) return null;
+  if (latitude === null || longitude === null || !weatherEnabled()) return null;
   const key = `${latitude.toFixed(3)},${longitude.toFixed(3)}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.hours;
@@ -38,11 +47,12 @@ export async function portForecast(latitude: number | null, longitude: number | 
       const fixture = JSON.parse(await readFile(process.env.WEATHER_FIXTURE, "utf8"));
       hours = parseForecast(fixture.forecast, fixture.marine ?? null);
     } else {
-      const common = `latitude=${latitude}&longitude=${longitude}&timezone=Europe%2FRome&forecast_days=3`;
+      const key = encodeURIComponent(process.env.OPEN_METEO_API_KEY!.trim());
+      const common = `latitude=${latitude}&longitude=${longitude}&timezone=Europe%2FRome&forecast_days=3&apikey=${key}`;
       const [forecast, marine] = await Promise.all([
-        fetchJson(`https://api.open-meteo.com/v1/forecast?${common}&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m,weather_code,temperature_2m&wind_speed_unit=kn`),
+        fetchJson(`https://customer-api.open-meteo.com/v1/forecast?${common}&hourly=wind_speed_10m,wind_gusts_10m,wind_direction_10m,weather_code,temperature_2m&wind_speed_unit=kn`),
         // Il mare può non esserci (porto su un lago, servizio giù): le previsioni del vento bastano.
-        fetchJson(`https://marine-api.open-meteo.com/v1/marine?${common}&hourly=${MARINE_VARIABLES}`).catch(() => null),
+        fetchJson(`https://customer-marine-api.open-meteo.com/v1/marine?${common}&hourly=${MARINE_VARIABLES}`).catch(() => null),
       ]);
       hours = parseForecast(forecast, marine);
     }
