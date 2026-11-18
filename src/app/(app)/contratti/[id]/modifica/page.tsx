@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import { page } from "@/components/page";
 import { PageHeader } from "@/components/ui";
 import { db } from "@/db";
@@ -37,7 +37,8 @@ export default page(async function EditDraftPage({ params }: { params: Promise<{
     db
       .select({ id: boats.id, ownerId: boats.ownerId, name: boats.name, lengthCm: boats.lengthCm, beamCm: boats.beamCm })
       .from(boats)
-      .where(eq(boats.marinaId, ctx.marinaId))
+      // Le barche in archivio restano fuori, tranne quella della bozza.
+      .where(and(eq(boats.marinaId, ctx.marinaId), or(isNull(boats.archivedAt), eq(boats.id, c.boatId))))
       .orderBy(asc(boats.name)),
     db.select({ vat: marinas.defaultVatRate, serviceFee: marinas.serviceFeeCents, wasteFee: marinas.wasteFeeCents }).from(marinas).where(eq(marinas.id, ctx.marinaId)),
   ]);

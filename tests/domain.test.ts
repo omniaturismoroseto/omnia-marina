@@ -22,6 +22,7 @@ import {
 } from "@/server/contracts";
 import { DomainError, toFormState } from "@/server/errors";
 import { setOwnerFormer } from "@/server/owners";
+import { setBoatArchived } from "@/server/boats";
 import { importOwners, undoOwnerImport } from "@/server/owner-import";
 import { ownerKey, type ImportBoat, type ImportOwner, type ImportRow } from "@/lib/owner-import";
 import { CONTRACT_APPROVAL_TEMPLATE, CONTRACT_TERMS_TEMPLATE } from "@/lib/contract-texts";
@@ -500,6 +501,38 @@ describe.skipIf(!available)("regole del porto (database)", () => {
     await create(a, { ownerId: owner.id, boatId: boat.id, startDate: "2041-05-01", endDate: "2041-05-03", instalments: { count: 1, firstDueDate: "2041-05-01", everyMonths: 1 } });
     expect((await db.select().from(owners).where(eq(owners.id, owner.id)))[0].former).toBe(false);
     await expect(db.transaction((tx) => setOwnerFormer(tx, a.marinaId, owner.id, true))).rejects.toThrow(/contratto attivo/);
+  });
+
+  it("archivio barche: con l'ex cliente, a mano, e fuori con un contratto attivo", async () => {
+    const a = await createWorld("Archivio A");
+    const b = await createWorld("Archivio B");
+    const [owner] = await db
+      .insert(owners)
+      .values({ marinaId: a.marinaId, type: "persona", firstName: "Ugo", lastName: "Venduto", displayName: "Venduto Ugo" })
+      .returning({ id: owners.id });
+    const boatOf = async (name: string) =>
+      (await db.insert(boats).values({ marinaId: a.marinaId, ownerId: owner.id, name, lengthCm: 600, beamCm: 240 }).returning({ id: boats.id }))[0].id;
+    const first = await boatOf("Prima");
+    const second = await boatOf("Seconda");
+    const archivedAt = async (id: string) => (await db.select().from(boats).where(eq(boats.id, id)))[0].archivedAt;
+
+    // Il cliente va via: le sue barche vanno in archivio con lui.
+    await db.transaction((tx) => setOwnerFormer(tx, a.marinaId, owner.id, true));
+    expect(await archivedAt(first)).not.toBeNull();
+    expect(await archivedAt(second)).not.toBeNull();
+
+    // Torna con un contratto attivo sulla prima: la prima esce dall'archivio, la seconda (venduta) no.
+    await create(a, { ownerId: owner.id, boatId: first, startDate: "2042-05-01", endDate: "2042-05-03", instalments: { count: 1, firstDueDate: "2042-05-01", everyMonths: 1 } });
+    expect(await archivedAt(first)).toBeNull();
+    expect(await archivedAt(second)).not.toBeNull();
+
+    // Con un contratto attivo non si archivia; un altro porto non la vede; a mano si ripristina.
+    await expect(db.transaction((tx) => setBoatArchived(tx, a.marinaId, first, true))).rejects.toThrow(/contratto attivo/);
+    await expect(db.transaction((tx) => setBoatArchived(tx, b.marinaId, second, false))).rejects.toThrow(/non trovata/);
+    await db.transaction((tx) => setBoatArchived(tx, a.marinaId, second, false));
+    expect(await archivedAt(second)).toBeNull();
+    await db.transaction((tx) => setBoatArchived(tx, a.marinaId, second, true));
+    expect(await archivedAt(second)).not.toBeNull();
   });
 
   it("importazione clienti: doppioni uniti, esistenti completati senza sovrascrivere, annullamento", async () => {

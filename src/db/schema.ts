@@ -401,6 +401,9 @@ export const boats = pgTable(
     insuranceExpiry: date("insurance_expiry"),
     notes: text("notes"),
     importId: uuid("import_id").references(() => ownerImports.id, { onDelete: "set null" }),
+    // In archivio (venduta, cliente andato via): fuori dagli elenchi e dalle scelte dei nuovi contratti. Ci va a mano
+    // o quando il cliente diventa «ex cliente»; ne esce da sola con un contratto attivo.
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

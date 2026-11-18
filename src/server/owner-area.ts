@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { berths, boats, contracts, piers } from "@/db/schema";
 import { addDays, diffDays } from "@/lib/dates";
@@ -42,7 +42,8 @@ export async function ownerBoats(scope: OwnerScope) {
       insuranceExpiry: boats.insuranceExpiry,
     })
     .from(boats)
-    .where(and(eq(boats.marinaId, scope.marinaId), eq(boats.ownerId, scope.ownerId)))
+    // Le barche in archivio (vendute) non riguardano più il diportista.
+    .where(and(eq(boats.marinaId, scope.marinaId), eq(boats.ownerId, scope.ownerId), isNull(boats.archivedAt)))
     .orderBy(asc(boats.name));
 }
 

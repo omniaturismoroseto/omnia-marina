@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { Download, Pencil, Plus, Printer } from "lucide-react";
 import { page } from "@/components/page";
 import { ChargeStatusBadge, ContractStatusBadge } from "@/components/status";
@@ -38,7 +38,8 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
 
   const today = todayRome();
   const [boatRows, contractRows, chargeRows, consentMap, history, [marina]] = await Promise.all([
-    db.select().from(boats).where(eq(boats.ownerId, id)).orderBy(asc(boats.name)),
+    // Le barche in archivio (vendute) in fondo.
+    db.select().from(boats).where(eq(boats.ownerId, id)).orderBy(sql`${boats.archivedAt} is not null`, asc(boats.name)),
     db
       .select({
         id: contracts.id,
@@ -175,6 +176,12 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
                         <Link href={`/barche/${b.id}`} className="link">
                           {b.name}
                         </Link>
+                        {b.archivedAt && (
+                          <>
+                            {" "}
+                            <Badge tone="sea">In archivio</Badge>
+                          </>
+                        )}
                         {b.registration && <span className="block text-xs text-muted">{b.registration}</span>}
                       </td>
                       <td>
@@ -317,7 +324,9 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
                 <p className="text-sm text-muted">Ha un contratto attivo: la categoria «{formerLabel}» si usa solo per chi non ne ha.</p>
               ) : (
                 <>
-                  <p className="mb-3 text-sm text-muted">Non ha contratti attivi. Se ha lasciato il porto, spostalo nella categoria «{formerLabel}».</p>
+                  <p className="mb-3 text-sm text-muted">
+                    Non ha contratti attivi. Se ha lasciato il porto, spostalo nella categoria «{formerLabel}»: anche le sue barche andranno in archivio.
+                  </p>
                   <ActionButton action={setOwnerFormerAction} fields={{ ownerId: id, former: "1" }} size="sm">
                     Sposta in «{formerLabel}»
                   </ActionButton>

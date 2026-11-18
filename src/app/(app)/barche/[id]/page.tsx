@@ -17,7 +17,7 @@ import { formatDimensions, formatMeters, formatMoney } from "@/lib/format";
 import { BOAT_TYPE_LABEL, CONTRACT_TYPE_LABEL, MOVEMENT_LABEL } from "@/lib/labels";
 import { uuidOrNull } from "@/lib/params";
 import { contractNumberLabel } from "@/lib/contract-numbers";
-import { deleteBoat } from "@/server/boat-actions";
+import { deleteBoat, setBoatArchivedAction } from "@/server/boat-actions";
 
 export const metadata: Metadata = { title: "Scheda barca" };
 
@@ -78,6 +78,7 @@ export default page(async function BoatPage({ params }: { params: Promise<{ id: 
         description={
           <span className="flex flex-wrap items-center gap-1.5">
             <Badge>{BOAT_TYPE_LABEL[boat.type]}</Badge>
+            {boat.archivedAt && <Badge tone="sea">In archivio</Badge>}
             {current?.berthCode && <Badge tone="sea">Posto {current.berthCode}</Badge>}
             {current && <PresenceBadge presence={current.presence} />}
           </span>
@@ -231,10 +232,42 @@ export default page(async function BoatPage({ params }: { params: Promise<{ id: 
             />
           </Card>
 
-          {office && contractRows.length === 0 && (
-            <ActionButton action={deleteBoat} fields={{ boatId: id }} variant="danger" size="sm" confirm="Eliminare definitivamente questa barca?">
-              Elimina barca
-            </ActionButton>
+          {office && (
+            <Card title="Archivio">
+              {boat.archivedAt ? (
+                <>
+                  <p className="mb-3 text-sm text-muted">
+                    In archivio dal {formatDate(todayRome(boat.archivedAt))}: non compare nell&apos;elenco normale né tra le barche per i nuovi contratti. Torna da
+                    sola nell&apos;elenco se attivi un suo contratto.
+                  </p>
+                  <ActionButton action={setBoatArchivedAction} fields={{ boatId: id, archived: "0" }} size="sm">
+                    Ripristina
+                  </ActionButton>
+                </>
+              ) : contractRows.some((c) => c.status === "attivo") ? (
+                <p className="text-sm text-muted">Ha un contratto attivo: si può archiviare quando il contratto è concluso o annullato.</p>
+              ) : (
+                <>
+                  <p className="mb-3 text-sm text-muted">Barca venduta o cliente andato via? Mettila in archivio: esce dall&apos;elenco ma resta con tutta la sua storia.</p>
+                  <ActionButton
+                    action={setBoatArchivedAction}
+                    fields={{ boatId: id, archived: "1" }}
+                    size="sm"
+                    confirm="Mettere la barca in archivio? Esce dall'elenco delle barche e dalle scelte dei nuovi contratti."
+                  >
+                    Metti in archivio
+                  </ActionButton>
+                </>
+              )}
+              {contractRows.length === 0 && (
+                <div className="mt-4 border-t border-line-soft pt-3">
+                  <p className="mb-2 text-xs text-muted">Mai usata in un contratto: si può anche eliminare del tutto.</p>
+                  <ActionButton action={deleteBoat} fields={{ boatId: id }} variant="danger" size="sm" confirm="Eliminare definitivamente questa barca?">
+                    Elimina barca
+                  </ActionButton>
+                </div>
+              )}
+            </Card>
           )}
         </div>
       </div>

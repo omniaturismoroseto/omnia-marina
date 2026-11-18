@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import { page } from "@/components/page";
 import { ButtonLink, EmptyState, PageHeader } from "@/components/ui";
 import { db } from "@/db";
@@ -17,6 +17,7 @@ export default page(async function NewContractPage({ searchParams }: { searchPar
   const sp = await searchParams;
   const today = todayRome();
 
+  const startBoat = uuidOrNull(sp.barca);
   const [ownerList, boatList, [marina]] = await Promise.all([
     db
       .select({ id: owners.id, name: owners.displayName })
@@ -26,7 +27,8 @@ export default page(async function NewContractPage({ searchParams }: { searchPar
     db
       .select({ id: boats.id, ownerId: boats.ownerId, name: boats.name, lengthCm: boats.lengthCm, beamCm: boats.beamCm })
       .from(boats)
-      .where(eq(boats.marinaId, ctx.marinaId))
+      // Le barche in archivio restano fuori, tranne quella da cui si parte (scheda barca → «Nuovo contratto»).
+      .where(and(eq(boats.marinaId, ctx.marinaId), startBoat ? or(isNull(boats.archivedAt), eq(boats.id, startBoat)) : isNull(boats.archivedAt)))
       .orderBy(asc(boats.name)),
     db.select({ vat: marinas.defaultVatRate, serviceFee: marinas.serviceFeeCents, wasteFee: marinas.wasteFeeCents }).from(marinas).where(eq(marinas.id, ctx.marinaId)),
   ]);

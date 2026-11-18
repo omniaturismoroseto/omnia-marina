@@ -127,6 +127,13 @@
       "when": 1794985931794,
       "tag": "0017_meteo_marino_protezione_civile",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795027684205,
+      "tag": "0018_archivio_barche",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import { Plus } from "lucide-react";
 import { page } from "@/components/page";
-import { Badge, ButtonLink, EmptyState, PageHeader, SearchBox } from "@/components/ui";
+import { Badge, ButtonLink, EmptyState, FilterTabs, PageHeader, SearchBox } from "@/components/ui";
 import { db } from "@/db";
 import { boats, owners } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
@@ -17,46 +17,69 @@ export const metadata: Metadata = { title: "Barche" };
 export default page(async function BoatsPage({ searchParams }: { searchParams: SearchParams }) {
   const ctx = await requireMarina();
   const office = OFFICE.includes(ctx.role);
-  const q = one((await searchParams).q).trim();
+  const sp = await searchParams;
+  const q = one(sp.q).trim();
+  // «archivio»: barche vendute o di clienti andati via.
+  const archive = one(sp.stato) === "archivio";
   const today = todayRome();
   const soon = addDays(today, 30);
   const like = `%${q.replace(/[%_\\]/g, "\\$&")}%`;
 
-  const rows = await db
-    .select({
-      id: boats.id,
-      name: boats.name,
-      registration: boats.registration,
-      type: boats.type,
-      builder: boats.builder,
-      model: boats.model,
-      lengthCm: boats.lengthCm,
-      beamCm: boats.beamCm,
-      insuranceExpiry: boats.insuranceExpiry,
-      ownerId: owners.id,
-      ownerName: owners.displayName,
-      // Posto del contratto attivo che copre oggi (o della barca ancora in porto).
-      berthCode: sql<string | null>`(
+  const [rows, [{ archived }]] = await Promise.all([
+    db
+      .select({
+        id: boats.id,
+        name: boats.name,
+        registration: boats.registration,
+        type: boats.type,
+        builder: boats.builder,
+        model: boats.model,
+        lengthCm: boats.lengthCm,
+        beamCm: boats.beamCm,
+        insuranceExpiry: boats.insuranceExpiry,
+        ownerId: owners.id,
+        ownerName: owners.displayName,
+        // Posto del contratto attivo che copre oggi (o della barca ancora in porto).
+        berthCode: sql<string | null>`(
         select b.code from contracts c join berths b on b.id = c.berth_id
         where c.boat_id = "boats"."id" and c.status = 'attivo' and c.start_date <= ${today}
           and (c.occupied_until > ${today} or c.presence in ('in_porto', 'fuori'))
         order by c.start_date desc limit 1
       )`,
-    })
-    .from(boats)
-    .innerJoin(owners, eq(owners.id, boats.ownerId))
-    .where(
-      and(
-        eq(boats.marinaId, ctx.marinaId),
-        q ? or(ilike(boats.name, like), ilike(boats.registration, like), ilike(boats.model, like), ilike(boats.builder, like), ilike(owners.displayName, like)) : undefined,
-      ),
-    )
-    .orderBy(asc(boats.name))
-    .limit(300);
+      })
+      .from(boats)
+      .innerJoin(owners, eq(owners.id, boats.ownerId))
+      .where(
+        and(
+          eq(boats.marinaId, ctx.marinaId),
+          archive ? sql`${boats.archivedAt} is not null` : sql`${boats.archivedAt} is null`,
+          q
+            ? or(
+                ilike(boats.name, like),
+                ilike(boats.registration, like),
+                ilike(boats.model, like),
+                ilike(boats.builder, like),
+                ilike(owners.displayName, like),
+              )
+            : undefined,
+        ),
+      )
+      .orderBy(asc(boats.name))
+      .limit(300),
+    db
+      .select({ archived: sql<number>`count(*)::int` })
+      .from(boats)
+      .where(and(eq(boats.marinaId, ctx.marinaId), sql`${boats.archivedAt} is not null`)),
+  ]);
+  const qs = (params: Record<string, string>) => {
+    const u = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
+    return u.size ? `?${u}` : "";
+  };
 
   return (
     <>
-      <PageHeader help="barche"
+      <PageHeader
+        help="barche"
         title="Barche"
         description="Unità da diporto registrate, con dimensioni, proprietario e posto assegnato."
         actions={
@@ -69,15 +92,30 @@ export default page(async function BoatsPage({ searchParams }: { searchParams: S
         }
       />
 
-      <div className="mb-4">
-        <SearchBox action="/barche" defaultValue={q} placeholder="Nome, matricola, modello, proprietario…" />
+      <div className="mb-4 space-y-3">
+        <FilterTabs
+          current={archive ? "archivio" : ""}
+          items={[
+            { value: "", label: "Barche", href: `/barche${qs({ q })}` },
+            { value: "archivio", label: "Archivio", count: archived, href: `/barche${qs({ q, stato: "archivio" })}` },
+          ]}
+        />
+        <SearchBox action="/barche" defaultValue={q} placeholder="Nome, matricola, modello, proprietario…">
+          {archive && <input type="hidden" name="stato" value="archivio" />}
+        </SearchBox>
       </div>
 
       <div className="card overflow-x-auto">
         {rows.length === 0 ? (
           <EmptyState
-            title={q ? "Nessuna barca corrisponde alla ricerca" : "Nessuna barca registrata"}
-            description={q ? undefined : "Le barche si aggiungono dalla scheda del cliente o da qui."}
+            title={q ? "Nessuna barca corrisponde alla ricerca" : archive ? "Nessuna barca in archivio" : "Nessuna barca registrata"}
+            description={
+              q
+                ? undefined
+                : archive
+                  ? "Qui finiscono le barche vendute o dei clienti andati via: si archiviano dalla scheda della barca, oppure da sole quando il cliente diventa ex cliente."
+                  : "Le barche si aggiungono dalla scheda del cliente o da qui."
+            }
           />
         ) : (
           <table className="tbl">

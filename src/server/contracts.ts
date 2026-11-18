@@ -9,6 +9,7 @@ import { splitVat } from "@/lib/format";
 import { CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { occupiedUntil, splitInstalments } from "@/lib/pricing";
 import { DomainError } from "./errors";
+import { unarchiveBoat } from "./boats";
 
 export interface Actor {
   marinaId: string;
@@ -257,6 +258,7 @@ export async function createContract(tx: Tx, actor: Actor, input: ContractInput)
 
   if (number) {
     await clearFormer(tx, actor.marinaId, input.ownerId);
+    await unarchiveBoat(tx, actor.marinaId, input.boatId);
     await createInstalmentCharges(tx, actor, { id: created.id, number, ...input }, input.instalments, todayRome());
     await chargePendingItems(tx, actor, { id: created.id, number, ownerId: input.ownerId, vatRate: input.vatRate }, input.instalments.firstDueDate);
   }
@@ -347,6 +349,7 @@ export async function activateContract(tx: Tx, actor: Actor, contractId: string,
   const { seq, number, fillsGap } = await assignContractNumber(tx, actor.marinaId, year);
   await tx.update(contracts).set({ status: "attivo", year, seq, number, updatedAt: new Date() }).where(eq(contracts.id, c.id));
   await clearFormer(tx, actor.marinaId, c.ownerId);
+  await unarchiveBoat(tx, actor.marinaId, c.boatId);
   const numbered = { ...c, number };
   await createInstalmentCharges(tx, actor, numbered, plan, todayRome());
   await chargePendingItems(tx, actor, numbered, plan.firstDueDate);

@@ -9,6 +9,7 @@ import { boats, owners } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { setBoatArchived } from "./boats";
 import { toFormState } from "./errors";
 
 const boatSchema = z.object({
@@ -88,8 +89,28 @@ export async function deleteBoat(_prev: FormState, formData: FormData): Promise<
     await audit(ctx, "eliminazione", "barca", boatId, deleted[0].name);
   } catch (err) {
     const state = toFormState(err);
-    return { ...state, message: "La barca ha contratti collegati e non può essere eliminata." };
+    return { ...state, message: "La barca ha contratti collegati e non può essere eliminata: mettila in archivio." };
   }
   revalidatePath("/", "layout");
   redirect("/barche");
+}
+
+const archiveSchema = z.object({ boatId: f.id(), archived: z.preprocess((v) => v === "1", z.boolean()) });
+
+/** Mette in archivio (barca venduta, cliente andato via) o ripristina una barca. */
+export async function setBoatArchivedAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(OFFICE);
+  const parsed = parseForm(archiveSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const { boatId, archived } = parsed.data;
+  try {
+    await db.transaction(async (tx) => {
+      const boat = await setBoatArchived(tx, ctx.marinaId, boatId, archived);
+      await audit(ctx, archived ? "archiviazione" : "ripristino", "barca", boatId, boat.name, tx);
+    });
+  } catch (error) {
+    return toFormState(error);
+  }
+  revalidatePath("/", "layout");
+  return { ok: true };
 }

@@ -145,7 +145,7 @@ export const GUIDE: GuideSection[] = [
           "«Aggiungi barca» e «Nuovo contratto» partono già con il cliente scelto.",
           "Privacy: stampa l'informativa, falla firmare e registra i consensi nella scheda.",
           "«Estratto conto»: addebiti e incassi del cliente.",
-          "Chi non ha più un contratto attivo si può spostare nella categoria «Ex cliente»: esce dall'elenco normale ma resta consultabile nella sua linguetta. Se torna con un nuovo contratto, esce da solo dalla categoria.",
+          "Chi non ha più un contratto attivo si può spostare nella categoria «Ex cliente»: esce dall'elenco normale ma resta consultabile nella sua linguetta, e le sue barche vanno in archivio. Se torna con un nuovo contratto, esce da solo dalla categoria.",
         ],
       },
       {
@@ -178,6 +178,15 @@ export const GUIDE: GuideSection[] = [
           "Lunghezza fuori tutto e larghezza massima sono obbligatorie: servono a proporre solo i posti in cui la barca entra.",
           "Inserisci compagnia, polizza e scadenza dell'assicurazione: le scadenze compaiono nel cruscotto.",
           "La scheda della barca mostra contratto, posto e ultimi movimenti in banchina.",
+        ],
+      },
+      {
+        title: "Archivio ed eliminazione",
+        items: [
+          "Barca venduta o cliente andato via: nella scheda della barca, riquadro «Archivio» → «Metti in archivio». Si può solo se non ha un contratto attivo.",
+          "Le barche in archivio escono dall'elenco e stanno nella linguetta «Archivio»; non compaiono tra le barche dei nuovi contratti né nell'app del diportista, ma tengono tutta la loro storia. «Ripristina» le riporta nell'elenco.",
+          "Vanno in archivio da sole quando il cliente passa nella categoria «Ex cliente», e ne escono da sole se attivi un loro contratto.",
+          "Una barca mai usata in un contratto si può anche eliminare del tutto, dallo stesso riquadro.",
         ],
       },
     ],

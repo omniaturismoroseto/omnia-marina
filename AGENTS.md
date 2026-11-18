@@ -37,6 +37,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Categoria «ex cliente»: `owners.former`, nome in `marinas.former_owner_label` (Impostazioni → Porto). Solo per chi non ha un
   contratto attivo (`setOwnerFormer`); attivare un contratto la toglie (`clearFormer` in `src/server/contracts.ts`). L'elenco
   clienti normale e il conteggio «Informativa mancante» escludono gli ex clienti.
+- Archivio barche: `boats.archived_at` (`src/server/boats.ts`). A mano dalla scheda barca (solo senza contratto attivo,
+  `setBoatArchived`), insieme al cliente quando diventa ex cliente (`archiveOwnerBoats` in `setOwnerFormer`); un contratto
+  che diventa attivo la riporta fuori (`unarchiveBoat` accanto a `clearFormer`). Le barche in archivio restano fuori
+  dall'elenco (linguetta «Archivio»), dalle scelte dei nuovi contratti e dall'area diportista; si elimina solo una barca
+  mai usata in un contratto.
 - Guida (`/guida`, voce di menu per tutti i ruoli): i testi stanno in `src/lib/guide.ts`, una sezione per voce di menu con i ruoli
   che la vedono; `PageHeader help="<id>"` mette accanto al titolo il collegamento alla sezione. Quando cambiano pulsanti, percorsi
   o regole visibili all'utente, aggiornare anche la guida (`tests/guide.test.ts` controlla ancore e collegamenti).

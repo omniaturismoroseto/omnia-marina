@@ -3,6 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db, type Tx } from "@/db";
 import { contracts, owners, privacyConsents } from "@/db/schema";
 import { DomainError } from "./errors";
+import { archiveOwnerBoats } from "./boats";
 
 export type ConsentKind = "informativa" | "marketing" | "terzi";
 export type ConsentState = Record<ConsentKind, { granted: boolean; recordedAt: Date; policyVersion: string } | null>;
@@ -35,7 +36,8 @@ export function hasInformativa(state: ConsentState | undefined): boolean {
 }
 
 // Categoria «Ex cliente» (il nome lo sceglie la direzione): si spunta solo su chi non ha contratti attivi.
-// La spunta si toglie da sola quando il cliente ha di nuovo un contratto attivo (src/server/contracts.ts).
+// La spunta si toglie da sola quando il cliente ha di nuovo un contratto attivo (src/server/contracts.ts). Spuntarla
+// archivia anche le sue barche (src/server/boats.ts).
 export async function setOwnerFormer(tx: Tx, marinaId: string, ownerId: string, former: boolean) {
   const [owner] = await tx
     .select({ id: owners.id })
@@ -52,4 +54,6 @@ export async function setOwnerFormer(tx: Tx, marinaId: string, ownerId: string, 
     if (active) throw new DomainError("Il cliente ha un contratto attivo: la categoria si può usare solo per chi non ne ha.");
   }
   await tx.update(owners).set({ former, updatedAt: new Date() }).where(eq(owners.id, ownerId));
+  // Chi va via si porta in archivio le barche (che non hanno contratti attivi, come lui).
+  if (former) await archiveOwnerBoats(tx, marinaId, ownerId);
 }
