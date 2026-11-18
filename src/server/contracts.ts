@@ -4,7 +4,7 @@ import { db, type Tx } from "@/db";
 import { berths, boats, charges, contractItems, contracts, movements, owners, payments, type ContractType } from "@/db/schema";
 import { SERVICE_ITEM_KIND, SERVICE_VAT_RATES, itemHasPeriod, itemTitle, type ContractItemInput } from "@/lib/contract-items";
 import { firstFreeSeq, formatContractNumber, seqGaps } from "@/lib/contract-numbers";
-import { annualEnd, formatDate, todayRome, yearOf } from "@/lib/dates";
+import { addDays, annualEnd, formatDate, todayRome, yearOf } from "@/lib/dates";
 import { splitVat } from "@/lib/format";
 import { CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { occupiedUntil, splitInstalments } from "@/lib/pricing";
@@ -454,4 +454,75 @@ export async function recordMovement(tx: Tx, actor: Actor, contractId: string, k
     userId: actor.userId,
     note,
   });
+}
+
+/**
+ * Cambio barca su un contratto attivo (il cliente ha venduto la barca e ne porta un'altra nello stesso posto).
+ * Il contratto firmato non si modifica: si conclude il giorno prima del cambio (la barca vecchia risulta partita) e
+ * nasce una bozza con stesso cliente, posto, tipo e fine, per la barca nuova, da completare, attivare e far firmare.
+ * Gli addebiti restano dove sono: l'ufficio decide importo e rate del nuovo contratto.
+ */
+export async function replaceContractBoat(
+  tx: Tx,
+  actor: Actor,
+  contractId: string,
+  input: { newBoatId: string; changeDate: string },
+): Promise<{ draftId: string; oldBoatId: string }> {
+  const c = await loadContract(tx, actor.marinaId, contractId);
+  if (c.status !== "attivo") throw new DomainError("Il cambio barca si fa solo su un contratto attivo.");
+  if (input.newBoatId === c.boatId) throw new DomainError("Scegli una barca diversa da quella del contratto.", "newBoatId");
+  const [newBoat] = await tx
+    .select({ id: boats.id, ownerId: boats.ownerId, name: boats.name })
+    .from(boats)
+    .where(and(eq(boats.id, input.newBoatId), eq(boats.marinaId, actor.marinaId)))
+    .limit(1);
+  if (!newBoat || newBoat.ownerId !== c.ownerId) throw new DomainError("La barca nuova deve essere dello stesso cliente.", "newBoatId");
+  if (input.changeDate <= c.startDate || input.changeDate > c.endDate) {
+    throw new DomainError(`La data del cambio deve cadere dopo l'inizio (${formatDate(c.startDate)}) ed entro la fine (${formatDate(c.endDate)}).`, "changeDate");
+  }
+
+  // Il contratto vecchio finisce il giorno prima: il posto si libera esattamente dal giorno del cambio.
+  const endDate = c.type === "transito" ? input.changeDate : addDays(input.changeDate, -1);
+  const now = new Date();
+  const wasHere = c.presence === "in_porto" || c.presence === "fuori";
+  await tx
+    .update(contracts)
+    .set({
+      status: "concluso",
+      endDate,
+      occupiedUntil: occupiedUntil(c.type, c.startDate, endDate),
+      presence: wasHere ? "partito" : c.presence,
+      checkedOutAt: wasHere ? now : c.checkedOutAt,
+      updatedAt: now,
+    })
+    .where(eq(contracts.id, c.id));
+  if (wasHere) {
+    await tx.insert(movements).values({
+      marinaId: actor.marinaId,
+      contractId: c.id,
+      boatId: c.boatId,
+      berthId: c.berthId,
+      kind: "partenza",
+      at: now,
+      userId: actor.userId,
+      note: `Cambio barca: arriva ${newBoat.name}`,
+    });
+  }
+
+  const draft = await createContract(tx, actor, {
+    ownerId: c.ownerId,
+    boatId: newBoat.id,
+    berthId: c.berthId,
+    type: c.type,
+    status: "bozza",
+    startDate: input.changeDate,
+    endDate: c.endDate,
+    // Il canone del periodo è già sul contratto vecchio: l'ufficio indica l'eventuale differenza.
+    amountCents: 0,
+    vatRate: c.vatRate,
+    signedOn: null,
+    notes: `Cambio barca: sostituisce il contratto ${c.number} dal ${formatDate(input.changeDate)}. Il canone e gli altri spazi sono rimasti sul contratto ${c.number}: indica qui l'eventuale differenza.`,
+    instalments: { count: 1, firstDueDate: input.changeDate, everyMonths: 1 },
+  });
+  return { draftId: draft.id, oldBoatId: c.boatId };
 }

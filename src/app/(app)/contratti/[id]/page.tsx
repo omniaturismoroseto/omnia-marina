@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, desc, eq } from "drizzle-orm";
-import { Pencil, Printer } from "lucide-react";
+import { Pencil, Printer, Repeat } from "lucide-react";
 import { MovementButtons } from "@/components/movement-buttons";
 import { page } from "@/components/page";
 import { ChargeStatusBadge, ContractStatusBadge, PresenceBadge } from "@/components/status";
@@ -32,6 +32,8 @@ export default page(async function ContractPage({ params, searchParams }: { para
   const reopenedNumber = one(sp.riaperto);
   const gap = one(sp.buco) === "1";
   const edited = one(sp.modificato) === "1";
+  // Bozza appena nata da «Cambia barca» su un altro contratto.
+  const fromBoatChange = one(sp.cambio) === "1";
 
   const [row] = await db
     .select({ contract: contracts, ownerName: owners.displayName, boat: boats, berthCode: berths.code })
@@ -88,6 +90,12 @@ export default page(async function ContractPage({ params, searchParams }: { para
                 Modifica
               </ButtonLink>
             )}
+            {c.status === "attivo" && (
+              <ButtonLink href={`/contratti/${id}/cambia-barca`}>
+                <Repeat size={16} aria-hidden="true" />
+                Cambia barca
+              </ButtonLink>
+            )}
             <ButtonLink href={`/contratti/${id}/stampa`}>
               <Printer size={16} aria-hidden="true" />
               Stampa
@@ -96,8 +104,14 @@ export default page(async function ContractPage({ params, searchParams }: { para
         }
       />
 
-      {(activated || reopenedNumber || edited) && (
+      {(activated || reopenedNumber || edited || fromBoatChange) && (
         <div className="mb-5">
+          {fromBoatChange && c.status === "bozza" && (
+            <Notice tone="sea">
+              Bozza per la barca nuova: il contratto precedente è concluso. Controlla importo (ora a zero), altri spazi e note, poi attiva il contratto e
+              fallo firmare.
+            </Notice>
+          )}
           {activated && c.number && (
             <Notice tone="ok">
               Contratto attivato con il numero <strong>{c.number}</strong>.{gap && " Ha ripreso un numero che era rimasto libero nella numerazione."}

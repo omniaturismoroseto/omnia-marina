@@ -80,6 +80,7 @@ export async function saveBoat(_prev: FormState, formData: FormData): Promise<Fo
 export async function deleteBoat(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(OFFICE);
   const boatId = String(formData.get("boatId") ?? "");
+  let ownerId: string;
   try {
     const deleted = await db
       .delete(boats)
@@ -87,12 +88,14 @@ export async function deleteBoat(_prev: FormState, formData: FormData): Promise<
       .returning({ name: boats.name, ownerId: boats.ownerId });
     if (deleted.length === 0) return fail("Barca non trovata.");
     await audit(ctx, "eliminazione", "barca", boatId, deleted[0].name);
+    ownerId = deleted[0].ownerId;
   } catch (err) {
     const state = toFormState(err);
     return { ...state, message: "La barca ha contratti collegati e non può essere eliminata: mettila in archivio." };
   }
   revalidatePath("/", "layout");
-  redirect("/barche");
+  // Dalla scheda cliente si resta sul cliente.
+  redirect(formData.get("ritorno") === "cliente" ? `/clienti/${ownerId}` : "/barche");
 }
 
 const archiveSchema = z.object({ boatId: f.id(), archived: z.preprocess((v) => v === "1", z.boolean()) });

@@ -41,7 +41,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   `setBoatArchived`), insieme al cliente quando diventa ex cliente (`archiveOwnerBoats` in `setOwnerFormer`); un contratto
   che diventa attivo la riporta fuori (`unarchiveBoat` accanto a `clearFormer`). Le barche in archivio restano fuori
   dall'elenco (linguetta «Archivio»), dalle scelte dei nuovi contratti e dall'area diportista; si elimina solo una barca
-  mai usata in un contratto.
+  mai usata in un contratto. Azioni anche nella scheda cliente (`clienti/[id]/boat-actions.tsx`).
+- Cambio barca (`/contratti/[id]/cambia-barca`, `replaceContractBoat` in `src/server/contracts.ts`): il contratto attivo
+  firmato non si modifica, si conclude il giorno prima del cambio (posto libero dal giorno del cambio, partenza registrata
+  se la barca era in porto) e nasce una bozza per la barca nuova con stesso cliente, posto, tipo e fine, importo zero;
+  addebiti e altri spazi restano sul contratto vecchio.
 - Guida (`/guida`, voce di menu per tutti i ruoli): i testi stanno in `src/lib/guide.ts`, una sezione per voce di menu con i ruoli
   che la vedono; `PageHeader help="<id>"` mette accanto al titolo il collegamento alla sezione. Quando cambiano pulsanti, percorsi
   o regole visibili all'utente, aggiornare anche la guida (`tests/guide.test.ts` controlla ancore e collegamenti).

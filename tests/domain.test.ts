@@ -16,6 +16,7 @@ import {
   createContract,
   recordMovement,
   removeContractItem,
+  replaceContractBoat,
   revertToDraft,
   updateDraftContract,
   type ContractInput,
@@ -501,6 +502,33 @@ describe.skipIf(!available)("regole del porto (database)", () => {
     await create(a, { ownerId: owner.id, boatId: boat.id, startDate: "2041-05-01", endDate: "2041-05-03", instalments: { count: 1, firstDueDate: "2041-05-01", everyMonths: 1 } });
     expect((await db.select().from(owners).where(eq(owners.id, owner.id)))[0].former).toBe(false);
     await expect(db.transaction((tx) => setOwnerFormer(tx, a.marinaId, owner.id, true))).rejects.toThrow(/contratto attivo/);
+  });
+
+  it("cambio barca: il contratto si conclude il giorno prima e nasce la bozza per la barca nuova", async () => {
+    const w = await createWorld("Cambio barca");
+    const other = await createWorld("Cambio barca altro");
+    const c = await create(w, { type: "annuale", startDate: "2043-01-01", endDate: "2043-12-31", instalments: { count: 1, firstDueDate: "2043-01-01", everyMonths: 1 } });
+    // Barca in porto: al cambio risulta partita.
+    await db.update(contracts).set({ presence: "in_porto" }).where(eq(contracts.id, c.id));
+
+    await expect(db.transaction((tx) => replaceContractBoat(tx, actor(w), c.id, { newBoatId: w.boatId, changeDate: "2043-06-01" }))).rejects.toThrow(/diversa/);
+    await expect(db.transaction((tx) => replaceContractBoat(tx, actor(w), c.id, { newBoatId: other.boatId, changeDate: "2043-06-01" }))).rejects.toThrow(/stesso cliente/);
+    await expect(db.transaction((tx) => replaceContractBoat(tx, actor(w), c.id, { newBoatId: w.otherBoatId, changeDate: "2044-01-05" }))).rejects.toThrow(/data del cambio/);
+
+    const { draftId, oldBoatId } = await db.transaction((tx) => replaceContractBoat(tx, actor(w), c.id, { newBoatId: w.otherBoatId, changeDate: "2043-06-01" }));
+    expect(oldBoatId).toBe(w.boatId);
+    const [old] = await db.select().from(contracts).where(eq(contracts.id, c.id));
+    expect(old).toMatchObject({ status: "concluso", endDate: "2043-05-31", occupiedUntil: "2043-06-01", presence: "partito" });
+    expect((await db.select().from(movements).where(eq(movements.contractId, c.id)))[0].kind).toBe("partenza");
+    const [draft] = await db.select().from(contracts).where(eq(contracts.id, draftId));
+    expect(draft).toMatchObject({ status: "bozza", boatId: w.otherBoatId, berthId: w.berthId, startDate: "2043-06-01", endDate: "2043-12-31", amountCents: 0, number: null });
+    expect(draft.notes).toContain(old.number!);
+
+    // La bozza si attiva sullo stesso posto senza conflitti con il contratto concluso.
+    await db.transaction((tx) => activateContract(tx, actor(w), draftId, { count: 1, firstDueDate: "2043-06-01", everyMonths: 1 }));
+    expect((await db.select().from(contracts).where(eq(contracts.id, draftId)))[0].status).toBe("attivo");
+    // Un contratto concluso non si cambia di nuovo.
+    await expect(db.transaction((tx) => replaceContractBoat(tx, actor(w), c.id, { newBoatId: w.otherBoatId, changeDate: "2043-07-01" }))).rejects.toThrow(/attivo/);
   });
 
   it("archivio barche: con l'ex cliente, a mano, e fuori con un contratto attivo", async () => {

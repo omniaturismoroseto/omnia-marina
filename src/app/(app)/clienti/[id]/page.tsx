@@ -19,6 +19,7 @@ import { latestConsents, type ConsentKind } from "@/server/owners";
 import { ActionButton } from "@/components/form";
 import { setOwnerFormerAction } from "@/server/owner-actions";
 import { AppAccessCard } from "./app-access";
+import { BoatRowActions } from "./boat-actions";
 import { ConsentForm, EraseOwnerButton } from "./privacy-forms";
 
 export const metadata: Metadata = { title: "Scheda cliente" };
@@ -49,6 +50,7 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
         startDate: contracts.startDate,
         endDate: contracts.endDate,
         amountCents: contracts.amountCents,
+        boatId: contracts.boatId,
         boatName: boats.name,
         berthCode: berths.code,
       })
@@ -167,6 +169,7 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
                     <th>Tipo</th>
                     <th>Dimensioni</th>
                     <th>Assicurazione</th>
+                    {!anonymized && <th className="sr-only">Azioni</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -198,6 +201,17 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
                           <span className="text-muted">fino al {formatDate(b.insuranceExpiry)}</span>
                         )}
                       </td>
+                      {!anonymized && (
+                        <td className="text-right whitespace-nowrap">
+                          <BoatRowActions
+                            boatId={b.id}
+                            boatName={b.name}
+                            archived={b.archivedAt !== null}
+                            activeContractId={contractRows.find((c) => c.boatId === b.id && c.status === "attivo")?.id ?? null}
+                            hasContracts={contractRows.some((c) => c.boatId === b.id)}
+                          />
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

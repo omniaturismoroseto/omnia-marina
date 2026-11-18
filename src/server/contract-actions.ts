@@ -22,7 +22,17 @@ import {
   type ContractItemInput,
 } from "@/lib/contract-items";
 import { categoryForBoat, occupiedUntil, quoteStay, zoneRate, type QuoteLine } from "@/lib/pricing";
-import { activateContract, addContractItem, cancelContract, createContract, removeContractItem, revertToDraft, updateDraftContract } from "./contracts";
+import {
+  activateContract,
+  addContractItem,
+  cancelContract,
+  createContract,
+  removeContractItem,
+  replaceContractBoat,
+  revertToDraft,
+  updateDraftContract,
+} from "./contracts";
+import { setBoatArchived } from "./boats";
 import { toFormState } from "./errors";
 import { extrasOfList, type ListExtra } from "./list-extras";
 
@@ -468,4 +478,34 @@ export async function removeContractItemAction(_prev: FormState, formData: FormD
   }
   revalidatePath("/", "layout");
   return { ok: true };
+}
+
+const replaceBoatSchema = z.object({
+  contractId: f.id(),
+  newBoatId: f.id("Scegli la barca nuova"),
+  changeDate: f.date("Indica da quando c'è la barca nuova"),
+  archiveOld: f.checkbox(),
+});
+
+/** Cambio barca: conclude il contratto attivo e prepara la bozza per la barca nuova. */
+export async function replaceContractBoatAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(OFFICE);
+  const parsed = parseForm(replaceBoatSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const d = parsed.data;
+  let draftId: string;
+  try {
+    draftId = await db.transaction(async (tx) => {
+      const actor = { marinaId: ctx.marinaId, userId: ctx.user.id };
+      const result = await replaceContractBoat(tx, actor, d.contractId, { newBoatId: d.newBoatId, changeDate: d.changeDate });
+      // La barca vecchia, venduta, va in archivio (se non ha altri contratti attivi).
+      if (d.archiveOld) await setBoatArchived(tx, ctx.marinaId, result.oldBoatId, true);
+      await audit(ctx, "cambio barca", "contratto", d.contractId, `Nuova bozza ${result.draftId}`, tx);
+      return result.draftId;
+    });
+  } catch (err) {
+    return toFormState(err);
+  }
+  revalidatePath("/", "layout");
+  redirect(`/contratti/${draftId}?cambio=1`);
 }
