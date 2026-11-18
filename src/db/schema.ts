@@ -50,6 +50,8 @@ export const ledgerAccountEnum = pgEnum("ledger_account", ["cassa", "banca"]);
 export const taskKindEnum = pgEnum("task_kind", ["assistenza", "manutenzione", "segnalazione", "servizio"]);
 export const taskPriorityEnum = pgEnum("task_priority", ["bassa", "normale", "alta"]);
 export const taskStatusEnum = pgEnum("task_status", ["aperta", "in_corso", "chiusa"]);
+// Messaggi ai diportisti: urgente (meteo, sicurezza: si chiede la conferma di lettura), lavori e disservizi, informazioni.
+export const messageKindEnum = pgEnum("message_kind", ["urgente", "lavori", "info"]);
 
 // ───────────────────────── Piattaforma ─────────────────────────
 
@@ -99,6 +101,20 @@ export const marinas = pgTable("marinas", {
   logoWidth: integer("logo_width"),
   logoHeight: integer("logo_height"),
   logoVersion: integer("logo_version").notNull().default(0),
+  // Area diportista: orari dell'ufficio e informazioni utili (regolamento, servizi, numeri), scritti dalla direzione.
+  officeHours: text("office_hours"),
+  boaterInfo: text("boater_info"),
+  // Meteo: posizione del porto (gradi decimali) e soglia delle raffiche, in nodi, oltre la quale si propone l'allerta.
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  windAlertKnots: integer("wind_alert_knots").notNull().default(30),
+  // Soglia dell'onda significativa, in metri, oltre la quale si propone l'avviso.
+  waveAlertM: real("wave_alert_m").notNull().default(2),
+  // Zona di allerta della Protezione Civile scelta a mano; vuota = quella che contiene il Comune del porto.
+  alertZone: text("alert_zone"),
+  // Invio automatico dell'allerta (serve il controllo periodico, vedi COME-LAVORIAMO.md) e ultimo invio, per non ripeterla.
+  windAlertAuto: boolean("wind_alert_auto").notNull().default(false),
+  windAlertSentAt: timestamp("wind_alert_sent_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
 
@@ -151,10 +167,12 @@ export const sessions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     marinaId: uuid("marina_id").references(() => marinas.id, { onDelete: "set null" }),
+    // Valorizzato quando la sessione è nell'area diportista: vale solo per quel cliente, mai per il gestionale.
+    ownerAccessId: uuid("owner_access_id").references(() => ownerAccess.id, { onDelete: "cascade" }),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: createdAt(),
   },
-  (t) => [index("sessions_user_idx").on(t.userId)],
+  (t) => [index("sessions_user_idx").on(t.userId), index("sessions_owner_access_idx").on(t.ownerAccessId)],
 );
 
 // ───────────────────────── Anagrafiche ─────────────────────────
@@ -220,6 +238,108 @@ export const owners = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index("owners_marina_name_idx").on(t.marinaId, t.displayName), index("owners_marina_fiscal_idx").on(t.marinaId, t.fiscalCode)],
+);
+
+// Messaggi dal porto ai diportisti. I destinatari (clienti) si fissano all'invio in message_recipients: chi arriva
+// dopo non riceve i messaggi vecchi. `audience` descrive a chi è andato («Pontile A», «Tutti i clienti»).
+export const messages = pgTable(
+  "messages",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    senderId: uuid("sender_id").references(() => users.id, { onDelete: "set null" }),
+    kind: messageKindEnum("kind").notNull().default("info"),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    audience: text("audience").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("messages_marina_created_idx").on(t.marinaId, t.createdAt)],
+);
+
+// Un destinatario per cliente: basta che una delle persone con accesso lo legga.
+export const messageRecipients = pgTable(
+  "message_recipients",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => owners.id, { onDelete: "cascade" }),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    readBy: uuid("read_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (t) => [uniqueIndex("message_recipients_uq").on(t.messageId, t.ownerId), index("message_recipients_owner_idx").on(t.ownerId)],
+);
+
+// Notifiche sul telefono (web push): un'iscrizione per dispositivo e browser in cui la persona le ha attivate.
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: id(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("push_subscriptions_user_idx").on(t.userId)],
+);
+
+// Area diportista. Un invito nasce dalla scheda del cliente: il codice (8 caratteri) si consegna su carta o con un
+// messaggio, vale 30 giorni e una volta sola. Resta leggibile all'ufficio finché è in attesa, poi si cancella.
+export const ownerInvites = pgTable(
+  "owner_invites",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => owners.id, { onDelete: "cascade" }),
+    // Persona invitata (il titolare, un familiare, uno skipper): diventa il nome del nuovo account.
+    name: text("name").notNull(),
+    code: text("code").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    // Tentativi con codice fiscale / partita IVA sbagliati: oltre il limite l'invito si blocca.
+    failedAttempts: integer("failed_attempts").notNull().default(0),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("owner_invites_owner_idx").on(t.ownerId)],
+);
+
+// Chi può entrare nell'area diportista di un cliente. Revocare non cancella: resta la storia e si può riattivare
+// con un nuovo invito.
+export const ownerAccess = pgTable(
+  "owner_access",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => owners.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("owner_access_owner_user_uq").on(t.ownerId, t.userId), index("owner_access_user_idx").on(t.userId)],
 );
 
 // Registro dei consensi: ogni riga è un evento (concesso o revocato). Non si modifica mai,

@@ -5,12 +5,13 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { memberships, users } from "@/db/schema";
-import { createSession, destroySession, setSessionMarina } from "@/lib/auth/session";
-import { homeFor, requireUser } from "@/lib/context";
+import { createSession, destroySession, setSessionMarina, setSessionOwnerArea } from "@/lib/auth/session";
+import { homeFor, ownerAreasFor, requireUser } from "@/lib/context";
 import { todayRome, yearOf } from "@/lib/dates";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
-import { createAccount, requestPasswordReset as sendPasswordReset, verifyLogin } from "./credentials";
+import { createAccount, isEmailVerified, requestPasswordReset as sendPasswordReset, sendVerificationEmail, verifyLogin } from "./credentials";
 import { createMarinaWithDefaults } from "./marina-setup";
+import { touchAccess } from "./owner-access";
 
 function signupAllowed(): boolean {
   return process.env.ALLOW_SIGNUP !== "false";
@@ -54,9 +55,33 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
   }
   attempts.delete(email);
 
-  const mems = await db.select({ marinaId: memberships.marinaId, role: memberships.role }).from(memberships).where(eq(memberships.userId, result.userId));
-  await createSession(result.userId, mems.length === 1 ? mems[0].marinaId : null);
-  redirect(mems.length === 1 ? homeFor(mems[0].role) : "/porti");
+  const userId = result.userId;
+  const [mems, areas] = await Promise.all([
+    db.select({ marinaId: memberships.marinaId, role: memberships.role }).from(memberships).where(eq(memberships.userId, userId)),
+    ownerAreasFor(userId),
+  ]);
+
+  // L'area diportista si apre solo con l'email confermata: se manca, si rimanda il collegamento.
+  if (areas.length > 0 && !(await isEmailVerified(userId))) {
+    await sendVerificationEmail(email, password);
+    if (mems.length === 0) {
+      return fail(
+        `Prima di entrare conferma la tua email: ti abbiamo mandato di nuovo il collegamento a ${email} (guarda anche nella posta indesiderata). Aperto il collegamento, torna qui e accedi.`,
+      );
+    }
+  }
+
+  if (mems.length === 0 && areas.length === 1) {
+    await createSession(userId, areas[0].marinaId, areas[0].accessId);
+    await touchAccess(areas[0].accessId);
+    redirect("/diportista");
+  }
+  if (mems.length === 1 && areas.length === 0) {
+    await createSession(userId, mems[0].marinaId);
+    redirect(homeFor(mems[0].role));
+  }
+  await createSession(userId, null);
+  redirect("/porti");
 }
 
 // Freno alle richieste di «password dimenticata»: al massimo 3 email per indirizzo ogni 15 minuti.
@@ -125,6 +150,19 @@ export async function selectMarina(_prev: FormState, formData: FormData): Promis
   if (!membership) return fail("Non hai accesso a questo porto.");
   await setSessionMarina(ctx.sessionId, marinaId);
   redirect(homeFor(membership.role));
+}
+
+export async function selectOwnerArea(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireUser();
+  const accessId = String(formData.get("accessId") ?? "");
+  const area = ctx.ownerAreas.find((a) => a.accessId === accessId);
+  if (!area) return fail("Non hai accesso a quest'area.");
+  if (!(await isEmailVerified(ctx.user.id))) {
+    return fail("Prima conferma la tua email con il collegamento che ti abbiamo mandato. Se non lo trovi, esci e rientra: te lo mandiamo di nuovo.");
+  }
+  await setSessionOwnerArea(ctx.sessionId, area.marinaId, area.accessId);
+  await touchAccess(area.accessId);
+  redirect("/diportista");
 }
 
 const newMarinaSchema = z.object({ marinaName: f.text("Inserisci il nome del porto") });

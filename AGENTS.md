@@ -62,7 +62,33 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   API REST con `FIREBASE_API_KEY` per l'accesso); senza, valgono le password locali. Un account locale passa su Firebase
   da solo (stesso uid = `users.id`) al primo accesso riuscito o alla prima richiesta di nuova password. Dopo l'accesso
   la sessione resta quella dell'app (`src/lib/auth/session.ts`). Test: `tests/credentials.test.ts` con l'emulatore
-  (`npx firebase-tools emulators:start --only auth --project demo-omnia`). Area diportista: `docs/area-diportista.md`.
+  (`npx firebase-tools emulators:start --only auth --project demo-omnia`).
+- Area diportista (`docs/area-diportista.md`): pagine in `src/app/(diportista)/`, che iniziano con `requireOwner()` e
+  filtrano **sempre** per `ctx.ownerId` e `ctx.marinaId`. Una sessione con `sessions.owner_access_id` è nell'area
+  diportista e non apre il gestionale (`requireMarina` la rimanda a `/diportista`). Inviti, attivazione e revoca in
+  `src/server/owner-access.ts`; codici, codice fiscale e messaggio in `src/lib/owner-access.ts`; attivazione pubblica
+  su `/attiva`; riquadro «Accesso all'app» nella scheda cliente. L'area si apre solo con l'email confermata
+  (`isEmailVerified`); anonimizzare un cliente cancella inviti e accessi.
+  Dati del diportista in `src/server/owner-area.ts` (contratti attivi e conclusi, barche, addebiti, scadenze); il contratto
+  stampato è un componente unico (`src/components/contract-document.tsx`) per ufficio e diportista.
+- Messaggi ai diportisti (`/messaggi`, `src/server/messages.ts`): destinatari fissati all'invio in `message_recipients`
+  (un cliente = letto se una sua persona lo apre); la banchina non scrive a «tutti» né per tipo di contratto (`canSendTo`).
+  Notifiche web push in `src/server/push.ts` (`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`, service worker `public/sw.js`):
+  senza chiavi sono spente. Il diportista segna letto aprendo il messaggio (`MarkRead`, mai durante il precaricamento).
+- Allerte (`/meteo`, voce di menu «Allerte», tutti i ruoli; riquadro `PortWeatherCard` in cruscotto e banchina; niente per i
+  diportisti, che ricevono solo i messaggi). Fonti della Protezione Civile (repository GitHub `pcm-dpc`, CC BY 4.0):
+  bollettino di **vigilanza** (`DPC-Bollettini-Vigilanza-Meteorologica`, `files/AAAAMMGG.json`: simboli di vento e mare con
+  coordinate, codici in `PHENOMENA`, presi entro `NEARBY_KM` dalla posizione del porto, e testi «Venti»/«Mari») e di
+  **criticità** (`DPC-Bollettini-Criticita-Idrogeologica-Idraulica`, ultimo file via API dei commit, `GITHUB_TOKEN` facoltativo;
+  zona dal Comune o `marinas.alert_zone`). Funzioni pure in `src/lib/civil-protection.ts`, lettura in
+  `src/server/civil-protection.ts` (memoria di un'ora). `portConditions` (`src/server/port-conditions.ts`) unisce tutto e
+  prepara l'avviso (burrasca, tempesta, mare agitato vicino al porto, allerta arancione/rossa): a «tutti» per direzione e
+  ufficio, a «chi è in porto» per la banchina; invio automatico da `/api/meteo/controllo` (Cloud Scheduler,
+  `METEO_CHECK_TOKEN`, non si ripete entro 24 ore, `wind_alert_sent_at`).
+  Previsioni Open-Meteo (`src/lib/weather.ts`, `src/server/weather.ts`: vento, onda, mare lungo, corrente, livello) **spente**:
+  l'uso gratuito è solo non commerciale, si accendono con `OPEN_METEO_API_KEY` (abbonamento, indirizzi `customer-…`).
+  Collaudi locali: `DPC_FIXTURE`, `DPC_VIGILANCE_FIXTURE`, `WEATHER_FIXTURE` (da qui GitHub API e Open-Meteo non sono
+  raggiungibili); estratti veri dei bollettini in `tests/fixtures/`.
 - Produzione: `output: "standalone"` + `Dockerfile` (Cloud Run). Le migrazioni si applicano all'avvio con
   `AUTO_MIGRATE=true`; ogni modifica allo schema richiede `pnpm db:generate` e la migrazione va committata.
 - Pubblicazione: `main` NON va online da solo. L'utente pubblica dal PC Windows (PowerShell), dalla cartella

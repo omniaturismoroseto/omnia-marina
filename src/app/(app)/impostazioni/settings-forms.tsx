@@ -15,6 +15,7 @@ import {
   removeMember,
   resetMemberPassword,
   saveBerth,
+  saveBoaterSettings,
   saveCategory,
   saveLegalTexts,
   saveMarina,
@@ -95,6 +96,108 @@ function RestoreTemplate({ field, text }: { field: string; text: string }) {
     >
       Usa il testo modello
     </button>
+  );
+}
+
+export function BoaterSettingsForm({
+  officeHours,
+  boaterInfo,
+  coordinates,
+  windAlertKnots,
+  waveAlertM,
+  windAlertAuto,
+  alertZone,
+  zoneNames,
+  detectedZone,
+  forecastEnabled,
+}: {
+  officeHours: string;
+  boaterInfo: string;
+  coordinates: string;
+  windAlertKnots: number;
+  waveAlertM: number;
+  alertZone: string;
+  // Zone di allerta dell'ultimo bollettino della Protezione Civile (vuoto se non raggiungibile) e quella trovata dal Comune.
+  zoneNames: string[];
+  detectedZone: string | null;
+  // Previsioni Open-Meteo accese (abbonamento): solo allora servono le soglie di raffiche e onda.
+  forecastEnabled: boolean;
+  windAlertAuto: boolean;
+}) {
+  return (
+    <Form action={saveBoaterSettings} className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <TextareaField
+          name="officeHours"
+          label="Orari dell'ufficio"
+          defaultValue={officeHours}
+          rows={3}
+          placeholder={"Lun-sab 8:30-12:30 e 15:00-18:00\nDomenica chiuso"}
+        />
+        <TextareaField
+          name="boaterInfo"
+          label="Informazioni per i diportisti"
+          defaultValue={boaterInfo}
+          rows={3}
+          hint="Servizi, numeri utili, regole principali. Compare nell'area diportista."
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Field
+          name="coordinates"
+          label="Posizione del porto"
+          defaultValue={coordinates}
+          placeholder="42.65890, 14.02560"
+          hint="Serve a capire se burrasca e mare agitato del bollettino riguardano il porto. Su Google Maps: tasto destro (o tieni premuto) sul porto e copia i numeri."
+          wrapperClassName="sm:col-span-2"
+        />
+        {forecastEnabled ? (
+          <Field name="windAlertKnots" label="Avviso raffiche oltre (nodi)" defaultValue={String(windAlertKnots)} inputMode="numeric" hint="Burrasca (forza 8) sempre." />
+        ) : (
+          <input type="hidden" name="windAlertKnots" value={String(windAlertKnots)} />
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {forecastEnabled ? (
+          <Field
+            name="waveAlertM"
+            label="Avviso onda oltre (m)"
+            defaultValue={String(waveAlertM).replace(".", ",")}
+            inputMode="decimal"
+            hint="Onda significativa prevista. 2,5 m = mare molto mosso."
+          />
+        ) : (
+          <input type="hidden" name="waveAlertM" value={String(waveAlertM)} />
+        )}
+        {zoneNames.length > 0 ? (
+          <SelectField
+            name="alertZone"
+            label="Zona di allerta (Protezione Civile)"
+            defaultValue={alertZone}
+            placeholder={detectedZone ? `Dal Comune del porto: ${detectedZone}` : "Scegli la zona…"}
+            options={zoneNames.map((z) => ({ value: z, label: z }))}
+            hint={detectedZone ? "Lascia la prima voce per usare la zona del Comune." : "Il Comune del porto non è in nessuna zona: scegli quella giusta."}
+            wrapperClassName="sm:col-span-2"
+          />
+        ) : (
+          <>
+            <input type="hidden" name="alertZone" value={alertZone} />
+            <p className="text-sm text-muted sm:col-span-2">
+              Zona di allerta della Protezione Civile: {alertZone || detectedZone || "non ancora individuata"}. L&apos;elenco delle zone non è raggiungibile in questo
+              momento.
+            </p>
+          </>
+        )}
+      </div>
+      <CheckboxField
+        name="windAlertAuto"
+        label="Invia l'avviso meteo da solo"
+        defaultChecked={windAlertAuto}
+        hint="Burrasca, tempesta o mare agitato vicino al porto, allerta arancione o rossa della Protezione Civile. Se spento, l'avviso compare in «Allerte» e lo invii tu con un clic. L'invio automatico richiede il controllo periodico (vedi la guida)."
+      />
+      <FormMessage />
+      <Submit>Salva</Submit>
+    </Form>
   );
 }
 

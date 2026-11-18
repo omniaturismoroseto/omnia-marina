@@ -21,19 +21,28 @@ successive (contratto, pagamenti, documenti, telecamere).
 
 ## Percorsi
 
+Stato: passo 1 (Firebase e «Password dimenticata?») e passo 2 (inviti, attivazione, revoca) **fatti**, e la prima
+versione dell'area (vedi «Funzioni dell'area» in fondo).
+
 ### 1. L'ufficio invita
 Scheda cliente → **«Accesso all'app»** → «Invita una persona»: un nome (il titolare è proposto dalla scheda; si può
 scrivere quello di un familiare o di uno skipper). L'app crea un **invito** valido 30 giorni e utilizzabile una sola
 volta, con un **codice di 8 caratteri** (senza caratteri ambigui come 0/O e 1/I). Il codice si consegna:
 - con il **foglio di benvenuto** stampabile (codice, QR code e istruzioni), insieme al contratto;
 - oppure copiando un messaggio già pronto (WhatsApp, SMS, email dell'ufficio) con il collegamento `/attiva/<codice>`.
+  Il pulsante «WhatsApp» apre la chat con il telefono della scheda, se c'è.
+
+Il codice resta **leggibile all'ufficio** finché l'invito è in attesa, così il foglio si può ristampare. Da solo non
+basta: serve anche il codice fiscale o la partita IVA. Dopo 5 tentativi sbagliati l'invito si blocca. All'attivazione
+l'invito si cancella.
 
 ### 2. Il diportista attiva l'accesso
 Su `/attiva` (o dal QR o dal collegamento, che compilano il codice) inserisce:
 1. il codice e, come seconda prova, il **codice fiscale o la partita IVA** del cliente presente nella scheda;
 2. email e password: l'app crea l'account su Firebase e Firebase invia l'**email di conferma dell'indirizzo**.
 
-L'area diportista si apre solo dopo che l'email è stata confermata. Il codice, intanto, è già usato.
+L'area diportista si apre solo dopo che l'email è stata confermata. Il codice, intanto, è già usato. Se si prova ad
+accedere senza aver confermato, Firebase rimanda l'email di conferma.
 Se l'email ha già un account (per esempio un dipendente che ha anche la barca nel porto), non se ne crea un altro:
 chiede la password che usa già e collega l'accesso a quell'account.
 
@@ -80,11 +89,11 @@ giorni. Le chiude invece il cambio dal proprio account o la password provvisoria
 ## Modello dei dati (proposta)
 
 - `users`: aggiunge `firebase_uid` (unico), e `password_hash` diventa facoltativa (fatto). `email_verified` si legge da Firebase.
-- `owner_invites`: porto, cliente, nome, hash del codice, scadenza, usato il, creato da.
-- `owner_access`: porto, cliente, utente, creato il, creato da, revocato il, ultimo ingresso. Ha un vincolo unico
-  (cliente, utente).
-- `sessions`: aggiunge `owner_access_id`. Se è valorizzato, la sessione è nell'area diportista.
-- Codici e token si salvano solo come hash SHA-256, come le sessioni.
+- `owner_invites` (fatto): porto, cliente, nome, codice (unico), scadenza, tentativi sbagliati, creato da.
+- `owner_access` (fatto): porto, cliente, utente, creato il, creato da, revocato il, ultimo ingresso. Ha un vincolo
+  unico (cliente, utente): un nuovo invito alla stessa persona riattiva l'accesso revocato.
+- `sessions` (fatto): aggiunge `owner_access_id`. Se è valorizzato, la sessione è nell'area diportista e
+  `requireMarina` la rimanda a `/diportista`.
 - Nuovo controllo `requireOwner()` (gemello di `requireMarina`): restituisce porto e cliente della sessione, verifica
   che l'accesso non sia revocato, e ogni lettura filtra per `ownerId` **e** `marinaId`.
 
@@ -101,3 +110,25 @@ Il porto non invia altre email: l'invito viaggia con il codice.
 3. Authentication → Modelli: lingua italiana, nome mittente «Omnia Marina».
 4. Authentication → Impostazioni → Domini autorizzati: aggiungere l'indirizzo dell'app su Cloud Run.
 5. Impostazioni progetto → copiare la chiave web pubblica, che diventa una variabile di Cloud Run.
+
+## Funzioni dell'area
+
+Fatte (prima versione):
+- **La mia barca** (`/diportista`): posto e pontile, contratto attivo da scaricare (stesso documento della stampa
+  dell'ufficio), scadenze (rate da pagare, fine contratto entro 60 giorni, assicurazione entro 30), barche, contatti e
+  orari del porto, informazioni utili, contratti passati. **Estratto conto** su `/diportista/conto`.
+- **Messaggi** (`/messaggi` per il personale, `/diportista/messaggi` per il diportista): a un cliente, a un pontile,
+  a un tipo di contratto, a chi è in porto o a tutti; urgenti in evidenza finché non letti; chi ha letto e quando;
+  notifiche web push (chiavi VAPID, vedi COME-LAVORIAMO.md).
+- **Allerte** (solo per il personale: `/meteo`, cruscotto e banchina): bollettini della Protezione Civile, cioè
+  burrasca, tempesta e mare agitato vicino al porto (vigilanza meteorologica) e criticità idrogeologica e temporali della
+  zona; avviso ai diportisti con un clic o in automatico ogni 3 ore. I diportisti non vedono il meteo: ricevono solo i
+  messaggi della direzione. Le previsioni Open-Meteo sono pronte ma spente finché non c'è l'abbonamento (uso commerciale).
+
+In lista per dopo:
+- Richieste e segnalazioni dal diportista (con foto), collegate alle segnalazioni della banchina.
+- «Esco in mare / rientro alle…» e assenze lunghe (posto libero per i transiti).
+- Promemoria automatici delle scadenze (rate, assicurazione) come notifiche.
+- Caricamento della nuova polizza dal telefono.
+- Pagamento online, prenotazione dei servizi, ospiti.
+- Telecamere (da decidere: condivisione DMSS oppure piccolo computer in porto con go2rtc e tunnel sicuro).

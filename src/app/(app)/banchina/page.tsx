@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { asc, eq } from "drizzle-orm";
 import { Phone } from "lucide-react";
 import { MovementButtons } from "@/components/movement-buttons";
 import { page } from "@/components/page";
+import { PortWeatherCard } from "@/components/port-weather";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui";
 import { db } from "@/db";
 import { berths, marinas } from "@/db/schema";
@@ -84,7 +86,8 @@ export default page(async function DockPage() {
 
   return (
     <>
-      <PageHeader help="banchina"
+      <PageHeader
+        help="banchina"
         title="Banchina"
         description={
           <>
@@ -101,6 +104,12 @@ export default page(async function DockPage() {
             <p className="mt-1 text-[13px] font-medium text-muted">{label}</p>
           </a>
         ))}
+      </div>
+
+      <div className="mb-6">
+        <Suspense fallback={null}>
+          <PortWeatherCard marinaId={ctx.marinaId} role={ctx.role} />
+        </Suspense>
       </div>
 
       <div className="space-y-6">
@@ -233,4 +242,4 @@ export default page(async function DockPage() {
       </div>
     </>
   );
-})
+});

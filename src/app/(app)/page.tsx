@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { and, asc, eq, gte, lte, ne, sql } from "drizzle-orm";
 import { ChevronRight } from "lucide-react";
 import { page } from "@/components/page";
+import { PortWeatherCard } from "@/components/port-weather";
 import { Badge, ButtonLink, Card, EmptyState, PageHeader, Stat } from "@/components/ui";
 import { db } from "@/db";
 import { boats, contracts, owners, payments, tasks } from "@/db/schema";
@@ -145,6 +147,12 @@ export default page(async function DashboardPage() {
           hint={`Totale ancora aperto: ${formatMoney(totals.openCents)}`}
           href="/contabilita?stato=scaduti"
         />
+      </div>
+
+      <div className="mt-5">
+        <Suspense fallback={null}>
+          <PortWeatherCard marinaId={ctx.marinaId} role={ctx.role} />
+        </Suspense>
       </div>
 
       <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-2">

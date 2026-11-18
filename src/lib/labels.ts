@@ -106,3 +106,6 @@ export const CONTRACT_ITEM_LABEL = {
   rifiuti: "Quota rifiuti",
   servizio: "Servizio",
 } as const;
+
+export const MESSAGE_KIND_LABEL = { urgente: "Urgente", lavori: "Lavori", info: "Informazione" } as const;
+export const MESSAGE_KIND_TONE = { urgente: "bad", lavori: "warn", info: "sea" } as const;

@@ -4,7 +4,7 @@ import type { Role } from "@/db/schema";
 // Nei testi i nomi di pulsanti, campi e pagine stanno tra «»: la pagina li mette in evidenza.
 // Quando cambia un pulsante o un percorso dell'app, aggiornare anche qui.
 
-export type GuideIcon = "start" | "dashboard" | "dock" | "map" | "owners" | "boats" | "contracts" | "accounting" | "tariffs" | "settings" | "account" | "help";
+export type GuideIcon = "start" | "dashboard" | "dock" | "map" | "owners" | "boats" | "contracts" | "messages" | "weather" | "accounting" | "tariffs" | "settings" | "account" | "help";
 
 export interface GuideSection {
   id: string; // ancora: /guida#id
@@ -61,6 +61,14 @@ export const GUIDE: GuideSection[] = [
           "In alto: posti occupati, movimenti attesi oggi e importi scaduti da incassare. Tocca un riquadro per aprire il dettaglio.",
           "«Da tenere d'occhio»: addebiti scaduti, contratti in bozza da attivare, contratti in scadenza, assicurazioni scadute, clienti senza informativa firmata, segnalazioni aperte, numeri di contratto rimasti liberi.",
           "«Banchina oggi», «Prossimi incassi» e «Occupazione per pontile» completano il quadro.",
+        ],
+      },
+      {
+        title: "Allerte meteo e mare",
+        items: [
+          "«Allerte meteo e mare»: dai bollettini ufficiali della Protezione Civile, burrasca, tempesta e mare agitato vicino al porto (oggi, domani, dopodomani) e la criticità idrogeologica e temporali della zona.",
+          "Con burrasca, tempesta o mare agitato vicino al porto, o allerta arancione o rossa, compare la striscia rossa con «Avvisa i clienti»: apre il messaggio urgente già scritto. Controllalo e premi «Invia».",
+          "Dopo l'invio il pulsante diventa «Manda un altro avviso» per 24 ore. Se la direzione ha scelto l'invio automatico, l'avviso parte da solo. Più dettagli nella voce «Allerte».",
         ],
       },
     ],
@@ -140,6 +148,15 @@ export const GUIDE: GuideSection[] = [
           "Chi non ha più un contratto attivo si può spostare nella categoria «Ex cliente»: esce dall'elenco normale ma resta consultabile nella sua linguetta. Se torna con un nuovo contratto, esce da solo dalla categoria.",
         ],
       },
+      {
+        title: "Accesso all'app per il diportista",
+        items: [
+          "Nella scheda del cliente, riquadro «Accesso all'app» → «Invita una persona»: il titolare, un familiare o lo skipper. Serve il codice fiscale o la partita IVA nella scheda: è la prova che chiediamo a chi attiva.",
+          "Nasce un codice di 8 caratteri, valido 30 giorni e una volta sola. Consegnalo con il «Foglio di benvenuto» (da stampare, con il QR code), con «Copia messaggio» o con «WhatsApp».",
+          "La persona apre il collegamento o inquadra il QR, scrive il codice fiscale dell'intestatario (per le società la partita IVA), sceglie email e password e conferma l'email. Da lì entra dalla normale pagina di accesso e vede solo l'area del suo cliente, mai il gestionale.",
+          "Nello stesso riquadro vedi chi ha l'accesso e quando è entrato l'ultima volta. «Revoca» lo toglie subito; «Nuovo codice» sostituisce un codice perso, scaduto o bloccato dopo troppi tentativi sbagliati.",
+        ],
+      },
     ],
     tips: [
       "Su richiesta del cliente: «Esportazione completa dei dati» oppure «Anonimizza i dati personali» (contratti e contabilità restano, ma non più riconducibili a lui).",
@@ -204,6 +221,64 @@ export const GUIDE: GuideSection[] = [
     link: { href: "/contratti", label: "Apri i contratti" },
   },
   {
+    id: "messaggi",
+    title: "Messaggi",
+    icon: "messages",
+    roles: ALL,
+    purpose: "Avvisi ai diportisti: arrivano nella loro area dell'app e come notifica sul telefono, se l'hanno attivata.",
+    steps: [
+      {
+        title: "Scrivere",
+        items: [
+          "«Nuovo messaggio» → scegli a chi: tutti i clienti con contratto attivo, un pontile, un tipo di contratto (annuali, stagionali…), chi è in porto adesso, oppure un singolo cliente.",
+          "L'operatore di banchina scrive a un pontile, a chi è in porto o a un cliente; a tutti scrivono direzione e ufficio.",
+          "Tipo: «Informazione», «Lavori o disservizio» oppure «Urgente» (meteo, sicurezza). Gli urgenti restano in evidenza nell'app del cliente finché non li apre.",
+          "Dalla scheda del cliente, riquadro «Accesso all'app» → «Scrivi un messaggio», il destinatario è già scelto.",
+        ],
+      },
+      {
+        title: "Chi l'ha letto",
+        items: [
+          "Aprendo un messaggio vedi, cliente per cliente, chi l'ha letto e quando. Per gli urgenti non letti c'è il pulsante «Chiama».",
+          "I clienti senza app attiva non ricevono niente subito: vedranno il messaggio quando attiveranno l'accesso.",
+        ],
+      },
+    ],
+    tips: ["Un messaggio inviato non si modifica: per una correzione mandane un altro allo stesso gruppo."],
+    link: { href: "/messaggi", label: "Apri i messaggi" },
+  },
+  {
+    id: "meteo",
+    title: "Allerte",
+    icon: "weather",
+    roles: ALL,
+    purpose: "Burrasca, mare agitato e criticità della zona dai bollettini della Protezione Civile, e l'avviso ai diportisti.",
+    steps: [
+      {
+        title: "Cosa si vede",
+        items: [
+          "«Vento e mare»: dal bollettino di vigilanza meteorologica, per oggi, domani e dopodomani, i fenomeni previsti vicino al porto (entro 70 km): venti forti, burrasca, tempesta, raffiche frequenti, mare molto mosso, agitato o grosso, moto ondoso in aumento. In rosso quelli per cui avvisare. Sotto ogni giorno c'è il testo nazionale su venti e mari.",
+          "«Criticità idrogeologica e temporali»: dal bollettino di criticità, l'allerta (verde, gialla, arancione, rossa) per la zona di allerta del porto, oggi e domani.",
+          "Lo stesso riquadro, più piccolo, è nel «Cruscotto» e nella «Banchina». I bollettini escono ogni giorno nel primo pomeriggio: la mattina si vede quello del giorno prima.",
+          "Servono la posizione e il Comune del porto, in «Impostazioni» → «Porto».",
+        ],
+      },
+      {
+        title: "Mandare l'avviso",
+        items: [
+          "La striscia rossa compare con burrasca, tempesta o mare agitato vicino al porto, oppure con allerta arancione o rossa. Il pulsante apre il messaggio urgente già scritto: controllalo, cambia se vuoi i destinatari, e premi «Invia».",
+          "Direzione e ufficio avvisano tutti i clienti con contratto attivo; l'operatore di banchina chi è in porto adesso, oppure un pontile.",
+          "Dopo l'invio il pulsante diventa «Manda un altro avviso» per 24 ore, così si vede che l'avviso è già partito.",
+        ],
+      },
+    ],
+    tips: [
+      "Per la navigazione fanno fede anche gli avvisi di burrasca e il meteomar dell'Aeronautica Militare e gli avvisi della Capitaneria; per le allerte, quella della Regione.",
+      "Zona di allerta e invio automatico li sceglie la direzione in «Impostazioni» → «Porto».",
+    ],
+    link: { href: "/meteo", label: "Apri le allerte" },
+  },
+  {
     id: "contabilita",
     title: "Contabilità",
     icon: "accounting",
@@ -263,6 +338,7 @@ export const GUIDE: GuideSection[] = [
         title: "Le linguette",
         items: [
           "«Porto»: dati della società, logo della società di gestione (compare nel menu e nelle stampe), spese di gestione e quota rifiuti, nome della categoria «Ex cliente», testi del contratto e dell'informativa.",
+          "«Porto» → «Area diportisti e allerte»: orari dell'ufficio e informazioni utili che i diportisti vedono nell'app, posizione del porto (da Google Maps) per capire se burrasca e mare agitato lo riguardano, zona di allerta della Protezione Civile (trovata dal Comune, oppure scelta a mano) e, se volete, l'invio automatico dell'avviso.",
           "«Pontili e posti»: pontili, banchine e posti. Tocca un posto per cambiarne misure, categoria o stato (in servizio, in manutenzione, fuori servizio).",
           "«Pianta dal vero»: carica la foto aerea, imposta la scala misurando una distanza nota, poi disponi i posti. «Riconoscimento automatico» propone pontili e banchine dalla foto.",
           "«Categorie»: le classi dei posti per misura.",

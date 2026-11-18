@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { boats, charges, contracts, marinas, owners, privacyConsents } from "@/db/schema";
+import { boats, charges, contracts, marinas, ownerAccess, ownerInvites, owners, privacyConsents } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
@@ -229,6 +229,9 @@ export async function eraseOwner(_prev: FormState, formData: FormData): Promise<
       .set({ registration: null, insuranceCompany: null, insurancePolicy: null, insuranceExpiry: null, notes: null, updatedAt: new Date() })
       .where(eq(boats.ownerId, ownerId));
     await tx.update(contracts).set({ notes: null }).where(eq(contracts.ownerId, ownerId));
+    // Niente più accessi all'area diportista: con l'accesso se ne vanno anche le sessioni aperte.
+    await tx.delete(ownerInvites).where(eq(ownerInvites.ownerId, ownerId));
+    await tx.delete(ownerAccess).where(eq(ownerAccess.ownerId, ownerId));
     await audit(ctx, "anonimizzazione", "cliente", ownerId, "Dati personali rimossi su richiesta", tx);
   });
 

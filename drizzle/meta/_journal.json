@@ -99,6 +99,34 @@
       "when": 1794948546443,
       "tag": "0013_accesso_firebase",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794950470069,
+      "tag": "0014_area_diportista",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794952269709,
+      "tag": "0015_porto_diportisti_meteo",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794952501200,
+      "tag": "0016_messaggi_diportisti",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794985931794,
+      "tag": "0017_meteo_marino_protezione_civile",
+      "breakpoints": true
     }
   ]
 }

@@ -1,10 +1,10 @@
 import "server-only";
 import { db, type Tx } from "@/db";
 import { auditLog } from "@/db/schema";
-import type { MarinaContext } from "./context";
 
 export async function audit(
-  ctx: Pick<MarinaContext, "marinaId" | "user">,
+  // Chi agisce: il personale del porto o, nell'area diportista, il diportista stesso.
+  ctx: { marinaId: string; user: { id: string | null } },
   action: string,
   entity: string,
   entityId: string | null,

@@ -46,6 +46,12 @@ export default function LoginPage() {
         <FormMessage />
         <Submit className="w-full">Accedi</Submit>
       </Form>
+      <p className="mt-6 text-sm text-muted">
+        Diportista con un codice del porto?{" "}
+        <Link href="/attiva" className="link">
+          Attiva l&apos;accesso
+        </Link>
+      </p>
       <Suspense fallback={null}>
         <SignupLink />
       </Suspense>

@@ -5,10 +5,12 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   Anchor,
+  CloudSun,
   Ellipsis,
   FileText,
   LayoutDashboard,
   LifeBuoy,
+  Mail,
   Map,
   Sailboat,
   Settings,
@@ -24,6 +26,8 @@ const ICONS = {
   cruscotto: LayoutDashboard,
   banchina: Anchor,
   mappa: Map,
+  messaggi: Mail,
+  meteo: CloudSun,
   clienti: Users,
   barche: Sailboat,
   contratti: FileText,

@@ -8,7 +8,11 @@ import { marinas } from "@/db/schema";
 import { requireMarina } from "@/lib/context";
 import { portLogo } from "@/lib/logo";
 import { LogoUploader } from "./logo-uploader";
-import { LegalTextsForm, MarinaForm } from "./settings-forms";
+import { findZoneByComune } from "@/lib/civil-protection";
+import { formatCoordinates } from "@/lib/weather";
+import { latestCivilBulletin } from "@/server/civil-protection";
+import { weatherEnabled } from "@/server/weather";
+import { BoaterSettingsForm, LegalTextsForm, MarinaForm } from "./settings-forms";
 import { SettingsTabs } from "./tabs";
 
 export const metadata: Metadata = { title: "Impostazioni" };
@@ -17,6 +21,8 @@ export default page(async function SettingsPage() {
   const ctx = await requireMarina(["admin"]);
   const [marina] = await db.select().from(marinas).where(eq(marinas.id, ctx.marinaId));
   const logo = portLogo(marina);
+  const bulletin = await latestCivilBulletin();
+  const zones = bulletin?.days[0]?.zones ?? [];
 
   return (
     <>
@@ -43,6 +49,20 @@ export default page(async function SettingsPage() {
               <LogoUploader hasLogo={logo !== null} />
             </div>
           </div>
+        </Card>
+        <Card title="Area diportisti e allerte">
+          <BoaterSettingsForm
+            officeHours={marina.officeHours ?? ""}
+            boaterInfo={marina.boaterInfo ?? ""}
+            coordinates={formatCoordinates(marina.latitude, marina.longitude)}
+            windAlertKnots={marina.windAlertKnots}
+            waveAlertM={marina.waveAlertM}
+            windAlertAuto={marina.windAlertAuto}
+            alertZone={marina.alertZone ?? ""}
+            zoneNames={[...new Set(zones.map((z) => z.name))].sort((a, b) => a.localeCompare(b, "it"))}
+            detectedZone={findZoneByComune(zones, marina.city)?.name ?? null}
+            forecastEnabled={weatherEnabled()}
+          />
         </Card>
         <Card title="Privacy e condizioni di contratto">
           <div className="mb-4">
