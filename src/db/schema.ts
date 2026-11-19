@@ -129,6 +129,9 @@ export const marinaPlans = pgTable("marina_plans", {
   // Si azzera quando cambia la foto o quando le proposte vengono confermate o scartate.
   analysis: jsonb("analysis"),
   analyzedAt: timestamp("analyzed_at", { withTimezone: true }),
+  // Forma del porto ricavata dalla foto (terra, moli, dighe) per la pianta disegnata; vale per la foto con photoVersion.
+  drawing: jsonb("drawing"),
+  drawnAt: timestamp("drawn_at", { withTimezone: true }),
   updatedAt: updatedAt(),
 });
 

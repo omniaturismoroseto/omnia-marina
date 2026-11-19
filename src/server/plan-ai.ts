@@ -5,6 +5,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { AnthropicVertex } from "@anthropic-ai/vertex-sdk";
 import { z } from "zod";
 import type { AiAnalysis } from "@/lib/plan-analysis";
+import type { AiDrawing } from "@/lib/plan-drawing";
 
 /*
  * Riconoscimento automatico di pontili e banchine nella foto aerea, con Claude. Due strade (vedi COME-LAVORIAMO.md):
@@ -65,6 +66,31 @@ Le coordinate sono millesimi della foto: x da 0 (bordo sinistro) a 1000 (bordo d
 ${scale}`;
 }
 
+const DrawingSchema = z.object({
+  land: z.array(
+    z.object({
+      kind: z.enum(["terra", "molo", "diga"]).describe("terra: costa, piazzali, edifici, strade; molo: moli e banchine in muratura che entrano nell'acqua; diga: dighe foranee e scogliere"),
+      points: z.array(point).describe("Vertici del contorno, in ordine lungo il bordo; il poligono si chiude da solo tra l'ultimo e il primo"),
+    }),
+  ),
+  notes: z.string().describe("Al massimo una frase in italiano su parti poco leggibili; vuoto se nessuna"),
+});
+
+function buildDrawingPrompt(width: number, height: number): string {
+  return `Questa è una foto aerea, ripresa dall'alto, di un porto turistico (${width} × ${height} pixel). Serve a disegnarne una pianta pulita, come una planimetria: acqua, terra, moli e dighe.
+
+Traccia il contorno di tutte le parti fisse che non sono acqua:
+- terra: la costa con piazzali, strade, parcheggi, edifici, spiagge e verde, come un'unica area (o poche aree grandi);
+- molo: i moli e le banchine in muratura o cemento che entrano nell'acqua, ognuno con il suo contorno;
+- diga: le dighe foranee, le scogliere e i frangiflutti.
+
+Non tracciare i pontili galleggianti (passerelle strette con le barche ai lati), le barche, le boe né le ombre: verranno disegnati a parte.
+
+Ogni contorno è un poligono con i vertici in ordine lungo il bordo. Segui con cura il bordo dell'acqua, dove ormeggiano le barche: usa abbastanza punti per seguirne la forma (da 4 a 80 per poligono), di più dove la riva è irregolare. Dove la terra arriva al bordo della foto, chiudi il contorno lungo il bordo.
+
+Le coordinate sono millesimi della foto: x da 0 (bordo sinistro) a 1000 (bordo destro), y da 0 (bordo in alto) a 1000 (bordo in basso). Sii preciso: la pianta disegnata verrà sovrapposta ai posti barca già disposti sulla foto.`;
+}
+
 export class PlanAnalysisError extends Error {}
 
 // Il motivo dato dal servizio, in breve: la pagina è riservata alla direzione, e così l'errore si capisce senza aprire i registri.
@@ -101,7 +127,7 @@ function configuredProvider(): Provider | null {
 }
 
 export function planAnalysisAvailable(): boolean {
-  return Boolean(configuredProvider() || process.env.PLAN_ANALYSIS_FIXTURE);
+  return Boolean(configuredProvider() || process.env.PLAN_ANALYSIS_FIXTURE || process.env.PLAN_DRAWING_FIXTURE);
 }
 
 function defaultClient(): Anthropic | AnthropicVertex {
@@ -119,19 +145,27 @@ function defaultClient(): Anthropic | AnthropicVertex {
   });
 }
 
+type Photo = { data: Buffer; mime: string; width: number; height: number };
+
 /**
  * Chiede a Claude di riconoscere pontili e banchine nella foto.
  * `client` si può sostituire nei test; in produzione è il client Vertex AI del progetto.
  */
-export async function analyzePlanPhoto(
-  photo: { data: Buffer; mime: string; width: number; height: number },
-  pxPerMeter: number | null,
-  client: Anthropic | AnthropicVertex | null = null,
-): Promise<AiAnalysis> {
+export async function analyzePlanPhoto(photo: Photo, pxPerMeter: number | null, client: Anthropic | AnthropicVertex | null = null): Promise<AiAnalysis> {
   // Solo per i collaudi: una risposta preparata, senza chiamare Google.
   const fixture = process.env.PLAN_ANALYSIS_FIXTURE;
   if (fixture && !client) return AnalysisSchema.parse(JSON.parse(await readFile(fixture, "utf8")));
+  return askAboutPhoto(photo, buildPrompt(photo.width, photo.height, pxPerMeter), AnalysisSchema, client);
+}
 
+/** Chiede a Claude i contorni di terra, moli e dighe, per la pianta disegnata. */
+export async function drawPlanPhoto(photo: Photo, client: Anthropic | AnthropicVertex | null = null): Promise<AiDrawing> {
+  const fixture = process.env.PLAN_DRAWING_FIXTURE;
+  if (fixture && !client) return DrawingSchema.parse(JSON.parse(await readFile(fixture, "utf8")));
+  return askAboutPhoto(photo, buildDrawingPrompt(photo.width, photo.height), DrawingSchema, client);
+}
+
+async function askAboutPhoto<T>(photo: Photo, prompt: string, schema: z.ZodType<T>, client: Anthropic | AnthropicVertex | null): Promise<T> {
   const api = client ?? defaultClient();
   const provider: Provider = api instanceof AnthropicVertex ? "vertex" : "anthropic";
   let message;
@@ -145,7 +179,7 @@ export async function analyzePlanPhoto(
         ...(provider === "anthropic" ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
         max_tokens: 16000,
         thinking: { type: "adaptive" },
-        output_config: { effort: "high", format: betaZodOutputFormat(AnalysisSchema) },
+        output_config: { effort: "high", format: betaZodOutputFormat(schema) },
         messages: [
           {
             role: "user",
@@ -154,7 +188,7 @@ export async function analyzePlanPhoto(
                 type: "image",
                 source: { type: "base64", media_type: photo.mime === "image/png" ? "image/png" : "image/jpeg", data: photo.data.toString("base64") },
               },
-              { type: "text", text: buildPrompt(photo.width, photo.height, pxPerMeter) },
+              { type: "text", text: prompt },
             ],
           },
         ],
@@ -195,7 +229,7 @@ export async function analyzePlanPhoto(
     console.error("Risposta dell'analisi non in formato JSON:", text.slice(0, 500));
     throw new PlanAnalysisError("La risposta dell'analisi non è leggibile. Riprova.");
   }
-  const result = AnalysisSchema.safeParse(parsed);
+  const result = schema.safeParse(parsed);
   if (!result.success) {
     console.error("Risposta dell'analisi non conforme allo schema:", result.error.issues.slice(0, 5));
     throw new PlanAnalysisError("La risposta dell'analisi non è leggibile. Riprova.");

@@ -117,7 +117,7 @@ export const GUIDE: GuideSection[] = [
         items: [
           "Tocca un posto per vedere barca, proprietario, telefono, contratto e prossime assegnazioni.",
           "Cambia la data in alto per vedere il porto in un altro giorno (per esempio a ferragosto).",
-          "Passa da «Schema» a «Pianta dal vero» per vedere i posti sopra la foto aerea, se è stata caricata.",
+          "Se è stata caricata la foto aerea, scegli la vista in alto: «Pianta disegnata» (planimetria con acqua, terra, pontili e barche colorate per stato), «Foto» (i posti sopra la foto) o «Schema».",
           "Su un posto libero l'ufficio trova «Assegna il posto»: apre un contratto nuovo già con posto e data.",
         ],
       },
@@ -340,7 +340,7 @@ export const GUIDE: GuideSection[] = [
           "«Porto»: dati della società, logo della società di gestione (compare nel menu e nelle stampe), spese di gestione e quota rifiuti, nome della categoria «Ex cliente», testi del contratto e dell'informativa.",
           "«Porto» → «Area diportisti e allerte»: orari dell'ufficio e informazioni utili che i diportisti vedono nell'app, posizione del porto (da Google Maps) per capire se burrasca e mare agitato lo riguardano, zona di allerta della Protezione Civile (trovata dal Comune, oppure scelta a mano) e, se volete, l'invio automatico dell'avviso.",
           "«Pontili e posti»: pontili, banchine e posti. Tocca un posto per cambiarne misure, categoria o stato (in servizio, in manutenzione, fuori servizio).",
-          "«Pianta dal vero»: carica la foto aerea, imposta la scala misurando una distanza nota, poi disponi i posti. «Riconoscimento automatico» propone pontili e banchine dalla foto.",
+          "«Pianta dal vero»: carica la foto aerea, imposta la scala misurando una distanza nota, poi disponi i posti. «Riconoscimento automatico» propone pontili e banchine dalla foto: «Crea» si conferma una volta sola, poi si corregge in «Pontili e posti» e con «Salva la pianta». «Pianta disegnata» ricava dalla foto la forma di costa, moli e dighe per la planimetria della mappa.",
           "«Categorie»: le classi dei posti per misura.",
           "«Utenti»: aggiungi persone, cambia il ruolo, reimposta la password.",
           "«Registro»: chi ha creato, modificato, esportato o cancellato dati personali e contabili.",

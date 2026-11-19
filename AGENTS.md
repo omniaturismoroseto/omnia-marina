@@ -42,6 +42,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   o regole visibili all'utente, aggiornare anche la guida (`tests/guide.test.ts` controlla ancore e collegamenti).
 - Pianta dal vero: le coordinate dei posti (`berths.plan_x/plan_y/plan_angle`) sono in pixel della foto caricata;
   la geometria sta in `src/lib/plan.ts`, la foto nel database (`marina_plans`) ed è servita da `/pianta/immagine`.
+  La mappa ha tre viste: «Pianta disegnata» (predefinita), «Foto» e «Schema» (`?vista=foto|schema`), tutte in `PlanView`
+  (`src/app/(app)/mappa/plan-view.tsx`). La pianta disegnata ricava passerelle e verso delle barche dai posti disposti
+  (`pierLayout` in `src/lib/plan-drawing.ts`) e la forma di terra, moli e dighe da `marina_plans.drawing`, che Claude ricava
+  dalla foto (`drawPlanFromPhoto`, stesso limite giornaliero dell'analisi; collaudi con `PLAN_DRAWING_FIXTURE`).
 - Numerazione dei contratti: le bozze non hanno numero (`seq`/`number` vuoti, in stampa «BOZZA»); il numero nasce all'attivazione
   ed è il più basso libero dell'anno (`src/lib/contract-numbers.ts`, `assignContractNumber`). «Torna in bozza» (`revertToDraft`) libera
   numero e addebiti mai incassati; i buchi (`contractNumberGaps`) si segnalano in elenco contratti e cruscotto finché non vengono ripresi.

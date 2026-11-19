@@ -6,13 +6,14 @@ import { MovementButtons } from "@/components/movement-buttons";
 import { page } from "@/components/page";
 import { Badge, ButtonLink, Details, EmptyState, FilterTabs, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { boats, contracts, marinas } from "@/db/schema";
+import { boats, contracts, marinaPlans, marinas } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, formatDateLong, isValidISODate, todayRome } from "@/lib/dates";
 import { formatDimensions, formatMeters } from "@/lib/format";
 import { BERTH_STATUS_LABEL, CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { one, qs, uuidOrNull, type SearchParams } from "@/lib/params";
 import { contractNumberLabel } from "@/lib/contract-numbers";
+import type { StoredDrawing } from "@/lib/plan-drawing";
 import { countStates, getBoard, STATE_LABEL, type BerthState, type BoardBerth, type BoardPier } from "@/server/board";
 import { PlanView } from "./plan-view";
 import { PlanZoom } from "./plan-zoom";
@@ -233,12 +234,13 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
   const date = isValidISODate(one(sp.data)) ? one(sp.data) : today;
   const selectedId = uuidOrNull(sp.posto);
 
-  const [board, [plan]] = await Promise.all([
+  const [board, [plan], [drawn]] = await Promise.all([
     getBoard(ctx.marinaId, date, today),
     db
       .select({ width: marinas.planWidth, height: marinas.planHeight, pxPerMeter: marinas.planPxPerMeter, version: marinas.planVersion })
       .from(marinas)
       .where(eq(marinas.id, ctx.marinaId)),
+    db.select({ drawing: marinaPlans.drawing }).from(marinaPlans).where(eq(marinaPlans.marinaId, ctx.marinaId)),
   ]);
   const counts = countStates(board);
   const allBerths = board.flatMap((p) => p.berths);
@@ -248,8 +250,13 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
   // La pianta dal vero è disponibile quando ci sono foto, scala e almeno un posto disposto.
   const offPlan = allBerths.filter((b) => b.planX === null);
   const hasPlan = plan.width !== null && plan.height !== null && plan.pxPerMeter !== null && offPlan.length < allBerths.length;
-  const view = hasPlan && one(sp.vista) !== "schema" ? "pianta" : "schema";
-  const vista = hasPlan && view === "schema" ? "schema" : null;
+  // Tre viste: la pianta disegnata (predefinita), i posti sulla foto e lo schema dei pontili.
+  const asked = one(sp.vista);
+  const view = !hasPlan || asked === "schema" ? "schema" : asked === "foto" ? "foto" : "disegno";
+  const vista = hasPlan && view !== "disegno" ? view : null;
+  // La forma del porto vale solo per la foto da cui è stata ricavata.
+  const stored = (drawn?.drawing ?? null) as StoredDrawing | null;
+  const land = stored && stored.photoVersion === plan.version && Array.isArray(stored.land) ? stored.land : [];
   const hrefFor = (berthId: string) => `/mappa${qs({ data: date === today ? null : date, vista, posto: berthId })}#dettaglio`;
 
   return (
@@ -291,7 +298,8 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
               <FilterTabs
                 current={view}
                 items={[
-                  { value: "pianta", label: "Pianta dal vero", href: `/mappa${qs({ data: date === today ? null : date, posto: selectedId })}` },
+                  { value: "disegno", label: "Pianta disegnata", href: `/mappa${qs({ data: date === today ? null : date, posto: selectedId })}` },
+                  { value: "foto", label: "Foto", href: `/mappa${qs({ data: date === today ? null : date, vista: "foto", posto: selectedId })}` },
                   { value: "schema", label: "Schema", href: `/mappa${qs({ data: date === today ? null : date, vista: "schema", posto: selectedId })}` },
                 ]}
               />
@@ -309,10 +317,13 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
           </ul>
 
           <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
-            {view === "pianta" ? (
+            {view !== "schema" ? (
               <div className="min-w-0">
                 <PlanZoom>
                   <PlanView
+                    mode={view}
+                    land={land}
+                    piers={board.map((p) => ({ id: p.id, code: p.code }))}
                     berths={allBerths}
                     width={plan.width!}
                     height={plan.height!}

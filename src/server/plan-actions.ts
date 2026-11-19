@@ -8,7 +8,8 @@ import { auditLog, berthCategories, berths, marinaPlans, marinas, piers } from "
 import { audit } from "@/lib/audit";
 import { requireMarina } from "@/lib/context";
 import { estimateScale, MAX_BERTHS_PER_SIDE, planBerths, toProposals, type StoredAnalysis } from "@/lib/plan-analysis";
-import { analyzePlanPhoto, PlanAnalysisError, planAnalysisAvailable } from "./plan-ai";
+import { toLandShapes, type StoredDrawing } from "@/lib/plan-drawing";
+import { analyzePlanPhoto, drawPlanPhoto, PlanAnalysisError, planAnalysisAvailable } from "./plan-ai";
 
 const layoutSchema = z.object({
   pxPerMeter: z.number().positive().max(2000).nullable(),
@@ -71,6 +72,14 @@ type Result = { ok: boolean; message: string };
 const DAILY_ANALYSES = 20;
 const ANALYSIS_ACTION = "analisi automatica";
 
+async function dailyLimitReached(marinaId: string): Promise<Result | null> {
+  const [{ recent }] = await db
+    .select({ recent: sql<number>`count(*)::int` })
+    .from(auditLog)
+    .where(and(eq(auditLog.marinaId, marinaId), eq(auditLog.action, ANALYSIS_ACTION), gt(auditLog.at, sql`now() - interval '24 hours'`)));
+  return recent >= DAILY_ANALYSES ? { ok: false, message: `Raggiunto il limite di ${DAILY_ANALYSES} analisi nelle ultime 24 ore. Riprova domani.` } : null;
+}
+
 /** Chiede a Claude di riconoscere pontili e banchine nella foto e salva le proposte, in attesa di conferma. */
 export async function analyzePlan(): Promise<Result> {
   const ctx = await requireMarina(["admin"]);
@@ -78,11 +87,8 @@ export async function analyzePlan(): Promise<Result> {
     return { ok: false, message: "Il riconoscimento automatico non è ancora attivo: va abilitato una volta su Google Cloud (istruzioni in COME-LAVORIAMO.md)." };
   }
 
-  const [{ recent }] = await db
-    .select({ recent: sql<number>`count(*)::int` })
-    .from(auditLog)
-    .where(and(eq(auditLog.marinaId, ctx.marinaId), eq(auditLog.action, ANALYSIS_ACTION), gt(auditLog.at, sql`now() - interval '24 hours'`)));
-  if (recent >= DAILY_ANALYSES) return { ok: false, message: `Raggiunto il limite di ${DAILY_ANALYSES} analisi nelle ultime 24 ore. Riprova domani.` };
+  const limit = await dailyLimitReached(ctx.marinaId);
+  if (limit) return limit;
 
   const [row] = await db
     .select({
@@ -120,6 +126,49 @@ export async function analyzePlan(): Promise<Result> {
   await db.update(marinaPlans).set({ analysis, analyzedAt: new Date() }).where(eq(marinaPlans.marinaId, ctx.marinaId));
   revalidatePath("/", "layout");
   return { ok: true, message: `Riconosciute ${proposals.length} strutture: controlla le proposte e conferma.` };
+}
+
+/** Ricava dalla foto la forma del porto (terra, moli, dighe) per la pianta disegnata. */
+export async function drawPlanFromPhoto(): Promise<Result> {
+  const ctx = await requireMarina(["admin"]);
+  if (!planAnalysisAvailable()) {
+    return { ok: false, message: "Il riconoscimento automatico non è ancora attivo: va abilitato una volta (istruzioni in COME-LAVORIAMO.md)." };
+  }
+  const limit = await dailyLimitReached(ctx.marinaId);
+  if (limit) return limit;
+
+  const [row] = await db
+    .select({ data: marinaPlans.data, mime: marinaPlans.mime, width: marinas.planWidth, height: marinas.planHeight, version: marinas.planVersion })
+    .from(marinaPlans)
+    .innerJoin(marinas, eq(marinas.id, marinaPlans.marinaId))
+    .where(eq(marinaPlans.marinaId, ctx.marinaId))
+    .limit(1);
+  if (!row || !row.width || !row.height) return { ok: false, message: "Carica prima la foto del porto." };
+
+  await audit(ctx, ANALYSIS_ACTION, "pianta del porto", ctx.marinaId, "Richiesta della forma del porto per la pianta disegnata");
+
+  let drawing: StoredDrawing;
+  try {
+    const result = await drawPlanPhoto({ data: row.data, mime: row.mime, width: row.width, height: row.height });
+    drawing = { photoVersion: row.version, land: toLandShapes(result, row.width, row.height), notes: result.notes.trim().slice(0, 300) };
+  } catch (error) {
+    if (error instanceof PlanAnalysisError) return { ok: false, message: error.message };
+    throw error;
+  }
+  if (drawing.land.length === 0) {
+    return { ok: false, message: "Nella foto non è stata riconosciuta la forma della costa. Prova con una foto che inquadri anche un po' di terra intorno al porto." };
+  }
+  await db.update(marinaPlans).set({ drawing, drawnAt: new Date() }).where(eq(marinaPlans.marinaId, ctx.marinaId));
+  revalidatePath("/", "layout");
+  return { ok: true, message: `Forma del porto ricavata dalla foto (${drawing.land.length} ${drawing.land.length === 1 ? "area" : "aree"} di terra, moli e dighe).` };
+}
+
+export async function clearPlanDrawing(): Promise<Result> {
+  const ctx = await requireMarina(["admin"]);
+  await db.update(marinaPlans).set({ drawing: null, drawnAt: null }).where(eq(marinaPlans.marinaId, ctx.marinaId));
+  await audit(ctx, "modifica", "pianta del porto", ctx.marinaId, "Tolta la forma del porto dalla pianta disegnata");
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Forma del porto tolta: la pianta disegnata mostra solo acqua, pontili e posti." };
 }
 
 export async function discardPlanAnalysis(): Promise<Result> {

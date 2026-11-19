@@ -8,8 +8,12 @@ import { berthCategories, berths, marinaPlans, marinas, piers } from "@/db/schem
 import { requireMarina } from "@/lib/context";
 import { SettingsTabs } from "../tabs";
 import type { StoredAnalysis } from "@/lib/plan-analysis";
+import type { StoredDrawing } from "@/lib/plan-drawing";
+import { PlanView } from "../../mappa/plan-view";
+import { PlanZoom } from "../../mappa/plan-zoom";
 import { planAnalysisAvailable } from "@/server/plan-ai";
 import { AutoDetect } from "./auto-detect";
+import { DrawingActions } from "./drawing-actions";
 import { PhotoUploader } from "./photo-uploader";
 import { PlanEditor } from "./plan-editor";
 
@@ -41,7 +45,7 @@ export default page(async function PlanSettingsPage() {
       .orderBy(asc(berths.code)),
   ]);
   const [[plan], categories] = await Promise.all([
-    db.select({ analysis: marinaPlans.analysis }).from(marinaPlans).where(eq(marinaPlans.marinaId, ctx.marinaId)),
+    db.select({ analysis: marinaPlans.analysis, drawing: marinaPlans.drawing }).from(marinaPlans).where(eq(marinaPlans.marinaId, ctx.marinaId)),
     db
       .select({ id: berthCategories.id, name: berthCategories.name, maxLengthCm: berthCategories.maxLengthCm, maxBeamCm: berthCategories.maxBeamCm })
       .from(berthCategories)
@@ -56,6 +60,8 @@ export default page(async function PlanSettingsPage() {
     b.x !== null && b.y !== null ? [{ x: b.x, y: b.y, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm }] : [],
   );
   const placedCount = berthRows.filter((b) => b.x !== null).length;
+  const storedDrawing = (plan?.drawing ?? null) as StoredDrawing | null;
+  const drawing = storedDrawing && storedDrawing.photoVersion === marina.version && Array.isArray(storedDrawing.land) ? storedDrawing : null;
 
   return (
     <>
@@ -93,6 +99,40 @@ export default page(async function PlanSettingsPage() {
               usedCodes={pierRows.map((p) => p.code)}
               placed={placedBerths}
             />
+          </Card>
+        )}
+
+        {hasPhoto && (
+          <Card title="Pianta disegnata">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+              <div className="max-w-2xl space-y-2 text-sm text-muted">
+                <p>
+                  Nella mappa, oltre ai posti sopra la foto, c&apos;è una pianta disegnata: acqua, terra, moli, pontili e barche con i colori
+                  dell&apos;app. Pontili e posti seguono quelli disposti qui sotto; la forma della costa, dei moli e delle dighe la ricava
+                  l&apos;app dalla foto.
+                </p>
+                {drawing?.notes && <p className="rounded-md bg-warn-soft px-3 py-2 text-warn">{drawing.notes}</p>}
+                {!drawing && <p>Senza la forma del porto la pianta mostra solo acqua, pontili e posti.</p>}
+              </div>
+              <DrawingActions available={planAnalysisAvailable()} hasDrawing={drawing !== null} />
+            </div>
+            {marina.pxPerMeter !== null && placedCount > 0 && (
+              <div className="mt-4">
+                <p className="mb-2 text-sm text-muted">Anteprima, con tutti i posti liberi: nella mappa i colori seguono lo stato di ogni posto.</p>
+                <PlanZoom>
+                  <PlanView
+                    mode="disegno"
+                    berths={berthRows.map((b) => ({ ...b, planX: b.x, planY: b.y, planAngle: b.angle, state: "libero" as const }))}
+                    land={drawing?.land ?? []}
+                    piers={pierRows}
+                    width={marina.width!}
+                    height={marina.height!}
+                    pxPerMeter={marina.pxPerMeter}
+                    imageUrl={`/pianta/immagine?v=${marina.version}`}
+                  />
+                </PlanZoom>
+              </div>
+            )}
           </Card>
         )}
 
