@@ -1,16 +1,21 @@
 import "server-only";
 import { and, eq } from "drizzle-orm";
 import type { Tx } from "@/db";
-import { berthCategories, priceListExtras, priceLists, rates, tariffZones, type ContractItemKind } from "@/db/schema";
+import { berthCategories, piers, priceListExtras, priceLists, rates, type ContractItemKind } from "@/db/schema";
 
 // Listino ufficiale 2026 di Marina Portorose, dal foglio TARIFFE_2026_UFFICIALI.xls.
 // Il prezzo dipende dalla lunghezza fuori tutto (pulpiti, spiaggette e delfiniere compresi) e dalla darsena:
-// le darsene A, B e D usano la tariffa base, la darsena C ha prezzi propri (zona tariffaria «Darsena C»).
+// le darsene A, B e D usano la tariffa base, la darsena C ha prezzi propri (quelli del pontile con codice C).
 // Il foglio non indica le larghezze: quelle qui sotto sono indicative e si correggono in Impostazioni → Categorie.
 // Importi in euro, IVA inclusa.
 
 export const OFFICIAL_LIST = { name: "Listino 2026", validFrom: "2026-01-01", validTo: "2026-12-31", vatRate: 22 };
 export const OFFICIAL_ZONE = "Darsena C";
+
+/** Il pontile della darsena C: codice «C» oppure nome che finisce con «C» (es. «Darsena C»). */
+export function isDarsenaC(pier: { code: string; name: string }): boolean {
+  return pier.code.trim().toUpperCase() === "C" || /(^|\s)c$/i.test(pier.name.trim());
+}
 
 interface Prices {
   annual: number;
@@ -78,11 +83,12 @@ function rateValues(p: Prices) {
 }
 
 /**
- * Carica il listino ufficiale: crea le categorie e la zona «Darsena C» se mancano (per nome), il listino 2026
- * se non c'è, scrive le tariffe base e quelle della zona e aggiunge i servizi non ancora presenti.
- * Si può ripetere: non duplica nulla e non tocca le altre categorie, i pontili né i posti barca.
+ * Carica il listino ufficiale: crea le categorie se mancano (per nome) e il listino 2026 se non c'è, scrive la
+ * tariffa base e i prezzi della darsena C sui pontili della darsena C (`isDarsenaC`, che smettono di usare la
+ * tariffa base) e aggiunge i servizi non ancora presenti.
+ * Si può ripetere: non duplica nulla e non tocca le altre categorie, gli altri pontili né i posti barca.
  */
-export async function loadOfficialPriceList(tx: Tx, marinaId: string): Promise<{ listId: string; zoneId: string; createdCategories: number }> {
+export async function loadOfficialPriceList(tx: Tx, marinaId: string): Promise<{ listId: string; darsenaC: string[]; createdCategories: number }> {
   const existing = await tx.select().from(berthCategories).where(eq(berthCategories.marinaId, marinaId));
   const categoryIds = new Map(existing.map((c) => [c.name, c.id]));
   let createdCategories = 0;
@@ -96,12 +102,9 @@ export async function loadOfficialPriceList(tx: Tx, marinaId: string): Promise<{
     createdCategories++;
   }
 
-  let [zone] = await tx
-    .select({ id: tariffZones.id })
-    .from(tariffZones)
-    .where(and(eq(tariffZones.marinaId, marinaId), eq(tariffZones.name, OFFICIAL_ZONE)))
-    .limit(1);
-  if (!zone) [zone] = await tx.insert(tariffZones).values({ marinaId, name: OFFICIAL_ZONE }).returning({ id: tariffZones.id });
+  const pierRows = await tx.select({ id: piers.id, code: piers.code, name: piers.name }).from(piers).where(eq(piers.marinaId, marinaId));
+  const darsenaC = pierRows.filter(isDarsenaC).map((p) => p.id);
+  for (const pierId of darsenaC) await tx.update(piers).set({ baseRate: false }).where(eq(piers.id, pierId));
 
   let [list] = await tx
     .select({ id: priceLists.id })
@@ -112,14 +115,14 @@ export async function loadOfficialPriceList(tx: Tx, marinaId: string): Promise<{
 
   for (const c of OFFICIAL_CATEGORIES) {
     const categoryId = categoryIds.get(c.name)!;
-    const rows: { zoneId: string | null; prices: Prices }[] = [{ zoneId: zone.id, prices: c.zone }];
-    if (c.base) rows.push({ zoneId: null, prices: c.base });
-    for (const { zoneId, prices } of rows) {
+    const rows: { pierId: string | null; prices: Prices }[] = darsenaC.map((pierId) => ({ pierId, prices: c.zone }));
+    if (c.base) rows.push({ pierId: null, prices: c.base });
+    for (const { pierId, prices } of rows) {
       const values = rateValues(prices);
       await tx
         .insert(rates)
-        .values({ marinaId, priceListId: list.id, categoryId, zoneId, ...values })
-        .onConflictDoUpdate({ target: [rates.priceListId, rates.categoryId, rates.zoneId], set: values });
+        .values({ marinaId, priceListId: list.id, categoryId, pierId, ...values })
+        .onConflictDoUpdate({ target: [rates.priceListId, rates.categoryId, rates.pierId], set: values });
     }
   }
 
@@ -140,5 +143,5 @@ export async function loadOfficialPriceList(tx: Tx, marinaId: string): Promise<{
     );
   }
 
-  return { listId: list.id, zoneId: zone.id, createdCategories };
+  return { listId: list.id, darsenaC, createdCategories };
 }

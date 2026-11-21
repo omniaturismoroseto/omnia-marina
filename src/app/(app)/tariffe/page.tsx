@@ -3,26 +3,26 @@ import { asc, desc, eq } from "drizzle-orm";
 import { page } from "@/components/page";
 import { Badge, Card, EmptyState, FilterTabs, Notice, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { berthCategories, piers, priceListExtras, priceLists, rates, seasonPeriods, tariffZones } from "@/db/schema";
+import { berthCategories, piers, priceListExtras, priceLists, rates, seasonPeriods } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, todayRome, yearOf } from "@/lib/dates";
 import { formatDimensions, moneyInput } from "@/lib/format";
 import { SEASON_LABEL } from "@/lib/labels";
-import { RATE_FIELDS } from "@/lib/pricing";
+import { RATE_FIELDS, groupPiersByName } from "@/lib/pricing";
 import { uuidOrNull, type SearchParams } from "@/lib/params";
-import { OFFICIAL_CATEGORIES, OFFICIAL_LIST, OFFICIAL_ZONE } from "@/server/official-price-list";
+import { OFFICIAL_CATEGORIES, OFFICIAL_LIST } from "@/server/official-price-list";
 import {
+  BaseRatePiersForm,
+  CopyPierRatesForm,
   DeletePeriodButton,
-  DeleteZoneButton,
   ListActions,
   LoadOfficialListButton,
-  PierZonesForm,
+  PierBaseRateButton,
   PriceListExtras,
   PriceListForm,
   RatesGrid,
   SeasonPeriodForm,
   Simulator,
-  ZoneForm,
   type RateGridRow,
 } from "./tariff-forms";
 
@@ -41,22 +41,23 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
   const today = todayRome();
   const params = await searchParams;
   const selectedId = uuidOrNull(params.listino);
-  const selectedZoneId = uuidOrNull(params.zona);
+  const selectedPierId = uuidOrNull(params.pontile);
 
-  const [lists, categories, zones, pierRows] = await Promise.all([
+  const [lists, categories, pierRows] = await Promise.all([
     db.select().from(priceLists).where(eq(priceLists.marinaId, ctx.marinaId)).orderBy(desc(priceLists.validFrom)),
     db.select().from(berthCategories).where(eq(berthCategories.marinaId, ctx.marinaId)).orderBy(asc(berthCategories.sortOrder), asc(berthCategories.maxLengthCm)),
-    db.select().from(tariffZones).where(eq(tariffZones.marinaId, ctx.marinaId)).orderBy(asc(tariffZones.sortOrder), asc(tariffZones.name)),
     db
-      .select({ id: piers.id, name: piers.name, zoneId: piers.tariffZoneId })
+      .select({ id: piers.id, name: piers.name, baseRate: piers.baseRate })
       .from(piers)
       .where(eq(piers.marinaId, ctx.marinaId))
       .orderBy(asc(piers.sortOrder), asc(piers.code)),
   ]);
   // Senza scelta esplicita si apre il listino in vigore oggi, altrimenti il più recente.
   const list = lists.find((l) => l.id === selectedId) ?? lists.find((l) => l.validFrom <= today && today <= l.validTo) ?? lists[0];
-  const zone = zones.find((z) => z.id === selectedZoneId) ?? null;
-  const pierNames = (zoneId: string | null) => pierRows.filter((p) => p.zoneId === zoneId).map((p) => p.name);
+  // Pontili con lo stesso nome: una scheda sola, prezzi condivisi.
+  const groups = groupPiersByName(pierRows);
+  const group = groups.find((g) => selectedPierId !== null && g.ids.includes(selectedPierId)) ?? null;
+  const basePierNames = groups.filter((g) => g.baseRate).map((g) => g.name);
 
   const [rateRows, periods, extras] = list
     ? await Promise.all([
@@ -65,22 +66,27 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
         db.select().from(priceListExtras).where(eq(priceListExtras.priceListId, list.id)).orderBy(asc(priceListExtras.sortOrder), asc(priceListExtras.name)),
       ])
     : [[], [], []];
+  // Dentro un gruppo i prezzi si leggono dal primo pontile che ne ha in questo listino (salvando valgono per tutti).
+  const pier = group
+    ? { id: group.ids.find((id) => rateRows.some((r) => r.pierId === id)) ?? group.ids[0], name: group.name, baseRate: group.baseRate, count: group.ids.length }
+    : null;
 
   const show = (cents: number | undefined) => (cents ? moneyInput(cents) : "");
   const valuesOf = (r: (typeof rateRows)[number] | undefined) => Object.fromEntries(RATE_FIELDS.map((k) => [k, show(r?.[k])])) as RateGridRow["values"];
   const grid: RateGridRow[] = categories.map((c) => {
-    const base = rateRows.find((row) => row.categoryId === c.id && row.zoneId === null);
-    const own = zone ? rateRows.find((row) => row.categoryId === c.id && row.zoneId === zone.id) : base;
+    const base = rateRows.find((row) => row.categoryId === c.id && row.pierId === null);
+    const own = pier ? rateRows.find((row) => row.categoryId === c.id && row.pierId === pier.id) : base;
     return {
       categoryId: c.id,
       categoryName: c.name,
       size: `fino a ${formatDimensions(c.maxLengthCm, c.maxBeamCm)}`,
       values: valuesOf(own),
-      fallback: zone ? valuesOf(base) : undefined,
+      fallback: pier ? valuesOf(base) : undefined,
     };
   });
-  const empty = rateRows.filter((r) => r.zoneId === null).every((r) => RATE_FIELDS.every((k) => r[k] === 0));
-  const listHref = (zoneId: string | null) => `/tariffe?listino=${list?.id ?? ""}${zoneId ? `&zona=${zoneId}` : ""}`;
+  const empty = rateRows.every((r) => RATE_FIELDS.every((k) => r[k] === 0));
+  const listHref = (pierId: string | null | undefined) => `/tariffe?listino=${list?.id ?? ""}${pierId ? `&pontile=${pierId}` : ""}`;
+  const pierHasPrices = (pierId: string) => rateRows.some((r) => r.pierId === pierId && RATE_FIELDS.some((k) => r[k] > 0));
 
   return (
     <>
@@ -121,20 +127,56 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
           >
             {categories.length > 0 && (
               <>
-                {zones.length > 0 && (
-                  <div className="space-y-2 border-b border-line-soft p-4">
+                {groups.length > 0 && (
+                  <div className="space-y-3 border-b border-line-soft p-4">
                     <FilterTabs
-                      current={zone?.id ?? "base"}
-                      items={[{ value: "base", label: "Tariffa base", href: listHref(null) }, ...zones.map((z) => ({ value: z.id, label: z.name, href: listHref(z.id) }))]}
+                      current={group?.key ?? "base"}
+                      items={[
+                        { value: "base", label: "Tariffa base", href: listHref(null) },
+                        ...groups.map((g) => ({ value: g.key, label: g.baseRate ? `${g.name} · base` : g.name, href: listHref(g.ids[0]) })),
+                      ]}
                     />
-                    <p className="text-sm text-muted">
-                      {zone
-                        ? `Prezzi per ${listOrNone(pierNames(zone.id))}. Dove una casella è vuota vale la tariffa base.`
-                        : `Vale per ${listOrNone(pierNames(null))} e per le caselle lasciate vuote nelle zone.`}
-                    </p>
+                    {!pier ? (
+                      admin ? (
+                        <BaseRatePiersForm piers={groups.map((g) => ({ id: g.ids[0], name: g.name, baseRate: g.baseRate }))} />
+                      ) : (
+                        <p className="text-sm text-muted">
+                          La tariffa base vale per {listOrNone(basePierNames)} e per le caselle lasciate vuote nei prezzi degli altri pontili.
+                        </p>
+                      )
+                    ) : (
+                      <div className="space-y-3">
+                        {pier.count > 1 && (
+                          <p className="text-sm text-muted">
+                            Ci sono {pier.count} pontili chiamati «{pier.name}»: hanno un&apos;unica tariffa e i prezzi salvati qui valgono per tutti.
+                          </p>
+                        )}
+                        {pier.baseRate ? (
+                          <Notice>
+                            {pier.name} usa la tariffa base: i prezzi qui sotto non si applicano finché non la spegni.
+                            {!pierHasPrices(pier.id) && " Compilali, oppure copiali dalla tariffa base o da un altro pontile."}
+                          </Notice>
+                        ) : (
+                          <p className="text-sm text-muted">
+                            {pier.name} usa i suoi prezzi, in tutti i listini. Dove una casella è vuota vale la tariffa base, mostrata in grigio.
+                          </p>
+                        )}
+                        {admin && (
+                          <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+                            <PierBaseRateButton pierId={pier.id} name={pier.name} baseRate={pier.baseRate} />
+                            <CopyPierRatesForm
+                              key={`${list.id}:${pier.id}`}
+                              listId={list.id}
+                              pierId={pier.id}
+                              sources={groups.filter((g) => g !== group).map((g) => ({ id: g.ids.find((id) => rateRows.some((r) => r.pierId === id)) ?? g.ids[0], name: g.name }))}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
-                <RatesGrid key={`${list.id}:${zone?.id ?? ""}`} listId={list.id} zoneId={zone?.id ?? ""} rows={grid} editable={admin} />
+                <RatesGrid key={`${list.id}:${pier?.id ?? ""}`} listId={list.id} pierId={pier?.id ?? ""} rows={grid} editable={admin} />
               </>
             )}
           </Card>
@@ -177,7 +219,7 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
                   key={list.id}
                   listId={list.id}
                   categories={categories.map((c) => ({ id: c.id, name: c.name }))}
-                  zones={zones.map((z) => ({ id: z.id, name: z.name }))}
+                  piers={groups.map((g) => ({ id: g.ids[0], name: g.baseRate ? `${g.name} (tariffa base)` : g.name }))}
                   today={today}
                 />
               ) : (
@@ -194,63 +236,13 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
         </div>
       )}
 
-      <div className="mt-5">
-        <Card title="Zone tariffarie">
-          <p className="mb-4 text-sm text-muted">
-            Una zona raggruppa i pontili che hanno prezzi diversi dal resto del porto, per esempio una darsena più cara. Ogni listino ha una griglia per
-            zona; i pontili senza zona usano la tariffa base.
-          </p>
-          {zones.length === 0 ? (
-            <p className="mb-4 text-sm text-muted">Nessuna zona: tutti i pontili usano la tariffa base.</p>
-          ) : admin ? (
-            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-              <section aria-label="Zone">
-                <h3 className="mb-2 text-sm font-semibold text-ink">Zone</h3>
-                <ul className="space-y-3">
-                  {zones.map((z) => (
-                    <li key={z.id} className="rounded-md border border-line-soft p-3">
-                      <ZoneForm zone={{ id: z.id, name: z.name }} />
-                      <div className="mt-2 flex items-center justify-between gap-3">
-                        <span className="text-xs text-muted">{listOrNone(pierNames(z.id))}</span>
-                        <DeleteZoneButton zoneId={z.id} name={z.name} />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-              <section aria-label="Zona di ogni pontile">
-                <h3 className="mb-1 text-sm font-semibold text-ink">Zona di ogni pontile</h3>
-                {pierRows.length === 0 ? (
-                  <p className="text-sm text-muted">Non ci sono ancora pontili.</p>
-                ) : (
-                  <PierZonesForm piers={pierRows} zones={zones.map((z) => ({ id: z.id, name: z.name }))} />
-                )}
-              </section>
-            </div>
-          ) : (
-            <ul className="mb-2 space-y-1 text-sm">
-              {zones.map((z) => (
-                <li key={z.id}>
-                  <span className="font-medium text-ink">{z.name}</span>: <span className="text-muted">{listOrNone(pierNames(z.id))}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {admin && (
-            <div className={zones.length > 0 ? "mt-5 border-t border-line-soft pt-4" : ""}>
-              <ZoneForm />
-            </div>
-          )}
-        </Card>
-      </div>
-
       {admin && (
         <Card title="Listino ufficiale 2026" className="mt-5">
           <p className="mb-3 text-sm text-muted">
-            Dal foglio delle tariffe ufficiali: {OFFICIAL_CATEGORIES.length} categorie per lunghezza, tariffa base per le darsene A, B e D e zona «{OFFICIAL_ZONE}»
-            con prezzi propri; canone annuale, quota rifiuti, stagionale maggio – settembre e mensile per le categorie B e C, posti auto, carrelli e cauzioni.
-            Dopo il caricamento: assegna la zona ai pontili della darsena C (qui sopra), le categorie ai posti e controlla le larghezze in Impostazioni →
-            Categorie, che sono indicative.
+            Dal foglio delle tariffe ufficiali: {OFFICIAL_CATEGORIES.length} categorie per lunghezza, tariffa base per le darsene A, B e D e prezzi propri
+            per la darsena C (il pontile con codice «C» o con il nome che finisce per «C»); canone annuale, quota rifiuti, stagionale maggio – settembre e
+            mensile per le categorie B e C, posti auto, carrelli e cauzioni. Dopo il caricamento: se la darsena C ha più pontili, copia i suoi prezzi negli
+            altri dalla loro scheda qui sopra, assegna le categorie ai posti e controlla le larghezze in Impostazioni → Categorie, che sono indicative.
           </p>
           <LoadOfficialListButton hasList={lists.some((l) => l.name === OFFICIAL_LIST.name)} />
         </Card>

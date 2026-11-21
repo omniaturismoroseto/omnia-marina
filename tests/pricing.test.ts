@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryForBoat, occupiedUntil, quoteStay, seasonForDate, splitInstalments, zoneRate, type RateRow, type SeasonPeriod } from "../src/lib/pricing";
+import { categoryForBoat, occupiedUntil, quoteStay, seasonForDate, splitInstalments, groupPiersByName, pierRate, ratePierId, type RateRow, type SeasonPeriod } from "../src/lib/pricing";
 import { addMonths, annualEnd, diffDays } from "../src/lib/dates";
 import { parseMeters, parseMoney, splitVat } from "../src/lib/format";
 
@@ -88,35 +88,55 @@ describe("preventivo", () => {
   });
 });
 
-describe("zone tariffarie", () => {
+describe("tariffa del pontile", () => {
   const zero = { dailyLow: 0, dailyMid: 0, dailyHigh: 0, monthlyLow: 0, monthlyMid: 0, monthlyHigh: 0, annual: 0, seasonal: 0, waste: 0 };
-  const base = { ...rate, waste: 4000, zoneId: null };
+  const base = { ...rate, waste: 4000, pierId: null };
   // Come a Portorose: nella darsena C il canone annuale costa di più, transiti e mensili restano quelli base.
-  const darsenaC = { ...zero, annual: 171000, zoneId: "zona-c" };
+  const darsenaC = { ...zero, annual: 171000, pierId: "pontile-c" };
 
-  it("senza zona vale la tariffa base", () => {
-    expect(zoneRate([base, darsenaC], null)).toEqual({ ...rate, waste: 4000 });
+  it("senza pontile vale la tariffa base", () => {
+    expect(pierRate([base, darsenaC], null)).toEqual({ ...rate, waste: 4000 });
   });
 
-  it("nella zona gli importi compilati sostituiscono quelli base, gli altri restano", () => {
-    const r = zoneRate([base, darsenaC], "zona-c")!;
+  it("nel pontile gli importi compilati sostituiscono quelli base, gli altri restano", () => {
+    const r = pierRate([base, darsenaC], "pontile-c")!;
     expect(r.annual).toBe(171000);
     expect(r.dailyHigh).toBe(rate.dailyHigh);
     expect(r.waste).toBe(4000);
     expect(quoteStay({ type: "annuale", startDate: "2026-01-01", endDate: "2026-12-31", rate: r, periods }).totalCents).toBe(171000);
   });
 
-  it("una zona senza righe proprie usa la tariffa base", () => {
-    expect(zoneRate([base], "zona-c")?.annual).toBe(rate.annual);
+  it("un pontile senza righe proprie usa la tariffa base", () => {
+    expect(pierRate([base], "pontile-c")?.annual).toBe(rate.annual);
   });
 
-  it("solo la riga di zona: le caselle vuote restano a zero", () => {
-    expect(zoneRate([darsenaC], "zona-c")?.dailyLow).toBe(0);
+  it("solo la riga del pontile: le caselle vuote restano a zero", () => {
+    expect(pierRate([darsenaC], "pontile-c")?.dailyLow).toBe(0);
   });
 
   it("nessuna riga: nessuna tariffa", () => {
-    expect(zoneRate([], "zona-c")).toBeNull();
-    expect(zoneRate([darsenaC], null)).toBeNull();
+    expect(pierRate([], "pontile-c")).toBeNull();
+    expect(pierRate([darsenaC], null)).toBeNull();
+  });
+
+  it("i pontili con lo stesso nome sono una scheda sola, nell'ordine di arrivo", () => {
+    const groups = groupPiersByName([
+      { id: "1", name: "Darsena C", baseRate: false },
+      { id: "2", name: "Pontile A", baseRate: true },
+      { id: "3", name: " darsena  c ", baseRate: true },
+    ]);
+    expect(groups.map((g) => [g.name, g.ids])).toEqual([
+      ["Darsena C", ["1", "3"]],
+      ["Pontile A", ["2"]],
+    ]);
+    // La tariffa base risulta accesa solo se tutti i pontili del gruppo la usano.
+    expect(groups.map((g) => g.baseRate)).toEqual([false, true]);
+  });
+
+  it("un pontile con la tariffa base accesa non legge i suoi prezzi", () => {
+    expect(ratePierId({ id: "pontile-c", baseRate: true })).toBeNull();
+    expect(ratePierId({ id: "pontile-c", baseRate: false })).toBe("pontile-c");
+    expect(ratePierId(null)).toBeNull();
   });
 });
 

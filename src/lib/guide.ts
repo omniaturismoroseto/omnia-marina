@@ -321,8 +321,10 @@ export const GUIDE: GuideSection[] = [
         items: [
           "Un listino ha un periodo di validità e i prezzi per ogni categoria di posto e tipo di contratto (annuale, stagionale, mensile, transito).",
           "«Stagioni»: indica i periodi di media e alta stagione; il resto dell'anno è bassa stagione.",
-          "«Zone tariffarie»: se una darsena costa di più, crea una zona con i suoi prezzi e assegnala ai pontili. I campi lasciati vuoti usano la tariffa base.",
-          "«Servizi e cauzioni»: le voci a prezzo fisso da aggiungere ai contratti; le cauzioni senza IVA.",
+          "Sopra la griglia c'è una scheda per la «Tariffa base» e una per ogni pontile o darsena: ogni pontile creato ha la sua. I pontili con lo stesso nome hanno una scheda sola e gli stessi prezzi.",
+          "Nella scheda «Tariffa base» spunta i pontili a cui si applica (uno, alcuni o «Tutti»; nessuno = spenta). Gli altri usano i prezzi della loro scheda.",
+          "Nella scheda di un pontile: «Usa i prezzi di …» o «Torna alla tariffa base», e «Copia i prezzi da» per riprendere la tariffa base o quella di un altro pontile. Le caselle lasciate vuote usano la tariffa base.",
+          "«Servizi e cauzioni»: le voci a prezzo fisso da aggiungere ai contratti; le cauzioni senza IVA. Nel contratto compare il nome che scrivi; «Nel contratto» si cambia solo per posti auto, carrello e spazio a terra, quando servono periodo e numero del posto.",
           "«Simulatore»: prova quanto costa un posto per una barca e un periodo.",
         ],
       },

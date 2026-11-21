@@ -12,15 +12,15 @@ import {
   addSeasonPeriod,
   deletePriceList,
   deletePriceListExtra,
+  copyPierRates,
   deleteSeasonPeriod,
-  deleteTariffZone,
   duplicatePriceList,
   loadOfficialPriceListAction,
-  savePierZones,
+  saveBaseRatePiers,
   savePriceList,
+  setPierBaseRate,
   updatePriceListExtra,
   saveRates,
-  saveTariffZone,
   simulateQuote,
 } from "@/server/tariff-actions";
 
@@ -76,15 +76,15 @@ export interface RateGridRow {
   categoryName: string;
   size: string;
   values: Record<RateKey, string>;
-  /** Solo nelle zone: gli importi della tariffa base, mostrati nelle caselle vuote. */
+  /** Solo nei pontili: gli importi della tariffa base, mostrati nelle caselle vuote. */
   fallback?: Record<RateKey, string>;
 }
 
 // In sola lettura l'importo si mostra con il separatore delle migliaia (1.900,00).
 const readable = (v: string) => v.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
-// Griglia tariffe di una zona (o della tariffa base): una riga per categoria, una colonna per periodo e stagione.
-export function RatesGrid({ listId, zoneId, rows, editable }: { listId: string; zoneId: string; rows: RateGridRow[]; editable: boolean }) {
+// Griglia tariffe di un pontile (o della tariffa base): una riga per categoria, una colonna per periodo e stagione.
+export function RatesGrid({ listId, pierId, rows, editable }: { listId: string; pierId: string; rows: RateGridRow[]; editable: boolean }) {
   const table = (
     <div className="overflow-x-auto">
       <table className="tbl min-w-[920px]">
@@ -157,76 +157,89 @@ export function RatesGrid({ listId, zoneId, rows, editable }: { listId: string; 
   return (
     <Form action={saveRates}>
       <input type="hidden" name="listId" value={listId} />
-      <input type="hidden" name="zoneId" value={zoneId} />
+      <input type="hidden" name="pierId" value={pierId} />
       {table}
       <div className="flex flex-wrap items-center gap-3 border-t border-line-soft p-4">
         <Submit>Salva tariffe</Submit>
         <FormMessage />
         <span className="text-sm text-muted">
-          Importi in euro, IVA inclusa.{zoneId ? " Le caselle vuote usano la tariffa base, mostrata in grigio." : ""}
+          Importi in euro, IVA inclusa.{pierId ? " Le caselle vuote usano la tariffa base, mostrata in grigio." : ""}
         </span>
       </div>
     </Form>
   );
 }
 
-// ───────────────────────── Zone tariffarie ─────────────────────────
+// ───────────────────────── Tariffa base e pontili ─────────────────────────
 
-export function ZoneForm({ zone }: { zone?: { id: string; name: string } }) {
+// I pontili a cui si applica la tariffa base: da nessuno (spenta) a tutti. Gli altri usano i propri prezzi.
+export function BaseRatePiersForm({ piers }: { piers: { id: string; name: string; baseRate: boolean }[] }) {
+  const [chosen, setChosen] = useState(() => new Set(piers.filter((p) => p.baseRate).map((p) => p.id)));
+  const all = chosen.size === piers.length;
+  const toggle = (id: string, on: boolean) => {
+    const next = new Set(chosen);
+    if (on) next.add(id);
+    else next.delete(id);
+    setChosen(next);
+  };
   return (
-    <Form action={saveTariffZone} resetOnSuccess={!zone} className="flex flex-wrap items-end gap-3">
-      {zone && <input type="hidden" name="id" value={zone.id} />}
-      <Field name="name" label={zone ? "Nome" : "Nuova zona"} defaultValue={zone?.name} placeholder={zone ? undefined : "es. Darsena C"} required wrapperClassName="min-w-48 flex-1" />
-      <Submit variant="secondary" size="sm">
-        {zone ? "Rinomina" : "Crea zona"}
-      </Submit>
-      <div className="basis-full">
+    <Form action={saveBaseRatePiers} className="space-y-2">
+      <p className="text-sm text-muted">
+        Applica la tariffa base a questi pontili; gli altri usano i propri prezzi (nella loro scheda), e dove una casella è vuota vale comunque la tariffa
+        base.
+      </p>
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
+        <label className="flex items-center gap-2 text-sm font-medium text-ink">
+          <input type="checkbox" checked={all} onChange={(e) => setChosen(e.target.checked ? new Set(piers.map((p) => p.id)) : new Set())} />
+          Tutti
+        </label>
+        {piers.map((p) => (
+          <label key={p.id} className="flex items-center gap-2 text-sm text-ink">
+            <input type="checkbox" name="base" value={p.id} checked={chosen.has(p.id)} onChange={(e) => toggle(p.id, e.target.checked)} />
+            {p.name}
+          </label>
+        ))}
+      </div>
+      <div className="flex items-center gap-3">
+        <Submit variant="secondary" size="sm">
+          Salva
+        </Submit>
         <FormMessage />
+        {chosen.size === 0 && <span className="text-sm text-muted">Tariffa base spenta: ogni pontile usa i suoi prezzi.</span>}
       </div>
     </Form>
   );
 }
 
-export function DeleteZoneButton({ zoneId, name }: { zoneId: string; name: string }) {
+export function PierBaseRateButton({ pierId, name, baseRate }: { pierId: string; name: string; baseRate: boolean }) {
   return (
-    <ActionButton
-      action={deleteTariffZone}
-      fields={{ zoneId }}
-      size="sm"
-      variant="danger"
-      confirm={`Eliminare la zona «${name}»? I suoi pontili torneranno alla tariffa base e i prezzi della zona verranno cancellati da tutti i listini. I contratti già creati non cambiano.`}
-    >
-      Elimina
+    <ActionButton action={setPierBaseRate} fields={{ pierId, baseRate: baseRate ? "0" : "1" }} size="sm" variant={baseRate ? "primary" : "secondary"}>
+      {baseRate ? `Usa i prezzi di ${name}` : "Torna alla tariffa base"}
     </ActionButton>
   );
 }
 
-export function PierZonesForm({ piers, zones }: { piers: { id: string; name: string; zoneId: string | null }[]; zones: { id: string; name: string }[] }) {
-  const options = [{ value: "", label: "Tariffa base" }, ...zones.map((z) => ({ value: z.id, label: z.name }))];
+// Copia nella griglia del pontile i prezzi della tariffa base o di un altro pontile, per il listino aperto.
+export function CopyPierRatesForm({ listId, pierId, sources }: { listId: string; pierId: string; sources: { id: string; name: string }[] }) {
   return (
-    <Form action={savePierZones}>
-      <ul className="divide-y divide-line-soft">
-        {piers.map((p) => (
-          <li key={p.id} className="flex items-center justify-between gap-3 py-2">
-            <label htmlFor={`zone-${p.id}`} className="text-sm font-medium text-ink">
-              {p.name}
-            </label>
-            <select id={`zone-${p.id}`} name={`pier:${p.id}`} defaultValue={p.zoneId ?? ""} className="input w-auto min-w-44">
-              {options.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-3 flex items-center gap-3">
-        <Submit variant="secondary" size="sm">
-          Salva zone dei pontili
-        </Submit>
-        <FormMessage />
-      </div>
+    <Form
+      action={copyPierRates}
+      className="flex flex-wrap items-end gap-2"
+      confirm="Sostituire i prezzi di questo pontile, in questo listino, con quelli scelti?"
+    >
+      <input type="hidden" name="listId" value={listId} />
+      <input type="hidden" name="pierId" value={pierId} />
+      <SelectField
+        name="from"
+        label="Copia i prezzi da"
+        defaultValue=""
+        options={[{ value: "", label: "Tariffa base" }, ...sources.map((p) => ({ value: p.id, label: p.name }))]}
+        wrapperClassName="min-w-48"
+      />
+      <Submit variant="secondary" size="sm">
+        Copia
+      </Submit>
+      <FormMessage />
     </Form>
   );
 }
@@ -267,16 +280,16 @@ export function DeletePeriodButton({ periodId }: { periodId: string }) {
 export function Simulator({
   listId,
   categories,
-  zones,
+  piers,
   today,
 }: {
   listId: string;
   categories: { id: string; name: string }[];
-  zones: { id: string; name: string }[];
+  piers: { id: string; name: string }[];
   today: string;
 }) {
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
-  const [zoneId, setZoneId] = useState("");
+  const [pierId, setPierId] = useState("");
   const [type, setType] = useState("transito");
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(addDays(today, 3));
@@ -286,7 +299,7 @@ export function Simulator({
 
   function calculate() {
     startTransition(async () => {
-      const result = await simulateQuote({ listId, categoryId, zoneId, type, startDate, endDate });
+      const result = await simulateQuote({ listId, categoryId, pierId, type, startDate, endDate });
       setQuote(result ?? "none");
     });
   }
@@ -306,16 +319,16 @@ export function Simulator({
             ))}
           </select>
         </div>
-        {zones.length > 0 && (
+        {piers.length > 0 && (
           <div className="sm:col-span-2">
-            <label className="label" htmlFor="sim-zone">
-              Zona
+            <label className="label" htmlFor="sim-pier">
+              Pontile
             </label>
-            <select id="sim-zone" className="input" value={zoneId} onChange={(e) => setZoneId(e.target.value)}>
+            <select id="sim-pier" className="input" value={pierId} onChange={(e) => setPierId(e.target.value)}>
               <option value="">Tariffa base</option>
-              {zones.map((z) => (
-                <option key={z.id} value={z.id}>
-                  {z.name}
+              {piers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
                 </option>
               ))}
             </select>
@@ -395,11 +408,11 @@ function ExtraFields({ extra }: { extra?: ExtraRow }) {
       <SelectField name="vatRate" label="IVA" defaultValue={String(extra?.vatRate ?? 22)} options={EXTRA_VAT_OPTIONS} />
       <SelectField
         name="itemKind"
-        label="Voce del contratto"
+        label="Nel contratto"
         defaultValue={extra?.itemKind ?? ""}
-        placeholder="Nessuna"
-        options={SPACE_ITEM_KINDS.map((k) => ({ value: k, label: CONTRACT_ITEM_LABEL[k] }))}
-        hint="Facoltativo: l'importo si propone quando la voce si aggiunge a un contratto."
+        placeholder="Servizio, con il nome scritto qui"
+        options={SPACE_ITEM_KINDS.map((k) => ({ value: k, label: `${CONTRACT_ITEM_LABEL[k]}, con periodo` }))}
+        hint="Di solito va lasciato così: nel contratto compare il nome del servizio. Scegli un posto auto, il carrello o lo spazio a terra solo se serve indicare il periodo (dal… al…) e il numero del posto."
       />
     </>
   );
@@ -414,7 +427,7 @@ function ExtraItem({ extra, editable }: { extra: ExtraRow; editable: boolean }) 
           {extra.name}
           <span className="block text-xs text-muted">
             {extra.vatRate === 0 ? "senza IVA" : `IVA ${extra.vatRate}% inclusa`}
-            {extra.itemKind && ` · proposto nei contratti come «${CONTRACT_ITEM_LABEL[extra.itemKind].toLowerCase()}»`}
+            {extra.itemKind && ` · nel contratto come «${CONTRACT_ITEM_LABEL[extra.itemKind].toLowerCase()}», con periodo`}
           </span>
         </span>
         <span className="flex items-center gap-1">
