@@ -113,7 +113,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   i comandi per l'utente stanno in `COME-LAVORIAMO.md`. Quando una modifica va online, ricordaglielo e dagli **sempre e solo
   il comando unico** di «Pubblicare» in `COME-LAVORIAMO.md` (prima `git pull`, poi pubblica solo se il pull riesce), in un
   unico blocco da copiare: mai `git pull` e pubblicazione come comandi separati.
-- Consegna: aprire sempre la pull request e **non chiedere** se unirla; dare all'utente il link della pull request come tasto da
-  cliccare («Unisci su GitHub», poi «Merge pull request» → «Confirm merge») e subito dopo il comando unico per PowerShell.
+- Consegna: aprire sempre la pull request, dare il comando unico per PowerShell e chiedere l'unione con un **pulsante in chat**
+  (domanda a scelta: «Unisci» / «Non ancora»), non con una domanda da scrivere; con «Unisci» unire la pull request (prima
+  allineando il ramo a `main` se è cambiato).
 - Prima di consegnare: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
 
