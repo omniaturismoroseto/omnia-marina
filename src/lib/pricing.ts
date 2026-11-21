@@ -124,6 +124,21 @@ export function seasonForDate(periods: SeasonPeriod[], date: string): Season {
   return found;
 }
 
+/**
+ * I giorni di bassa stagione di un listino, a tratti continui: tutto ciò che, tra inizio e fine del listino, non rientra
+ * in un periodo di media o alta stagione. Servono a mostrare la bassa stagione accanto ai periodi dichiarati.
+ */
+export function lowSeasonRanges(periods: SeasonPeriod[], from: string, to: string): { startDate: string; endDate: string }[] {
+  const ranges: { startDate: string; endDate: string }[] = [];
+  for (let day = from; day <= to; day = addDays(day, 1)) {
+    if (seasonForDate(periods, day) !== "bassa") continue;
+    const last = ranges[ranges.length - 1];
+    if (last && addDays(last.endDate, 1) === day) last.endDate = day;
+    else ranges.push({ startDate: day, endDate: day });
+  }
+  return ranges;
+}
+
 // Primo giorno in cui il posto torna libero.
 // Transito: il giorno di partenza è già libero per un nuovo arrivo (minimo una notte).
 // Altri contratti: la data di fine è l'ultimo giorno occupato.

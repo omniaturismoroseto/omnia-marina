@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { ActionButton, Field, Form, FormMessage, SelectField, Submit } from "@/components/form";
 import { addDays, formatDate, isValidISODate } from "@/lib/dates";
-import { SPACE_ITEM_KINDS } from "@/lib/contract-items";
 import { formatMoney, moneyInput, parseMoney } from "@/lib/format";
 import { CONTRACT_ITEM_LABEL } from "@/lib/labels";
 import { annualTotal, type Quote } from "@/lib/pricing";
@@ -485,17 +484,17 @@ const EXTRA_VAT_OPTIONS = [...VAT_OPTIONS.slice(0, -1), { value: "0", label: "Se
 function ExtraFields({ extra, vatIncluded }: { extra?: ExtraRow; vatIncluded: boolean }) {
   return (
     <>
-      <Field name="name" label="Servizio" placeholder="Es. Posto auto coperto" defaultValue={extra?.name} required />
+      <Field
+        name="name"
+        label="Servizio"
+        placeholder="Es. Posto auto coperto"
+        defaultValue={extra?.name}
+        required
+        hint="Nel contratto compare questo nome. Per posti auto, carrelli e spazi a terra il contratto chiede anche numero e periodo."
+        wrapperClassName="sm:col-span-2"
+      />
       <Field name="amount" label={vatIncluded ? "Importo (IVA inclusa)" : "Importo (senza IVA)"} inputMode="decimal" placeholder="0,00" defaultValue={extra ? moneyInput(extra.amountCents) : undefined} required />
       <SelectField name="vatRate" label="IVA" defaultValue={String(extra?.vatRate ?? 22)} options={EXTRA_VAT_OPTIONS} />
-      <SelectField
-        name="itemKind"
-        label="Nel contratto"
-        defaultValue={extra?.itemKind ?? ""}
-        placeholder="Servizio, con il nome scritto qui"
-        options={SPACE_ITEM_KINDS.map((k) => ({ value: k, label: `${CONTRACT_ITEM_LABEL[k]}, con periodo` }))}
-        hint="Di solito va lasciato così: nel contratto compare il nome del servizio. Scegli un posto auto, il carrello o lo spazio a terra solo se serve indicare il periodo (dal… al…) e il numero del posto."
-      />
     </>
   );
 }
@@ -513,7 +512,7 @@ function ExtraItem({ extra, editable, vatIncluded }: { extra: ExtraRow; editable
               : vatIncluded
                 ? `IVA ${extra.vatRate}% inclusa`
                 : `più IVA ${extra.vatRate}%: ${formatMoney(Math.round((extra.amountCents * (100 + extra.vatRate)) / 100))}`}
-            {extra.itemKind && ` · nel contratto come «${CONTRACT_ITEM_LABEL[extra.itemKind].toLowerCase()}», con periodo`}
+            {extra.itemKind && " · nel contratto con numero e periodo"}
           </span>
         </span>
         <span className="flex items-center gap-1">
