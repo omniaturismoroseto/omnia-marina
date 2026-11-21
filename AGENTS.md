@@ -94,8 +94,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Pubblicazione: `main` NON va online da solo. L'utente pubblica dal PC Windows (PowerShell), dalla cartella
   `C:\Users\roset\OneDrive\Desktop\App Porto\omnia-marina`, con
   `gcloud run deploy omnia-marina --source . --region europe-west1 --project omnia-marina` dopo un `git pull`;
-  i comandi per l'utente stanno in `COME-LAVORIAMO.md`. Quando una modifica va online, ricordaglielo, e dagli **sempre prima
-  il comando per scaricare i file (`git pull`) e poi quello per pubblicare** (o il comando unico di `COME-LAVORIAMO.md`, che
-  pubblica solo se il `git pull` riesce): altrimenti pubblica i file vecchi.
+  i comandi per l'utente stanno in `COME-LAVORIAMO.md`. Quando una modifica va online, ricordaglielo e dagli **sempre e solo
+  il comando unico** di «Pubblicare» in `COME-LAVORIAMO.md` (prima `git pull`, poi pubblica solo se il pull riesce), in un
+  unico blocco da copiare: mai `git pull` e pubblicazione come comandi separati.
 - Prima di consegnare: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
 
