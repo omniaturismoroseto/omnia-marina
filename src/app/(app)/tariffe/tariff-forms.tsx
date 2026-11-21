@@ -126,45 +126,59 @@ export function RatesGrid({
   const yearOf = (row: RateGridRow) => annualTotal({ annual: cents(row, "annual"), waste: cents(row, "waste"), service: cents(row, "service") }, vatRate, vatIncluded);
   const vatLabel = vatIncluded ? `${vatRate}% inclusa` : `${vatRate}% in più`;
 
+  // La tabella occupa la larghezza disponibile: le colonne dei prezzi si dividono lo spazio. Solo sotto la larghezza minima
+  // (schermi stretti, dove le caselle non sarebbero più leggibili) compare lo scorrimento laterale.
+  const head = "num border-l border-line px-1.5! whitespace-normal! normal-case! tracking-normal! text-[11px]! leading-tight";
+  const sub = "block font-normal text-muted";
   const table = (
     <div className="overflow-x-auto">
-      <table className="tbl min-w-[1180px]">
+      <table className="tbl min-w-[58rem] table-fixed">
+        <colgroup>
+          <col className="w-[8.75rem]" />
+          {COLUMNS.map(([key]) => (
+            <col key={key} />
+          ))}
+          <col className="w-[5rem]" />
+          <col className="w-[6.25rem]" />
+        </colgroup>
         <thead>
           <tr>
-            <th rowSpan={2}>Categoria</th>
-            <th colSpan={3} className="border-l border-line text-center">
+            <th rowSpan={2} className="px-2! normal-case! tracking-normal! text-[11px]!">
+              Categoria
+            </th>
+            <th colSpan={3} className="border-l border-line px-1.5! text-center normal-case! tracking-normal! text-[11px]!">
               Tariffa giornaliera
             </th>
-            <th colSpan={3} className="border-l border-line text-center">
+            <th colSpan={3} className="border-l border-line px-1.5! text-center normal-case! tracking-normal! text-[11px]!">
               Tariffa mensile
             </th>
-            <th rowSpan={2} className="num border-l border-line">
+            <th rowSpan={2} className={head}>
               Annuale
             </th>
-            <th rowSpan={2} className="num border-l border-line">
+            <th rowSpan={2} className={head}>
               Stagionale
-              <span className="block text-[11px] font-normal normal-case text-muted">canone fisso</span>
+              <span className={sub}>fisso</span>
             </th>
-            <th rowSpan={2} className="num border-l border-line">
+            <th rowSpan={2} className={head}>
               Rifiuti
-              <span className="block text-[11px] font-normal normal-case text-muted">voce degli annuali</span>
+              <span className={sub}>annuali</span>
             </th>
-            <th rowSpan={2} className="num border-l border-line">
+            <th rowSpan={2} className={head}>
               Condominio
-              <span className="block text-[11px] font-normal normal-case text-muted">voce degli annuali</span>
+              <span className={sub}>annuali</span>
             </th>
-            <th rowSpan={2} className="num border-l border-line">
+            <th rowSpan={2} className={head}>
               IVA
-              <span className="block text-[11px] font-normal normal-case text-muted">{vatLabel}</span>
+              <span className={sub}>{vatLabel}</span>
             </th>
-            <th rowSpan={2} className="num border-l border-line">
+            <th rowSpan={2} className={head}>
               Totale annuo
-              <span className="block text-[11px] font-normal normal-case text-muted">con rifiuti, condominio e IVA</span>
+              <span className={sub}>tutto compreso</span>
             </th>
           </tr>
           <tr>
             {COLUMNS.slice(0, 6).map(([key, , season], i) => (
-              <th key={key} className={`num ${i % 3 === 0 ? "border-l border-line" : ""}`}>
+              <th key={key} className={`num px-1.5! normal-case! tracking-normal! text-[11px]! ${i % 3 === 0 ? "border-l border-line" : ""}`}>
                 {season}
               </th>
             ))}
@@ -175,12 +189,12 @@ export function RatesGrid({
             const year = yearOf(row);
             return (
               <tr key={row.categoryId}>
-                <th scope="row" className="border-b border-line-soft px-3 py-2 text-left font-medium whitespace-nowrap">
+                <th scope="row" className="border-b border-line-soft px-2 py-1.5 text-left text-[13px] leading-tight font-medium">
                   {row.categoryName}
-                  <span className="block text-xs font-normal text-muted">{row.size}</span>
+                  <span className="block text-[11px] font-normal text-muted">{row.size}</span>
                 </th>
                 {COLUMNS.map(([key, period, season]) => (
-                  <td key={key} className={editable ? "num px-1! py-1.5!" : "num"}>
+                  <td key={key} className={editable ? "num px-0.5! py-1!" : "num px-1.5! text-[13px]"}>
                     {editable ? (
                       <input
                         name={`${row.categoryId}:${key}`}
@@ -189,7 +203,7 @@ export function RatesGrid({
                         placeholder={row.fallback?.[key] || undefined}
                         inputMode="decimal"
                         aria-label={`${row.categoryName}, ${period.toLowerCase()} ${season}`.trim()}
-                        className="input ml-auto w-[5.25rem] px-2 py-1 text-right tabular-nums placeholder:text-faint"
+                        className="input min-h-8 w-full px-1 py-0.5 text-right text-[13px] tabular-nums placeholder:text-faint"
                       />
                     ) : row.values[key] ? (
                       readable(row.values[key])
@@ -202,8 +216,8 @@ export function RatesGrid({
                     )}
                   </td>
                 ))}
-                <td className="num border-l border-line text-muted">{year.totalCents ? formatMoney(year.vatCents) : "—"}</td>
-                <td className="num font-semibold">{year.totalCents ? formatMoney(year.totalCents) : "—"}</td>
+                <td className="num border-l border-line px-1.5! text-[13px] text-muted">{year.totalCents ? formatMoney(year.vatCents) : "—"}</td>
+                <td className="num px-1.5! text-[13px] font-semibold">{year.totalCents ? formatMoney(year.totalCents) : "—"}</td>
               </tr>
             );
           })}
