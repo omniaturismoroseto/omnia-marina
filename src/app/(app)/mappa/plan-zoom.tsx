@@ -258,7 +258,8 @@ export function PlanZoom({
   const atFit = zoom <= 1.001;
 
   return (
-    <div className="relative h-[calc(100dvh-9rem)] min-h-80 lg:h-[calc(100dvh-5rem)]">
+    // Alto quanto la pianta alla larghezza disponibile, ma mai più dello schermo: niente fasce vuote sopra e sotto.
+    <div className="relative max-h-[calc(100dvh-9rem)] min-h-64 lg:max-h-[calc(100dvh-5rem)]" style={{ aspectRatio: `${width} / ${height}` }}>
       <div
         ref={boxRef}
         tabIndex={0}

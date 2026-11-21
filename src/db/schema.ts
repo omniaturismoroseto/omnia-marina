@@ -435,6 +435,13 @@ export const piers = pgTable(
     name: text("name").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
     tariffZoneId: uuid("tariff_zone_id").references(() => tariffZones.id, { onDelete: "set null" }),
+    // Linea tracciata sulla foto (pixel), dalla radice (a) alla testata (b), e larghezza della passerella in metri
+    // (0 = banchina): serve a disegnare il pontile nello schema. Vuota se il pontile non è mai stato tracciato.
+    planAx: real("plan_ax"),
+    planAy: real("plan_ay"),
+    planBx: real("plan_bx"),
+    planBy: real("plan_by"),
+    planWidthM: real("plan_width_m"),
   },
   (t) => [uniqueIndex("piers_marina_code_uq").on(t.marinaId, t.code)],
 );

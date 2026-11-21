@@ -42,6 +42,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   o regole visibili all'utente, aggiornare anche la guida (`tests/guide.test.ts` controlla ancore e collegamenti).
 - Pianta dal vero: le coordinate dei posti (`berths.plan_x/plan_y/plan_angle`) sono in pixel della foto caricata;
   la geometria sta in `src/lib/plan.ts`, la foto nel database (`marina_plans`) ed è servita da `/pianta/immagine`.
+  La mappa (`/mappa`) ha «Schema» (predefinito: disegno pulito ricavato dalla pianta, `buildDrawing` in `src/lib/plan-drawing.ts`)
+  e «Foto dal vero» (`?vista=foto`), entrambe in `PlanView` con le sagome delle barche alla loro misura e la poppa verso il pontile.
+  La linea di ogni pontile (`piers.plan_ax/ay/bx/by`, `plan_width_m`, 0 = banchina) si salva quando lo si traccia nell'editor o
+  lo crea il riconoscimento automatico; senza linea la geometria si ricava dai posti. Senza pianta resta la griglia dei pontili.
+  `PlanZoom` (`src/app/(app)/mappa/plan-zoom.tsx`): niente barre né pulsanti di zoom, si trascina e si ingrandisce con rotellina/dita.
 - Numerazione dei contratti: le bozze non hanno numero (`seq`/`number` vuoti, in stampa «BOZZA»); il numero nasce all'attivazione
   ed è il più basso libero dell'anno (`src/lib/contract-numbers.ts`, `assignContractNumber`). «Torna in bozza» (`revertToDraft`) libera
   numero e addebiti mai incassati; i buchi (`contractNumberGaps`) si segnalano in elenco contratti e cruscotto finché non vengono ripresi.

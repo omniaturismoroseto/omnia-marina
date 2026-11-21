@@ -14,13 +14,14 @@ import { BERTH_STATUS_LABEL, CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { one, qs, uuidOrNull, type SearchParams } from "@/lib/params";
 import { contractNumberLabel } from "@/lib/contract-numbers";
 import { countStates, getBoard, STATE_LABEL, type BerthState, type BoardBerth, type BoardPier } from "@/server/board";
+import { buildDrawing } from "@/lib/plan-drawing";
 import { PlanView } from "./plan-view";
 import { PlanZoom } from "./plan-zoom";
 
 export const metadata: Metadata = { title: "Mappa dei posti barca" };
 
 const CELL: Record<BerthState, string> = {
-  libero: "border-ok/50 bg-card text-ok",
+  libero: "border-ok/50 bg-ok-soft text-ok",
   occupato: "border-sea-dark bg-sea text-white",
   fuori: "hatch border-sea/60 bg-card text-sea-dark",
   atteso: "border-warn/60 bg-warn-soft text-warn",
@@ -248,8 +249,24 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
   // La pianta dal vero è disponibile quando ci sono foto, scala e almeno un posto disposto.
   const offPlan = allBerths.filter((b) => b.planX === null);
   const hasPlan = plan.width !== null && plan.height !== null && plan.pxPerMeter !== null && offPlan.length < allBerths.length;
-  const view = hasPlan && one(sp.vista) !== "schema" ? "pianta" : "schema";
-  const vista = hasPlan && view === "schema" ? "schema" : null;
+  // Con la pianta disposta lo schema è il disegno del porto ricavato dalla foto; senza, la griglia dei pontili.
+  const drawing = hasPlan
+    ? buildDrawing(
+        board.map((p) => ({
+          id: p.id,
+          name: p.name,
+          trace: p.trace,
+          berths: p.berths.flatMap((b) =>
+            b.planX === null || b.planY === null
+              ? []
+              : [{ id: b.id, side: b.side, x: b.planX, y: b.planY, angle: b.planAngle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm }],
+          ),
+        })),
+        plan.pxPerMeter!,
+      )
+    : null;
+  const view = drawing && one(sp.vista) === "foto" ? "foto" : "schema";
+  const vista = view === "foto" ? "foto" : null;
   const hrefFor = (berthId: string) => `/mappa${qs({ data: date === today ? null : date, vista, posto: berthId })}#dettaglio`;
 
   return (
@@ -286,13 +303,13 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
         </div>
       ) : (
         <>
-          {hasPlan && (
+          {drawing && (
             <div className="mb-4">
               <FilterTabs
                 current={view}
                 items={[
-                  { value: "pianta", label: "Pianta dal vero", href: `/mappa${qs({ data: date === today ? null : date, posto: selectedId })}` },
-                  { value: "schema", label: "Schema", href: `/mappa${qs({ data: date === today ? null : date, vista: "schema", posto: selectedId })}` },
+                  { value: "schema", label: "Schema", href: `/mappa${qs({ data: date === today ? null : date, posto: selectedId })}` },
+                  { value: "foto", label: "Foto dal vero", href: `/mappa${qs({ data: date === today ? null : date, vista: "foto", posto: selectedId })}` },
                 ]}
               />
             </div>
@@ -309,10 +326,16 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
           </ul>
 
           <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
-            {view === "pianta" ? (
+            {drawing ? (
               <div className="min-w-0">
-                <PlanZoom width={plan.width!} height={plan.height!}>
+                <PlanZoom
+                  key={view}
+                  width={view === "schema" ? drawing.bounds.width : plan.width!}
+                  height={view === "schema" ? drawing.bounds.height : plan.height!}
+                >
                   <PlanView
+                    mode={view}
+                    drawing={drawing}
                     berths={allBerths}
                     width={plan.width!}
                     height={plan.height!}
