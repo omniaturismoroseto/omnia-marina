@@ -21,22 +21,77 @@ export interface RateRow {
   seasonal: number;
   /** Quota rifiuti proposta nei contratti annuali come voce a parte (non entra nel canone). */
   waste: number;
+  /** Condominio (spese di gestione comuni) proposto nei contratti annuali come voce a parte. */
+  service: number;
 }
 
-export const RATE_FIELDS = ["dailyLow", "dailyMid", "dailyHigh", "monthlyLow", "monthlyMid", "monthlyHigh", "annual", "seasonal", "waste"] as const;
+export const RATE_FIELDS = ["dailyLow", "dailyMid", "dailyHigh", "monthlyLow", "monthlyMid", "monthlyHigh", "annual", "seasonal", "waste", "service"] as const;
+
+/** Importo IVA compresa: se il listino ha prezzi netti, aggiunge l'IVA. I contratti lavorano sempre IVA compresa. */
+export function withVat(cents: number, vatRate: number, vatIncluded: boolean): number {
+  return vatIncluded ? cents : Math.round((cents * (100 + vatRate)) / 100);
+}
 
 /**
- * Tariffa di una categoria in una zona: ogni importo della zona, se compilato, prende il posto di quello della tariffa base.
- * Così una zona può ritoccare solo gli annuali e continuare a usare i prezzi base per transiti e mensili.
- * Restituisce null se non c'è nessuna delle due righe.
+ * Costo di un anno, come nelle colonne «IVA» e «Totale annuo» delle tariffe: canone annuale, rifiuti e condominio, più l'IVA
+ * (o con l'IVA già dentro, se il listino ha prezzi IVA inclusa).
  */
-export function zoneRate<T extends RateRow & { zoneId: string | null }>(rows: T[], zoneId: string | null): RateRow | null {
-  const base = rows.find((r) => r.zoneId === null) ?? null;
-  const zone = zoneId ? (rows.find((r) => r.zoneId === zoneId) ?? null) : null;
-  if (!base && !zone) return null;
+export function annualTotal(rate: Pick<RateRow, "annual" | "waste" | "service">, vatRate: number, vatIncluded: boolean) {
+  const sum = rate.annual + rate.waste + rate.service;
+  const totalCents = withVat(sum, vatRate, vatIncluded);
+  const netCents = vatIncluded ? Math.round(sum / (1 + vatRate / 100)) : sum;
+  return { netCents, vatCents: totalCents - netCents, totalCents };
+}
+
+/**
+ * Tariffa di una categoria su un pontile con prezzi propri (pierId vuoto = tariffa base): ogni importo del pontile,
+ * se compilato, prende il posto di quello della tariffa base. Così un pontile può ritoccare solo gli annuali e
+ * continuare a usare i prezzi base per transiti e mensili. Restituisce null se non c'è nessuna delle due righe.
+ * Per un pontile che usa la tariffa base (piers.base_rate) si passa null: vedi `ratePierId`.
+ */
+export function pierRate<T extends RateRow & { pierId: string | null }>(rows: T[], pierId: string | null): RateRow | null {
+  const base = rows.find((r) => r.pierId === null) ?? null;
+  const own = pierId ? (rows.find((r) => r.pierId === pierId) ?? null) : null;
+  if (!base && !own) return null;
   const merged = {} as RateRow;
-  for (const field of RATE_FIELDS) merged[field] = zone?.[field] || base?.[field] || 0;
+  for (const field of RATE_FIELDS) merged[field] = own?.[field] || base?.[field] || 0;
   return merged;
+}
+
+/** Pontili con lo stesso nome (maiuscole e spazi a parte) hanno un'unica tariffa: questa è la chiave che li unisce. */
+export function pierGroupKey(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLocaleLowerCase("it");
+}
+
+export interface PierGroup<T> {
+  key: string;
+  name: string;
+  piers: T[];
+  ids: string[];
+  /** Acceso se tutti i pontili del gruppo usano la tariffa base. */
+  baseRate: boolean;
+}
+
+/** Raggruppa i pontili per nome, nell'ordine in cui arrivano: in Tariffe ogni nome compare una volta sola. */
+export function groupPiersByName<T extends { id: string; name: string; baseRate: boolean }>(piers: T[]): PierGroup<T>[] {
+  const groups = new Map<string, PierGroup<T>>();
+  for (const pier of piers) {
+    const key = pierGroupKey(pier.name);
+    const group = groups.get(key);
+    if (group) {
+      group.piers.push(pier);
+      group.ids.push(pier.id);
+      group.baseRate &&= pier.baseRate;
+    } else {
+      groups.set(key, { key, name: pier.name.trim(), piers: [pier], ids: [pier.id], baseRate: pier.baseRate });
+    }
+  }
+  return [...groups.values()];
+}
+
+/** Il pontile di cui leggere i prezzi propri: nessuno se usa la tariffa base. */
+export function ratePierId(pier: { id: string; baseRate: boolean } | null | undefined): string | null {
+  return pier && !pier.baseRate ? pier.id : null;
 }
 
 export interface QuoteLine {
@@ -156,6 +211,21 @@ export function quoteStay(input: {
   }
 
   return { lines, totalCents: lines.reduce((sum, l) => sum + l.amountCents, 0) };
+}
+
+/**
+ * Preventivo IVA compresa a partire da quello del listino: righe e totale con l'IVA aggiunta se il listino ha prezzi netti,
+ * e rifiuti e condominio da proporre come voci dei contratti annuali.
+ */
+export function grossQuote(quote: Quote, rate: RateRow, type: StayType, list: { vatRate: number; vatIncluded: boolean }): Quote & { wasteCents: number; serviceCents: number } {
+  const gross = (cents: number) => withVat(cents, list.vatRate, list.vatIncluded);
+  const lines = quote.lines.map((l) => ({ ...l, unitCents: gross(l.unitCents), amountCents: gross(l.unitCents) * l.quantity }));
+  return {
+    lines,
+    totalCents: lines.reduce((sum, l) => sum + l.amountCents, 0),
+    wasteCents: type === "annuale" ? gross(rate.waste) : 0,
+    serviceCents: type === "annuale" ? gross(rate.service) : 0,
+  };
 }
 
 // La categoria tariffaria più piccola in cui la barca rientra per lunghezza e larghezza.

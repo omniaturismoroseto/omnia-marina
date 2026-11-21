@@ -21,8 +21,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Importi in centesimi, misure in centimetri, date di calendario come stringhe `AAAA-MM-GG` (`src/lib/dates.ts`).
 - Nelle select Drizzle su una sola tabella le colonne interpolate in `sql` escono senza nome di tabella: nelle
   sottoquery correlate scrivere il riferimento esterno per esteso (es. `"owners"."id"`).
-- Tariffe: una riga di `rates` per listino × categoria × zona (`zone_id` vuoto = tariffa base, vincolo unico NULLS NOT DISTINCT);
-  la zona sta sul pontile (`piers.tariff_zone_id`) e `zoneRate` (`src/lib/pricing.ts`) unisce zona e base campo per campo. `rates.waste` non entra nel canone: precompila la voce «rifiuti» degli annuali.
+- Tariffe: una riga di `rates` per listino × categoria × pontile (`pier_id` vuoto = tariffa base, vincolo unico NULLS NOT DISTINCT);
+  ogni pontile ha la sua scheda in Tariffe, ma i pontili con lo stesso nome (`groupPiersByName`/`pierGroupKey`) ne hanno una sola e
+  le azioni scrivono i prezzi e la tariffa base su tutti. `piers.base_rate` acceso = il pontile usa la tariffa base (si sceglie per più pontili
+  nella scheda «Tariffa base»), spento = i suoi prezzi; `ratePierId` + `pierRate` (`src/lib/pricing.ts`) uniscono pontile e base campo per campo. `rates.waste` e `rates.service`
+  (condominio) non entrano nel canone: precompilano le voci «rifiuti» e «gestione» degli annuali. `price_lists.vat_included`: prezzi del
+  listino (tariffe e servizi) IVA inclusa o netti; i contratti lavorano sempre IVA compresa (`withVat`, `grossQuote`, `extrasOfList`),
+  la griglia mostra «IVA» e «Totale annuo» (`annualTotal`).
 - Marchio: originali (a colori e in negativo per sfondi scuri) in `marchio/`, anche in orizzontale (`omnia-marina-logo-orizzontale*.png`,
   composto dai pezzi del logo verticale); per l'interfaccia `src/components/brand.tsx` con le immagini di `src/assets/brand/` (già alla
   misura giusta, `unoptimized`): `BrandWide` in alto nel menu, `BrandLogo` nelle pagine di accesso. Icone in `src/app` (favicon, icon,
@@ -42,6 +47,17 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   o regole visibili all'utente, aggiornare anche la guida (`tests/guide.test.ts` controlla ancore e collegamenti).
 - Pianta dal vero: le coordinate dei posti (`berths.plan_x/plan_y/plan_angle`) sono in pixel della foto caricata;
   la geometria sta in `src/lib/plan.ts`, la foto nel database (`marina_plans`) ed è servita da `/pianta/immagine`.
+  La mappa (`/mappa`) ha «Schema» (predefinito: disegno pulito ricavato dalla pianta, `buildDrawing` in `src/lib/plan-drawing.ts`)
+  e «Foto dal vero» (`?vista=foto`), entrambe in `PlanView` con le sagome delle barche alla loro misura e la poppa verso il pontile.
+  La linea di ogni pontile (`piers.plan_ax/ay/bx/by`, `plan_width_m`, 0 = banchina) si salva quando lo si traccia nell'editor o
+  lo crea il riconoscimento automatico; senza linea la geometria si ricava dai posti. Senza pianta resta la griglia dei pontili.
+  `PlanZoom` (`src/app/(app)/mappa/plan-zoom.tsx`): niente barre né pulsanti di zoom, si trascina e si ingrandisce con rotellina/dita.
+  Sfondo e servizi dello schema in `plan_features` (terra, acqua che scava la terra, edificio, verde, servizio = un punto con il tipo
+  del catalogo `src/lib/port-services.ts`, icone in `src/components/service-icon.tsx`; colori in `src/lib/plan-style.ts`). Editor in
+  Impostazioni → Pianta (`surroundings-editor.tsx`): terra e acqua dai colori della foto nel browser (`src/lib/land-mask.ts`, semi in acqua
+  davanti alla prua dei posti, posti barca forzati ad acqua), edifici/verde/servizi da Claude (`analyzeSurroundings`, stesso limite
+  giornaliero delle analisi; collaudi con `PLAN_SURROUNDINGS_FIXTURE`), poi ritocchi a mano e `savePlanFeatures` (sostituisce tutto).
+  Una foto con inquadratura diversa azzera posti, linee dei pontili e sfondo.
 - Numerazione dei contratti: le bozze non hanno numero (`seq`/`number` vuoti, in stampa «BOZZA»); il numero nasce all'attivazione
   ed è il più basso libero dell'anno (`src/lib/contract-numbers.ts`, `assignContractNumber`). «Torna in bozza» (`revertToDraft`) libera
   numero e addebiti mai incassati; i buchi (`contractNumberGaps`) si segnalano in elenco contratti e cruscotto finché non vengono ripresi.
@@ -94,8 +110,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Pubblicazione: `main` NON va online da solo. L'utente pubblica dal PC Windows (PowerShell), dalla cartella
   `C:\Users\roset\OneDrive\Desktop\App Porto\omnia-marina`, con
   `gcloud run deploy omnia-marina --source . --region europe-west1 --project omnia-marina` dopo un `git pull`;
-  i comandi per l'utente stanno in `COME-LAVORIAMO.md`. Quando una modifica va online, ricordaglielo, e dagli **sempre prima
-  il comando per scaricare i file (`git pull`) e poi quello per pubblicare** (o il comando unico di `COME-LAVORIAMO.md`, che
-  pubblica solo se il `git pull` riesce): altrimenti pubblica i file vecchi.
+  i comandi per l'utente stanno in `COME-LAVORIAMO.md`. Quando una modifica va online, ricordaglielo e dagli **sempre e solo
+  il comando unico** di «Pubblicare» in `COME-LAVORIAMO.md` (prima `git pull`, poi pubblica solo se il pull riesce), in un
+  unico blocco da copiare: mai `git pull` e pubblicazione come comandi separati.
+- Consegna: aprire sempre la pull request, dare il comando unico per PowerShell e chiedere l'unione con un **pulsante in chat**
+  (domanda a scelta: «Unisci» / «Non ancora»), non con una domanda da scrivere; con «Unisci» unire la pull request (prima
+  allineando il ramo a `main` se è cambiato).
 - Prima di consegnare: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
 

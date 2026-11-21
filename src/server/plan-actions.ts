@@ -4,11 +4,13 @@ import { revalidatePath } from "next/cache";
 import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { auditLog, berthCategories, berths, marinaPlans, marinas, piers } from "@/db/schema";
+import { auditLog, berthCategories, berths, marinaPlans, marinas, piers, planFeatures } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { requireMarina } from "@/lib/context";
-import { estimateScale, MAX_BERTHS_PER_SIDE, planBerths, toProposals, type StoredAnalysis } from "@/lib/plan-analysis";
-import { analyzePlanPhoto, PlanAnalysisError, planAnalysisAvailable } from "./plan-ai";
+import { estimateScale, MAX_BERTHS_PER_SIDE, planBerths, structureWidthM, toProposals, type StoredAnalysis } from "@/lib/plan-analysis";
+import { surroundingsToFeatures, type PlanFeature } from "@/lib/plan-features";
+import { isServiceKey } from "@/lib/port-services";
+import { analyzePlanPhoto, analyzeSurroundingsPhoto, PlanAnalysisError, planAnalysisAvailable } from "./plan-ai";
 
 const layoutSchema = z.object({
   pxPerMeter: z.number().positive().max(2000).nullable(),
@@ -21,16 +23,28 @@ const layoutSchema = z.object({
       }),
     )
     .max(5000),
+  // Linee dei pontili tracciate in questa sessione dell'editor (servono a disegnarli nello schema).
+  traces: z
+    .array(
+      z.object({
+        pierId: z.uuid(),
+        a: z.object({ x: z.number().finite(), y: z.number().finite() }),
+        b: z.object({ x: z.number().finite(), y: z.number().finite() }),
+        widthM: z.number().min(0).max(50),
+      }),
+    )
+    .max(500)
+    .default([]),
 });
 
 export type PlanLayoutInput = z.infer<typeof layoutSchema>;
 
 // Salva la scala della foto e la posizione di tutti i posti disposti nell'editor della pianta.
-export async function savePlanLayout(input: PlanLayoutInput): Promise<{ ok: boolean; message: string }> {
+export async function savePlanLayout(input: z.input<typeof layoutSchema>): Promise<{ ok: boolean; message: string }> {
   const ctx = await requireMarina(["admin"]);
   const parsed = layoutSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "Dati della pianta non validi." };
-  const { pxPerMeter, placements } = parsed.data;
+  const { pxPerMeter, placements, traces } = parsed.data;
 
   const [marina] = await db.select({ width: marinas.planWidth, height: marinas.planHeight }).from(marinas).where(eq(marinas.id, ctx.marinaId));
   if (!marina?.width || !marina.height) return { ok: false, message: "Carica prima la foto del porto." };
@@ -40,6 +54,7 @@ export async function savePlanLayout(input: PlanLayoutInput): Promise<{ ok: bool
   const inside = (p: { x: number; y: number }) =>
     p.x >= -marina.width! * margin && p.x <= marina.width! * (1 + margin) && p.y >= -marina.height! * margin && p.y <= marina.height! * (1 + margin);
   if (placements.some((p) => p.position && !inside(p.position))) return { ok: false, message: "Alcuni posti sono fuori dalla foto." };
+  if (traces.some((t) => !inside(t.a) || !inside(t.b))) return { ok: false, message: "Alcune linee dei pontili sono fuori dalla foto." };
 
   await db.transaction(async (tx) => {
     await tx.update(marinas).set({ planPxPerMeter: pxPerMeter }).where(eq(marinas.id, ctx.marinaId));
@@ -54,6 +69,13 @@ export async function savePlanLayout(input: PlanLayoutInput): Promise<{ ok: bool
         from (values ${rows}) as v(id, x, y, angle)
         where berths.id = v.id and berths.marina_id = ${ctx.marinaId}
       `);
+    }
+    for (const t of traces) {
+      // Il filtro sul porto impedisce di toccare pontili di altri porti.
+      await tx
+        .update(piers)
+        .set({ planAx: t.a.x, planAy: t.a.y, planBx: t.b.x, planBy: t.b.y, planWidthM: t.widthM })
+        .where(and(eq(piers.id, t.pierId), eq(piers.marinaId, ctx.marinaId)));
     }
     const placed = placements.filter((p) => p.position).length;
     await audit(ctx, "modifica", "pianta del porto", ctx.marinaId, `${placed} posti disposti sulla foto`, tx);
@@ -216,7 +238,17 @@ export async function createFromProposals(input: ProposalsInput): Promise<Result
     for (const { item, berths: rows } of planned) {
       const [pier] = await tx
         .insert(piers)
-        .values({ marinaId: ctx.marinaId, code: item.code, name: item.name, sortOrder: order++ })
+        .values({
+          marinaId: ctx.marinaId,
+          code: item.code,
+          name: item.name,
+          sortOrder: order++,
+          planAx: item.a.x,
+          planAy: item.a.y,
+          planBx: item.b.x,
+          planBy: item.b.y,
+          planWidthM: structureWidthM(item.kind),
+        })
         .returning({ id: piers.id });
       const categoryOf = new Map(item.sides.map((s) => [s.side, s.categoryId]));
       await tx.insert(berths).values(
@@ -241,4 +273,102 @@ export async function createFromProposals(input: ProposalsInput): Promise<Result
 
   revalidatePath("/", "layout");
   return { ok: true, message: `Creati ${items.length} ${items.length === 1 ? "pontile" : "pontili e banchine"} con ${total} posti, già disposti sulla foto.` };
+}
+
+// ───────────────────────── Sfondo e servizi della mappa ─────────────────────────
+
+const featurePoint = z.object({ x: z.number().finite(), y: z.number().finite() });
+const featuresSchema = z
+  .array(
+    z.object({
+      kind: z.enum(["terra", "acqua", "edificio", "verde", "servizio"]),
+      service: z.string().max(40).nullable(),
+      name: z.string().max(80).nullable(),
+      points: z.array(featurePoint).min(1).max(5000),
+      source: z.enum(["manuale", "colori", "claude"]),
+    }),
+  )
+  .max(3000);
+
+export type FeaturesInput = z.infer<typeof featuresSchema>;
+
+/** Salva tutto lo sfondo della mappa (sostituisce quello di prima). */
+export async function savePlanFeatures(input: FeaturesInput): Promise<Result> {
+  const ctx = await requireMarina(["admin"]);
+  const parsed = featuresSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Dati dello sfondo non validi." };
+  const features = parsed.data;
+  if (features.reduce((sum, f) => sum + f.points.length, 0) > 200_000) return { ok: false, message: "Lo sfondo è troppo dettagliato: semplificalo." };
+
+  const [marina] = await db.select({ width: marinas.planWidth, height: marinas.planHeight }).from(marinas).where(eq(marinas.id, ctx.marinaId));
+  if (!marina?.width || !marina.height) return { ok: false, message: "Carica prima la foto del porto." };
+  const margin = 0.1;
+  const inside = (p: { x: number; y: number }) =>
+    p.x >= -marina.width! * margin && p.x <= marina.width! * (1 + margin) && p.y >= -marina.height! * margin && p.y <= marina.height! * (1 + margin);
+  for (const f of features) {
+    if (!f.points.every(inside)) return { ok: false, message: "Alcuni elementi sono fuori dalla foto." };
+    if (f.kind === "servizio" ? f.points.length !== 1 || !isServiceKey(f.service) : f.points.length < 3) {
+      return { ok: false, message: "Un elemento dello sfondo non è completo." };
+    }
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.delete(planFeatures).where(eq(planFeatures.marinaId, ctx.marinaId));
+    if (features.length > 0) {
+      await tx.insert(planFeatures).values(
+        features.map((f, i) => ({
+          marinaId: ctx.marinaId,
+          kind: f.kind,
+          service: f.kind === "servizio" ? f.service : null,
+          name: f.name?.trim() || null,
+          points: f.points.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 })),
+          source: f.source,
+          sortOrder: i,
+        })),
+      );
+    }
+    const services = features.filter((f) => f.kind === "servizio").length;
+    await audit(ctx, "modifica", "sfondo della mappa", ctx.marinaId, `${features.length - services} forme, ${services} servizi`, tx);
+  });
+
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Sfondo salvato: lo trovi nello schema della mappa." };
+}
+
+/** Chiede a Claude edifici, aree verdi e servizi: le proposte tornano all'editor, che le mostra in attesa di salvataggio. */
+export async function analyzeSurroundings(): Promise<Result & { features?: Omit<PlanFeature, "id">[] }> {
+  const ctx = await requireMarina(["admin"]);
+  if (!planAnalysisAvailable()) {
+    return { ok: false, message: "Il riconoscimento automatico non è ancora attivo (istruzioni in COME-LAVORIAMO.md). Puoi disegnare edifici e servizi a mano." };
+  }
+  const [{ recent }] = await db
+    .select({ recent: sql<number>`count(*)::int` })
+    .from(auditLog)
+    .where(and(eq(auditLog.marinaId, ctx.marinaId), eq(auditLog.action, ANALYSIS_ACTION), gt(auditLog.at, sql`now() - interval '24 hours'`)));
+  if (recent >= DAILY_ANALYSES) return { ok: false, message: `Raggiunto il limite di ${DAILY_ANALYSES} analisi nelle ultime 24 ore. Riprova domani.` };
+
+  const [row] = await db
+    .select({ data: marinaPlans.data, mime: marinaPlans.mime, width: marinas.planWidth, height: marinas.planHeight })
+    .from(marinaPlans)
+    .innerJoin(marinas, eq(marinas.id, marinaPlans.marinaId))
+    .where(eq(marinaPlans.marinaId, ctx.marinaId))
+    .limit(1);
+  if (!row || !row.width || !row.height) return { ok: false, message: "Carica prima la foto del porto." };
+
+  await audit(ctx, ANALYSIS_ACTION, "pianta del porto", ctx.marinaId, "Richiesta di riconoscimento di edifici e servizi");
+  try {
+    const result = await analyzeSurroundingsPhoto({ data: row.data, mime: row.mime, width: row.width, height: row.height });
+    const features = surroundingsToFeatures(result, row.width, row.height);
+    if (features.length === 0) return { ok: false, message: "Nella foto non sono stati riconosciuti edifici o servizi: disegnali a mano." };
+    const services = features.filter((f) => f.kind === "servizio").length;
+    const notes = result.notes.trim().slice(0, 300);
+    return {
+      ok: true,
+      message: `Proposti ${features.length - services} edifici e aree verdi e ${services} servizi: controllali, correggi dove serve e salva.${notes ? ` Nota: ${notes}` : ""}`,
+      features,
+    };
+  } catch (error) {
+    if (error instanceof PlanAnalysisError) return { ok: false, message: error.message };
+    throw error;
+  }
 }

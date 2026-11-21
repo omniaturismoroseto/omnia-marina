@@ -127,6 +127,41 @@
       "when": 1794985931794,
       "tag": "0017_meteo_marino_protezione_civile",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795250231200,
+      "tag": "0018_linea_dei_pontili",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795254829404,
+      "tag": "0019_sfondo_e_servizi",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795255663101,
+      "tag": "0020_tariffa_per_pontile",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795255664071,
+      "tag": "0021_via_zone_tariffarie",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795267503260,
+      "tag": "0022_iva_e_condominio",
+      "breakpoints": true
     }
   ]
 }

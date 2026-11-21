@@ -28,7 +28,7 @@ lavorare per più porti con ruoli diversi.
 - **Contratti** – annuali, stagionali, mensili e transiti; posti liberi e adatti alla barca proposti in automatico,
   importo calcolato dal listino, rate, stampa del contratto.
 - **Tariffe** – listini per categoria e stagione (bassa, media, alta), canone stagionale fisso e quota rifiuti per categoria
-  (proposta come voce dei contratti annuali); **zone tariffarie** per i pontili con prezzi propri (es. una darsena più cara); simulatore.
+  (proposta come voce dei contratti annuali); **una tariffa per ogni pontile**, con la tariffa base da applicare ai pontili scelti; simulatore.
 - **Contabilità interna** – scadenziario, incassi anche parziali, prima nota di cassa e banca, riepilogo annuale,
   esportazione CSV per il commercialista. Non sostituisce la fatturazione elettronica.
 

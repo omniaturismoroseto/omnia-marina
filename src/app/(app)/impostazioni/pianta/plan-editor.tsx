@@ -58,6 +58,8 @@ export function PlanEditor({
   const lastAngle = useRef(0);
   // Ultimo pontile tracciato: serve a rifarlo con i lati invertiti senza ricliccare sulla foto.
   const [lastTrace, setLastTrace] = useState<{ pierId: string; a: Point; b: Point; widthM: number; flip: boolean } | null>(null);
+  // Linee tracciate in questa sessione, una per pontile: si salvano per disegnare i pontili nello schema.
+  const [traces, setTraces] = useState<Record<string, { a: Point; b: Point; widthM: number }>>({});
 
   // Unità di disegno: spessori e testi restano proporzionati qualunque sia la dimensione della foto.
   const u = width / 1000;
@@ -137,6 +139,7 @@ export function PlanEditor({
     setBerths((list) => list.map((b) => (byId.has(b.id) ? { ...b, ...byId.get(b.id)! } : b)));
     lastAngle.current = placements[0].angle;
     setLastTrace(trace);
+    setTraces((all) => ({ ...all, [trace.pierId]: { a: trace.a, b: trace.b, widthM: trace.widthM } }));
     setDirty(true);
     setNotice({
       ok: true,
@@ -198,9 +201,13 @@ export function PlanEditor({
       const result = await savePlanLayout({
         pxPerMeter,
         placements: berths.map((b) => ({ id: b.id, position: b.x !== null && b.y !== null ? { x: b.x, y: b.y, angle: b.angle ?? 0 } : null })),
+        traces: Object.entries(traces).map(([pierId, t]) => ({ pierId, ...t })),
       });
       setNotice(result);
-      if (result.ok) setDirty(false);
+      if (result.ok) {
+        setDirty(false);
+        setTraces({});
+      }
     });
   }
 

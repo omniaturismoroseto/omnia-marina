@@ -59,6 +59,8 @@ export interface BoardPier {
   id: string;
   code: string;
   name: string;
+  // Linea tracciata sulla foto (radice → testata) e larghezza in metri; null se mai tracciata.
+  trace: { a: { x: number; y: number }; b: { x: number; y: number }; widthM: number } | null;
   berths: BoardBerth[];
 }
 
@@ -116,7 +118,16 @@ export async function getBoard(marinaId: string, date: string, today: string): P
     byBerth.set(row.berthId, list);
   }
 
-  const result = pierRows.map((p) => ({ id: p.id, code: p.code, name: p.name, berths: [] as BoardBerth[] }));
+  const result: BoardPier[] = pierRows.map((p) => ({
+    id: p.id,
+    code: p.code,
+    name: p.name,
+    trace:
+      p.planAx !== null && p.planAy !== null && p.planBx !== null && p.planBy !== null
+        ? { a: { x: p.planAx, y: p.planAy }, b: { x: p.planBx, y: p.planBy }, widthM: p.planWidthM ?? 2 }
+        : null,
+    berths: [],
+  }));
   const pierIndex = new Map(result.map((p) => [p.id, p]));
 
   for (const { berth, categoryName } of berthRows) {

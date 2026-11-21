@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { berthCategories, berths, boats, contracts, piers, priceLists, rates, seasonPeriods, tariffZones, type ContractType } from "@/db/schema";
+import { berthCategories, berths, boats, contracts, piers, priceLists, rates, seasonPeriods, type ContractType } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { annualEnd, isValidISODate } from "@/lib/dates";
@@ -21,7 +21,7 @@ import {
   itemTitle,
   type ContractItemInput,
 } from "@/lib/contract-items";
-import { categoryForBoat, occupiedUntil, quoteStay, zoneRate, type QuoteLine } from "@/lib/pricing";
+import { categoryForBoat, grossQuote, occupiedUntil, pierRate, quoteStay, ratePierId, type QuoteLine } from "@/lib/pricing";
 import { activateContract, addContractItem, cancelContract, createContract, removeContractItem, revertToDraft, updateDraftContract } from "./contracts";
 import { toFormState } from "./errors";
 import { extrasOfList, type ListExtra } from "./list-extras";
@@ -37,8 +37,18 @@ export interface BerthOption {
 
 export interface ContractOptions {
   berths: BerthOption[];
-  // wasteCents: quota rifiuti del listino per i contratti annuali, da proporre come voce «rifiuti» (0 = usa quella del porto).
-  quote: { listName: string; categoryName: string; zoneName: string | null; lines: QuoteLine[]; totalCents: number; vatRate: number; wasteCents: number } | null;
+  // Importi IVA compresa. wasteCents e serviceCents: rifiuti e condominio del listino per i contratti annuali, da proporre
+  // come voci «rifiuti» e «spese di gestione» (0 = usa quelle del porto).
+  quote: {
+    listName: string;
+    categoryName: string;
+    pierName: string | null;
+    lines: QuoteLine[];
+    totalCents: number;
+    vatRate: number;
+    wasteCents: number;
+    serviceCents: number;
+  } | null;
   quoteNote: string | null;
   // Importi del listino per le voci del contratto (posti auto, carrello…), dai servizi collegati.
   itemPrices: Partial<Record<(typeof SPACE_ITEM_KINDS)[number], number>>;
@@ -74,7 +84,7 @@ export async function loadContractOptions(input: {
 
   const [berthRows, busyRows, categories, [list]] = await Promise.all([
     db
-      .select({ berth: berths, pierName: piers.name, zoneId: piers.tariffZoneId })
+      .select({ berth: berths, pierName: piers.name, pierId: piers.id, baseRate: piers.baseRate })
       .from(berths)
       .innerJoin(piers, eq(piers.id, berths.pierId))
       .where(eq(berths.marinaId, ctx.marinaId))
@@ -112,11 +122,11 @@ export async function loadContractOptions(input: {
     return { id: berth.id, code: berth.code, pierName, size: formatDimensions(berth.lengthCm, berth.beamCm), available: reason === null, reason };
   });
 
-  // La tariffa segue la categoria del posto scelto e la zona del suo pontile; senza posto, la categoria in cui
-  // rientra la barca e la tariffa base.
+  // La tariffa segue la categoria del posto scelto e il suo pontile (prezzi propri o tariffa base); senza posto,
+  // la categoria in cui rientra la barca e la tariffa base.
   const chosenRow = berthId ? berthRows.find((r) => r.berth.id === berthId) : undefined;
   const chosen = chosenRow?.berth;
-  const zoneId = chosenRow?.zoneId ?? null;
+  const pierId = ratePierId(chosenRow ? { id: chosenRow.pierId, baseRate: chosenRow.baseRate } : null);
   const category = chosen?.categoryId ? categories.find((c) => c.id === chosen.categoryId) : categoryForBoat(categories, boat);
 
   if (!list) return { berths: options, quote: null, quoteNote: "Nessun listino copre la data di inizio: inserisci l'importo a mano.", itemPrices: {}, listExtras: [] };
@@ -127,7 +137,7 @@ export async function loadContractOptions(input: {
 
   if (!category) return { berths: options, quote: null, quoteNote: "Nessuna categoria tariffaria adatta: inserisci l'importo a mano.", itemPrices, listExtras };
 
-  const [rateRows, periods, [zone]] = await Promise.all([
+  const [rateRows, periods] = await Promise.all([
     db
       .select()
       .from(rates)
@@ -135,32 +145,27 @@ export async function loadContractOptions(input: {
         and(
           eq(rates.priceListId, list.id),
           eq(rates.categoryId, category.id),
-          zoneId ? or(isNull(rates.zoneId), eq(rates.zoneId, zoneId)) : isNull(rates.zoneId),
+          eq(rates.marinaId, ctx.marinaId),
+          pierId ? or(isNull(rates.pierId), eq(rates.pierId, pierId)) : isNull(rates.pierId),
         ),
       ),
     db.select().from(seasonPeriods).where(eq(seasonPeriods.priceListId, list.id)),
-    zoneId
-      ? db
-          .select({ name: tariffZones.name })
-          .from(tariffZones)
-          .where(and(eq(tariffZones.id, zoneId), eq(tariffZones.marinaId, ctx.marinaId)))
-          .limit(1)
-      : Promise.resolve([]),
   ]);
-  const rate = zoneRate(rateRows, zoneId);
+  const rate = pierRate(rateRows, pierId);
   if (!rate) return { berths: options, quote: null, quoteNote: `Il ${list.name} non ha tariffe per la categoria ${category.name}.`, itemPrices, listExtras };
 
-  const quote = quoteStay({ type, startDate: input.startDate, endDate: input.endDate, rate, periods });
+  const quote = grossQuote(quoteStay({ type, startDate: input.startDate, endDate: input.endDate, rate, periods }), rate, type, list);
   return {
     berths: options,
     quote: {
       listName: list.name,
       categoryName: category.name,
-      zoneName: zone?.name ?? null,
+      pierName: pierId ? (chosenRow?.pierName ?? null) : null,
       lines: quote.lines,
       totalCents: quote.totalCents,
       vatRate: list.vatRate,
-      wasteCents: type === "annuale" ? rate.waste : 0,
+      wasteCents: quote.wasteCents,
+      serviceCents: quote.serviceCents,
     },
     quoteNote: quote.totalCents === 0 ? "Le tariffe di questa categoria non sono ancora compilate." : null,
     itemPrices,

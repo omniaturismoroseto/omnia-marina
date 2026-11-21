@@ -4,7 +4,9 @@ import { asc, eq } from "drizzle-orm";
 import { page } from "@/components/page";
 import { Card, Notice, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { berthCategories, berths, marinaPlans, marinas, piers } from "@/db/schema";
+import { berthCategories, berths, marinaPlans, marinas, piers, planFeatures } from "@/db/schema";
+import { berthSizePx } from "@/lib/plan";
+import { buildDrawing } from "@/lib/plan-drawing";
 import { requireMarina } from "@/lib/context";
 import { SettingsTabs } from "../tabs";
 import type { StoredAnalysis } from "@/lib/plan-analysis";
@@ -12,6 +14,7 @@ import { planAnalysisAvailable } from "@/server/plan-ai";
 import { AutoDetect } from "./auto-detect";
 import { PhotoUploader } from "./photo-uploader";
 import { PlanEditor } from "./plan-editor";
+import { SurroundingsEditor, type BerthRect } from "./surroundings-editor";
 
 export const metadata: Metadata = { title: "Pianta dal vero" };
 
@@ -22,7 +25,20 @@ export default page(async function PlanSettingsPage() {
       .select({ width: marinas.planWidth, height: marinas.planHeight, pxPerMeter: marinas.planPxPerMeter, version: marinas.planVersion })
       .from(marinas)
       .where(eq(marinas.id, ctx.marinaId)),
-    db.select({ id: piers.id, name: piers.name, code: piers.code }).from(piers).where(eq(piers.marinaId, ctx.marinaId)).orderBy(asc(piers.sortOrder), asc(piers.code)),
+    db
+      .select({
+        id: piers.id,
+        name: piers.name,
+        code: piers.code,
+        ax: piers.planAx,
+        ay: piers.planAy,
+        bx: piers.planBx,
+        by: piers.planBy,
+        widthM: piers.planWidthM,
+      })
+      .from(piers)
+      .where(eq(piers.marinaId, ctx.marinaId))
+      .orderBy(asc(piers.sortOrder), asc(piers.code)),
     db
       .select({
         id: berths.id,
@@ -40,13 +56,18 @@ export default page(async function PlanSettingsPage() {
       .where(eq(berths.marinaId, ctx.marinaId))
       .orderBy(asc(berths.code)),
   ]);
-  const [[plan], categories] = await Promise.all([
+  const [[plan], categories, featureRows] = await Promise.all([
     db.select({ analysis: marinaPlans.analysis }).from(marinaPlans).where(eq(marinaPlans.marinaId, ctx.marinaId)),
     db
       .select({ id: berthCategories.id, name: berthCategories.name, maxLengthCm: berthCategories.maxLengthCm, maxBeamCm: berthCategories.maxBeamCm })
       .from(berthCategories)
       .where(eq(berthCategories.marinaId, ctx.marinaId))
       .orderBy(asc(berthCategories.sortOrder), asc(berthCategories.maxLengthCm)),
+    db
+      .select({ id: planFeatures.id, kind: planFeatures.kind, service: planFeatures.service, name: planFeatures.name, points: planFeatures.points, source: planFeatures.source })
+      .from(planFeatures)
+      .where(eq(planFeatures.marinaId, ctx.marinaId))
+      .orderBy(asc(planFeatures.sortOrder)),
   ]);
   const hasPhoto = marina.width !== null && marina.height !== null;
   // Le proposte valgono solo per la foto su cui sono state calcolate.
@@ -56,6 +77,38 @@ export default page(async function PlanSettingsPage() {
     b.x !== null && b.y !== null ? [{ x: b.x, y: b.y, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm }] : [],
   );
   const placedCount = berthRows.filter((b) => b.x !== null).length;
+
+  // Per ricavare terra e acqua dai colori: i posti (che contano come acqua) e un punto in acqua davanti alla prua di ciascuno.
+  const scale = marina.pxPerMeter;
+  const berthRects: BerthRect[] = scale
+    ? berthRows.flatMap((b) => (b.x !== null && b.y !== null ? [{ x: b.x, y: b.y, angle: b.angle ?? 0, ...berthSizePx(b, scale) }] : []))
+    : [];
+  const drawing = scale
+    ? buildDrawing(
+        pierRows.map((p) => ({
+          id: p.id,
+          name: p.name,
+          trace:
+            p.ax !== null && p.ay !== null && p.bx !== null && p.by !== null ? { a: { x: p.ax, y: p.ay }, b: { x: p.bx, y: p.by }, widthM: p.widthM ?? 2 } : null,
+          berths: berthRows.flatMap((b) =>
+            b.pierId === p.id && b.x !== null && b.y !== null
+              ? [{ id: b.id, side: b.side, x: b.x, y: b.y, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm }]
+              : [],
+          ),
+        })),
+        scale,
+      )
+    : null;
+  const waterSeeds = drawing
+    ? berthRows.flatMap((b) => {
+        if (b.x === null || b.y === null) return [];
+        const a = ((b.angle ?? 0) * Math.PI) / 180;
+        const stern = drawing.stern.get(b.id) ?? 1;
+        // Dalla poppa verso la prua, 2 m oltre la fine del posto.
+        const reach = (b.lengthCm / 200 + 2) * scale!;
+        return [{ x: b.x + Math.sin(a) * stern * reach, y: b.y - Math.cos(a) * stern * reach }];
+      })
+    : [];
 
   return (
     <>
@@ -92,6 +145,27 @@ export default page(async function PlanSettingsPage() {
               categories={categories}
               usedCodes={pierRows.map((p) => p.code)}
               placed={placedBerths}
+            />
+          </Card>
+        )}
+
+        {hasPhoto && (
+          <Card title="Sfondo e servizi della mappa">
+            <p className="mb-4 max-w-3xl text-sm text-muted">
+              Lo schema della mappa disegna il porto come una mappa illustrata: terra, moli ed edifici in grigio, aree verdi e i servizi (bar,
+              ristorante, parcheggio, cantiere, carburante…). Ricava terra e acqua dai colori della foto, chiedi a Claude edifici e servizi, poi ritocca
+              a mano e salva.
+            </p>
+            <SurroundingsEditor
+              key={marina.version}
+              imageUrl={`/pianta/immagine?v=${marina.version}`}
+              width={marina.width!}
+              height={marina.height!}
+              pxPerMeter={marina.pxPerMeter}
+              initialFeatures={featureRows}
+              berthRects={berthRects}
+              waterSeeds={waterSeeds}
+              aiAvailable={planAnalysisAvailable()}
             />
           </Card>
         )}

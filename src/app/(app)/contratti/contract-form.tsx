@@ -89,8 +89,9 @@ export function ContractForm({
         if (superseded) return; // risposta superata da una richiesta più recente
         setResult({ request, options: next });
         if (!amountEditedRef.current && next.quote) setAmount(moneyInput(next.quote.totalCents));
-        // La quota rifiuti del listino (per categoria e zona) prende il posto di quella generale del porto.
+        // Rifiuti e condominio del listino (per categoria e pontile) prendono il posto di quelli generali del porto.
         if (!feesEditedRef.current && next.quote?.wasteCents) setRifiuti(moneyInput(next.quote.wasteCents));
+        if (!feesEditedRef.current && next.quote?.serviceCents) setGestione(moneyInput(next.quote.serviceCents));
         if (request.berthId && !next.berths.some((b) => b.id === request.berthId && b.available)) setBerthId("");
       })
       .catch(() => {
@@ -372,7 +373,7 @@ export function ContractForm({
           <>
             <p className="mt-1 text-xs text-muted">
               {options.quote.listName} · categoria {options.quote.categoryName}
-              {options.quote.zoneName ? ` · ${options.quote.zoneName}` : ""}
+              {options.quote.pierName ? ` · tariffa di ${options.quote.pierName}` : ""}
             </p>
             <table className="mt-3 w-full text-sm">
               <tbody>
@@ -393,8 +394,17 @@ export function ContractForm({
                 </tr>
               </tfoot>
             </table>
-            {options.quote.wasteCents > 0 && (
-              <p className="mt-2 text-xs text-muted">Quota rifiuti da listino: {formatMoney(options.quote.wasteCents)}, proposta tra le altre voci del contratto.</p>
+            {(options.quote.wasteCents > 0 || options.quote.serviceCents > 0) && (
+              <p className="mt-2 text-xs text-muted">
+                Da listino, IVA inclusa:{" "}
+                {[
+                  options.quote.wasteCents > 0 && `quota rifiuti ${formatMoney(options.quote.wasteCents)}`,
+                  options.quote.serviceCents > 0 && `condominio ${formatMoney(options.quote.serviceCents)}`,
+                ]
+                  .filter(Boolean)
+                  .join(" e ")}
+                , proposti tra le altre voci del contratto.
+              </p>
             )}
             {options.quoteNote && <p className="mt-2 rounded-md bg-warn-soft px-2 py-1.5 text-xs text-warn">{options.quoteNote}</p>}
             {amountEdited && amountCents !== options.quote.totalCents && (
