@@ -107,6 +107,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   `gcloud run deploy omnia-marina --source . --region europe-west1 --project omnia-marina` dopo un `git pull`;
   i comandi per l'utente stanno in `COME-LAVORIAMO.md`. Quando una modifica va online, ricordaglielo e dagli **sempre e solo
   il comando unico** di «Pubblicare» in `COME-LAVORIAMO.md` (prima `git pull`, poi pubblica solo se il pull riesce), in un
-  unico blocco da copiare: mai `git pull` e pubblicazione come comandi separati.
+  unico blocco da copiare: mai `git pull` e pubblicazione come comandi separati. Se l'utente è in Google Cloud Shell (bash,
+`~/omnia-marina`) dagli la versione bash dello stesso comando unico, anch'essa in `COME-LAVORIAMO.md`.
 - Prima di consegnare: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
 

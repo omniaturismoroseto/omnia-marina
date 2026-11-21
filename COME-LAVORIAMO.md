@@ -75,6 +75,16 @@ cd "C:\Users\roset\OneDrive\Desktop\App Porto\omnia-marina"; git pull origin mai
 
 Se compare «git pull non riuscito», non è stato pubblicato niente: guarda «Quando qualcosa va storto» più sotto.
 
+**Da Google Cloud Shell** (https://shell.cloud.google.com, la riga di comando nel browser: usa bash, non PowerShell, e il
+progetto sta in `~/omnia-marina`) il comando unico è questo; anche qui pubblica solo se lo scaricamento è riuscito:
+
+```bash
+cd ~/omnia-marina && git pull origin main && gcloud run deploy omnia-marina --source . --region europe-west1 --project omnia-marina --quiet
+```
+
+Se Cloud Shell dice che la cartella `omnia-marina` non esiste, scaricala una volta con
+`git clone https://github.com/omniaturismoroseto/omnia-marina.git ~/omnia-marina`.
+
 Ci vogliono 5-10 minuti. Alla fine compare `Service URL: …`: la nuova versione è online.
 
 - Google compila l'app sui suoi server: sul PC non serve installare altro.
