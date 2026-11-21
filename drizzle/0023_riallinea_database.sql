@@ -1,5 +1,5 @@
 -- Riallinea il database qualunque versione sia stata pubblicata prima (mappa e tariffe per pontile sono nate su rami
--- diversi e le loro migrazioni sono state rinumerate): ripete, senza effetti se già fatte, le migrazioni 0018-0021.
+-- diversi e le loro migrazioni sono state rinumerate): ripete, senza effetti se già fatte, le migrazioni 0018-0022.
 -- Serve perché drizzle applica solo le migrazioni più recenti dell'ultima registrata nel database.
 ALTER TABLE "piers" ADD COLUMN IF NOT EXISTS "plan_ax" real;--> statement-breakpoint
 ALTER TABLE "piers" ADD COLUMN IF NOT EXISTS "plan_ay" real;--> statement-breakpoint
@@ -61,3 +61,6 @@ DO $$ BEGIN
 	END IF;
 END $$;
 
+--> statement-breakpoint
+ALTER TABLE "price_lists" ADD COLUMN IF NOT EXISTS "vat_included" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "rates" ADD COLUMN IF NOT EXISTS "service" integer DEFAULT 0 NOT NULL;

@@ -159,8 +159,15 @@
     {
       "idx": 22,
       "version": "7",
-      "when": 1795255913740,
-      "tag": "0022_riallinea_database",
+      "when": 1795267503260,
+      "tag": "0022_iva_e_condominio",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795276821823,
+      "tag": "0023_riallinea_database",
       "breakpoints": true
     }
   ]

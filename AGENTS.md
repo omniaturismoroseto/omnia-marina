@@ -24,7 +24,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Tariffe: una riga di `rates` per listino × categoria × pontile (`pier_id` vuoto = tariffa base, vincolo unico NULLS NOT DISTINCT);
   ogni pontile ha la sua scheda in Tariffe, ma i pontili con lo stesso nome (`groupPiersByName`/`pierGroupKey`) ne hanno una sola e
   le azioni scrivono i prezzi e la tariffa base su tutti. `piers.base_rate` acceso = il pontile usa la tariffa base (si sceglie per più pontili
-  nella scheda «Tariffa base»), spento = i suoi prezzi; `ratePierId` + `pierRate` (`src/lib/pricing.ts`) uniscono pontile e base campo per campo. `rates.waste` non entra nel canone: precompila la voce «rifiuti» degli annuali.
+  nella scheda «Tariffa base»), spento = i suoi prezzi; `ratePierId` + `pierRate` (`src/lib/pricing.ts`) uniscono pontile e base campo per campo. `rates.waste` e `rates.service`
+  (condominio) non entrano nel canone: precompilano le voci «rifiuti» e «gestione» degli annuali. `price_lists.vat_included`: prezzi del
+  listino (tariffe e servizi) IVA inclusa o netti; i contratti lavorano sempre IVA compresa (`withVat`, `grossQuote`, `extrasOfList`),
+  la griglia mostra «IVA» e «Totale annuo» (`annualTotal`).
 - Marchio: originali (a colori e in negativo per sfondi scuri) in `marchio/`, anche in orizzontale (`omnia-marina-logo-orizzontale*.png`,
   composto dai pezzi del logo verticale); per l'interfaccia `src/components/brand.tsx` con le immagini di `src/assets/brand/` (già alla
   misura giusta, `unoptimized`): `BrandWide` in alto nel menu, `BrandLogo` nelle pagine di accesso. Icone in `src/app` (favicon, icon,
@@ -111,5 +114,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   il comando unico** di «Pubblicare» in `COME-LAVORIAMO.md` (prima `git pull`, poi pubblica solo se il pull riesce), in un
   unico blocco da copiare: mai `git pull` e pubblicazione come comandi separati. Se l'utente è in Google Cloud Shell (bash,
 `~/omnia-marina`) dagli la versione bash dello stesso comando unico, anch'essa in `COME-LAVORIAMO.md`.
+- Consegna: aprire sempre la pull request, dare il comando unico per PowerShell e chiedere l'unione con un **pulsante in chat**
+  (domanda a scelta: «Unisci» / «Non ancora»), non con una domanda da scrivere; con «Unisci» unire la pull request (prima
+  allineando il ramo a `main` se è cambiato).
 - Prima di consegnare: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
 

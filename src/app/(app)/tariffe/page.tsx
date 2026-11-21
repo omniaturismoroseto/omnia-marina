@@ -8,7 +8,7 @@ import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, todayRome, yearOf } from "@/lib/dates";
 import { formatDimensions, moneyInput } from "@/lib/format";
 import { SEASON_LABEL } from "@/lib/labels";
-import { RATE_FIELDS, groupPiersByName } from "@/lib/pricing";
+import { RATE_FIELDS, groupPiersByName, lowSeasonRanges } from "@/lib/pricing";
 import { uuidOrNull, type SearchParams } from "@/lib/params";
 import { OFFICIAL_CATEGORIES, OFFICIAL_LIST } from "@/server/official-price-list";
 import {
@@ -71,6 +71,13 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
     ? { id: group.ids.find((id) => rateRows.some((r) => r.pierId === id)) ?? group.ids[0], name: group.name, baseRate: group.baseRate, count: group.ids.length }
     : null;
 
+  // Periodi dichiarati (media e alta) e, tra l'uno e l'altro, la bassa stagione calcolata, in ordine di data.
+  const seasonRows = list
+    ? [
+        ...periods.map((p) => ({ key: p.id, id: p.id as string | null, season: p.season, startDate: p.startDate, endDate: p.endDate })),
+        ...lowSeasonRanges(periods, list.validFrom, list.validTo).map((r) => ({ key: `bassa:${r.startDate}`, id: null, season: "bassa" as const, ...r })),
+      ].sort((x, y) => x.startDate.localeCompare(y.startDate))
+    : [];
   const show = (cents: number | undefined) => (cents ? moneyInput(cents) : "");
   const valuesOf = (r: (typeof rateRows)[number] | undefined) => Object.fromEntries(RATE_FIELDS.map((k) => [k, show(r?.[k])])) as RateGridRow["values"];
   const grid: RateGridRow[] = categories.map((c) => {
@@ -119,7 +126,7 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
                 {list.name}
                 {list.validFrom <= today && today <= list.validTo ? <Badge tone="ok">In vigore</Badge> : list.validFrom > today ? <Badge tone="sea">Futuro</Badge> : <Badge>Scaduto</Badge>}
                 <span className="text-sm font-normal text-muted">
-                  dal {formatDate(list.validFrom)} al {formatDate(list.validTo)} · IVA {list.vatRate}% inclusa
+                  dal {formatDate(list.validFrom)} al {formatDate(list.validTo)} · {list.vatIncluded ? `IVA ${list.vatRate}% inclusa` : `prezzi senza IVA, più IVA ${list.vatRate}%`}
                 </span>
               </span>
             }
@@ -176,31 +183,37 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
                     )}
                   </div>
                 )}
-                <RatesGrid key={`${list.id}:${pier?.id ?? ""}`} listId={list.id} pierId={pier?.id ?? ""} rows={grid} editable={admin} />
+                <RatesGrid
+                  key={`${list.id}:${pier?.id ?? ""}:${list.vatRate}:${list.vatIncluded}`}
+                  listId={list.id}
+                  pierId={pier?.id ?? ""}
+                  rows={grid}
+                  editable={admin}
+                  vatRate={list.vatRate}
+                  vatIncluded={list.vatIncluded}
+                />
               </>
             )}
           </Card>
 
           <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
             <Card title="Stagioni">
-              <p className="mb-3 text-sm text-muted">Indica i periodi di media e alta stagione. Tutti gli altri giorni sono bassa stagione.</p>
-              {periods.length === 0 ? (
-                <p className="text-sm text-muted">Nessun periodo: tutto l&apos;anno è bassa stagione.</p>
-              ) : (
-                <ul className="divide-y divide-line-soft">
-                  {periods.map((p) => (
-                    <li key={p.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                      <span className="flex items-center gap-2">
-                        <Badge tone={p.season === "alta" ? "buoy" : "warn"}>{SEASON_LABEL[p.season]}</Badge>
-                        <span className="tabular-nums">
-                          {formatDate(p.startDate)} – {formatDate(p.endDate)}
-                        </span>
+              <p className="mb-3 text-sm text-muted">
+                Indica i periodi di media e alta stagione: i giorni che restano sono bassa stagione e compaiono qui da soli.
+              </p>
+              <ul className="divide-y divide-line-soft">
+                {seasonRows.map((p) => (
+                  <li key={p.key} className="flex items-center justify-between gap-3 py-2 text-sm">
+                    <span className="flex items-center gap-2">
+                      <Badge tone={p.season === "alta" ? "buoy" : p.season === "media" ? "warn" : "sea"}>{SEASON_LABEL[p.season]}</Badge>
+                      <span className="tabular-nums">
+                        {formatDate(p.startDate)} – {formatDate(p.endDate)}
                       </span>
-                      {admin && <DeletePeriodButton periodId={p.id} />}
-                    </li>
-                  ))}
-                </ul>
-              )}
+                    </span>
+                    {p.id ? admin && <DeletePeriodButton periodId={p.id} /> : <span className="text-xs text-muted">il resto del listino</span>}
+                  </li>
+                ))}
+              </ul>
               {admin && (
                 <div className="mt-4 border-t border-line-soft pt-4">
                   <SeasonPeriodForm listId={list.id} validFrom={list.validFrom} />
@@ -210,7 +223,7 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
 
             <Card title="Servizi e cauzioni">
               <p className="mb-3 text-sm text-muted">Posti auto, carrelli, cauzioni e altri servizi a prezzo fisso: si scelgono quando si crea un addebito.</p>
-              <PriceListExtras listId={list.id} extras={extras} editable={admin} />
+              <PriceListExtras listId={list.id} extras={extras} editable={admin} vatIncluded={list.vatIncluded} />
             </Card>
 
             <Card title="Simulatore">

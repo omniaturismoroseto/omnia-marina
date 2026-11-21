@@ -1,5 +1,5 @@
 {
-  "id": "f2edffb3-bd3e-47c9-bfa3-f1ba52586cc6",
+  "id": "fcae663a-cd9d-475b-8c5f-3165dcba8392",
   "prevId": "f0ddd036-9d87-4165-8e13-5665b0068e3c",
   "version": "7",
   "dialect": "postgresql",
@@ -77,37 +77,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "audit_log_marina_id_marinas_id_fk": {
           "name": "audit_log_marina_id_marinas_id_fk",
           "tableFrom": "audit_log",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "audit_log_user_id_users_id_fk": {
           "name": "audit_log_user_id_users_id_fk",
           "tableFrom": "audit_log",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -171,24 +171,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "berth_categories_marina_id_marinas_id_fk": {
           "name": "berth_categories_marina_id_marinas_id_fk",
           "tableFrom": "berth_categories",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -330,9 +330,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "berths_pier_idx": {
           "name": "berths_pier_idx",
@@ -345,50 +345,50 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "berths_marina_id_marinas_id_fk": {
           "name": "berths_marina_id_marinas_id_fk",
           "tableFrom": "berths",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "berths_pier_id_piers_id_fk": {
           "name": "berths_pier_id_piers_id_fk",
           "tableFrom": "berths",
+          "tableTo": "piers",
           "columnsFrom": [
             "pier_id"
           ],
-          "tableTo": "piers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "berths_category_id_berth_categories_id_fk": {
           "name": "berths_category_id_berth_categories_id_fk",
           "tableFrom": "berths",
+          "tableTo": "berth_categories",
           "columnsFrom": [
             "category_id"
           ],
-          "tableTo": "berth_categories",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -605,9 +605,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "boats_owner_idx": {
           "name": "boats_owner_idx",
@@ -620,50 +620,50 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "boats_marina_id_marinas_id_fk": {
           "name": "boats_marina_id_marinas_id_fk",
           "tableFrom": "boats",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "boats_owner_id_owners_id_fk": {
           "name": "boats_owner_id_owners_id_fk",
           "tableFrom": "boats",
+          "tableTo": "owners",
           "columnsFrom": [
             "owner_id"
           ],
-          "tableTo": "owners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "boats_import_id_owner_imports_id_fk": {
           "name": "boats_import_id_owner_imports_id_fk",
           "tableFrom": "boats",
+          "tableTo": "owner_imports",
           "columnsFrom": [
             "import_id"
           ],
-          "tableTo": "owner_imports",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -795,9 +795,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "charges_owner_idx": {
           "name": "charges_owner_idx",
@@ -810,9 +810,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "charges_contract_idx": {
           "name": "charges_contract_idx",
@@ -825,63 +825,63 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "charges_marina_id_marinas_id_fk": {
           "name": "charges_marina_id_marinas_id_fk",
           "tableFrom": "charges",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "charges_owner_id_owners_id_fk": {
           "name": "charges_owner_id_owners_id_fk",
           "tableFrom": "charges",
+          "tableTo": "owners",
           "columnsFrom": [
             "owner_id"
           ],
-          "tableTo": "owners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "charges_contract_id_contracts_id_fk": {
           "name": "charges_contract_id_contracts_id_fk",
           "tableFrom": "charges",
+          "tableTo": "contracts",
           "columnsFrom": [
             "contract_id"
           ],
-          "tableTo": "contracts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         },
         "charges_created_by_users_id_fk": {
           "name": "charges_created_by_users_id_fk",
           "tableFrom": "charges",
+          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -989,50 +989,50 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "contract_items_marina_id_marinas_id_fk": {
           "name": "contract_items_marina_id_marinas_id_fk",
           "tableFrom": "contract_items",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "contract_items_contract_id_contracts_id_fk": {
           "name": "contract_items_contract_id_contracts_id_fk",
           "tableFrom": "contract_items",
+          "tableTo": "contracts",
           "columnsFrom": [
             "contract_id"
           ],
-          "tableTo": "contracts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "contract_items_charge_id_charges_id_fk": {
           "name": "contract_items_charge_id_charges_id_fk",
           "tableFrom": "contract_items",
+          "tableTo": "charges",
           "columnsFrom": [
             "charge_id"
           ],
-          "tableTo": "charges",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1218,9 +1218,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "contracts_berth_idx": {
           "name": "contracts_berth_idx",
@@ -1239,9 +1239,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "contracts_owner_idx": {
           "name": "contracts_owner_idx",
@@ -1254,9 +1254,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "contracts_boat_idx": {
           "name": "contracts_boat_idx",
@@ -1269,76 +1269,76 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "contracts_marina_id_marinas_id_fk": {
           "name": "contracts_marina_id_marinas_id_fk",
           "tableFrom": "contracts",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "contracts_owner_id_owners_id_fk": {
           "name": "contracts_owner_id_owners_id_fk",
           "tableFrom": "contracts",
+          "tableTo": "owners",
           "columnsFrom": [
             "owner_id"
           ],
-          "tableTo": "owners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "contracts_boat_id_boats_id_fk": {
           "name": "contracts_boat_id_boats_id_fk",
           "tableFrom": "contracts",
+          "tableTo": "boats",
           "columnsFrom": [
             "boat_id"
           ],
-          "tableTo": "boats",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "contracts_berth_id_berths_id_fk": {
           "name": "contracts_berth_id_berths_id_fk",
           "tableFrom": "contracts",
+          "tableTo": "berths",
           "columnsFrom": [
             "berth_id"
           ],
-          "tableTo": "berths",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "contracts_created_by_users_id_fk": {
           "name": "contracts_created_by_users_id_fk",
           "tableFrom": "contracts",
+          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1458,9 +1458,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "ledger_payment_uq": {
           "name": "ledger_payment_uq",
@@ -1473,9 +1473,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "ledger_import_idx": {
           "name": "ledger_import_idx",
@@ -1488,63 +1488,63 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "ledger_entries_marina_id_marinas_id_fk": {
           "name": "ledger_entries_marina_id_marinas_id_fk",
           "tableFrom": "ledger_entries",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "ledger_entries_payment_id_payments_id_fk": {
           "name": "ledger_entries_payment_id_payments_id_fk",
           "tableFrom": "ledger_entries",
+          "tableTo": "payments",
           "columnsFrom": [
             "payment_id"
           ],
-          "tableTo": "payments",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "ledger_entries_import_id_ledger_imports_id_fk": {
           "name": "ledger_entries_import_id_ledger_imports_id_fk",
           "tableFrom": "ledger_entries",
+          "tableTo": "ledger_imports",
           "columnsFrom": [
             "import_id"
           ],
-          "tableTo": "ledger_imports",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "ledger_entries_created_by_users_id_fk": {
           "name": "ledger_entries_created_by_users_id_fk",
           "tableFrom": "ledger_entries",
+          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1644,37 +1644,37 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "ledger_imports_marina_id_marinas_id_fk": {
           "name": "ledger_imports_marina_id_marinas_id_fk",
           "tableFrom": "ledger_imports",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "ledger_imports_created_by_users_id_fk": {
           "name": "ledger_imports_created_by_users_id_fk",
           "tableFrom": "ledger_imports",
+          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1718,15 +1718,15 @@
         "marina_logos_marina_id_marinas_id_fk": {
           "name": "marina_logos_marina_id_marinas_id_fk",
           "tableFrom": "marina_logos",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1782,15 +1782,15 @@
         "marina_plans_marina_id_marinas_id_fk": {
           "name": "marina_plans_marina_id_marinas_id_fk",
           "tableFrom": "marina_plans",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2100,37 +2100,37 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "memberships_user_id_users_id_fk": {
           "name": "memberships_user_id_users_id_fk",
           "tableFrom": "memberships",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "memberships_marina_id_marinas_id_fk": {
           "name": "memberships_marina_id_marinas_id_fk",
           "tableFrom": "memberships",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2199,9 +2199,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "message_recipients_owner_idx": {
           "name": "message_recipients_owner_idx",
@@ -2214,63 +2214,63 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "message_recipients_marina_id_marinas_id_fk": {
           "name": "message_recipients_marina_id_marinas_id_fk",
           "tableFrom": "message_recipients",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "message_recipients_message_id_messages_id_fk": {
           "name": "message_recipients_message_id_messages_id_fk",
           "tableFrom": "message_recipients",
+          "tableTo": "messages",
           "columnsFrom": [
             "message_id"
           ],
-          "tableTo": "messages",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "message_recipients_owner_id_owners_id_fk": {
           "name": "message_recipients_owner_id_owners_id_fk",
           "tableFrom": "message_recipients",
+          "tableTo": "owners",
           "columnsFrom": [
             "owner_id"
           ],
-          "tableTo": "owners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "message_recipients_read_by_users_id_fk": {
           "name": "message_recipients_read_by_users_id_fk",
           "tableFrom": "message_recipients",
+          "tableTo": "users",
           "columnsFrom": [
             "read_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2354,37 +2354,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "messages_marina_id_marinas_id_fk": {
           "name": "messages_marina_id_marinas_id_fk",
           "tableFrom": "messages",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "messages_sender_id_users_id_fk": {
           "name": "messages_sender_id_users_id_fk",
           "tableFrom": "messages",
+          "tableTo": "users",
           "columnsFrom": [
             "sender_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2473,9 +2473,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "movements_boat_idx": {
           "name": "movements_boat_idx",
@@ -2494,76 +2494,76 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "movements_marina_id_marinas_id_fk": {
           "name": "movements_marina_id_marinas_id_fk",
           "tableFrom": "movements",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "movements_contract_id_contracts_id_fk": {
           "name": "movements_contract_id_contracts_id_fk",
           "tableFrom": "movements",
+          "tableTo": "contracts",
           "columnsFrom": [
             "contract_id"
           ],
-          "tableTo": "contracts",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "movements_boat_id_boats_id_fk": {
           "name": "movements_boat_id_boats_id_fk",
           "tableFrom": "movements",
+          "tableTo": "boats",
           "columnsFrom": [
             "boat_id"
           ],
-          "tableTo": "boats",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "movements_berth_id_berths_id_fk": {
           "name": "movements_berth_id_berths_id_fk",
           "tableFrom": "movements",
+          "tableTo": "berths",
           "columnsFrom": [
             "berth_id"
           ],
-          "tableTo": "berths",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         },
         "movements_user_id_users_id_fk": {
           "name": "movements_user_id_users_id_fk",
           "tableFrom": "movements",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2645,9 +2645,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "owner_access_user_idx": {
           "name": "owner_access_user_idx",
@@ -2660,63 +2660,63 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "owner_access_marina_id_marinas_id_fk": {
           "name": "owner_access_marina_id_marinas_id_fk",
           "tableFrom": "owner_access",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "owner_access_owner_id_owners_id_fk": {
           "name": "owner_access_owner_id_owners_id_fk",
           "tableFrom": "owner_access",
+          "tableTo": "owners",
           "columnsFrom": [
             "owner_id"
           ],
-          "tableTo": "owners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "owner_access_user_id_users_id_fk": {
           "name": "owner_access_user_id_users_id_fk",
           "tableFrom": "owner_access",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "owner_access_created_by_users_id_fk": {
           "name": "owner_access_created_by_users_id_fk",
           "tableFrom": "owner_access",
+          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2810,37 +2810,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "owner_imports_marina_id_marinas_id_fk": {
           "name": "owner_imports_marina_id_marinas_id_fk",
           "tableFrom": "owner_imports",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "owner_imports_created_by_users_id_fk": {
           "name": "owner_imports_created_by_users_id_fk",
           "tableFrom": "owner_imports",
+          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2923,60 +2923,60 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "owner_invites_marina_id_marinas_id_fk": {
           "name": "owner_invites_marina_id_marinas_id_fk",
           "tableFrom": "owner_invites",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "owner_invites_owner_id_owners_id_fk": {
           "name": "owner_invites_owner_id_owners_id_fk",
           "tableFrom": "owner_invites",
+          "tableTo": "owners",
           "columnsFrom": [
             "owner_id"
           ],
-          "tableTo": "owners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "owner_invites_created_by_users_id_fk": {
           "name": "owner_invites_created_by_users_id_fk",
           "tableFrom": "owner_invites",
+          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "owner_invites_code_unique": {
           "name": "owner_invites_code_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "code"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -3187,9 +3187,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "owners_marina_fiscal_idx": {
           "name": "owners_marina_fiscal_idx",
@@ -3208,37 +3208,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "owners_marina_id_marinas_id_fk": {
           "name": "owners_marina_id_marinas_id_fk",
           "tableFrom": "owners",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "owners_import_id_owner_imports_id_fk": {
           "name": "owners_import_id_owner_imports_id_fk",
           "tableFrom": "owners",
+          "tableTo": "owner_imports",
           "columnsFrom": [
             "import_id"
           ],
-          "tableTo": "owner_imports",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3327,9 +3327,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "payments_marina_date_idx": {
           "name": "payments_marina_date_idx",
@@ -3348,63 +3348,63 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "payments_marina_id_marinas_id_fk": {
           "name": "payments_marina_id_marinas_id_fk",
           "tableFrom": "payments",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "payments_charge_id_charges_id_fk": {
           "name": "payments_charge_id_charges_id_fk",
           "tableFrom": "payments",
+          "tableTo": "charges",
           "columnsFrom": [
             "charge_id"
           ],
-          "tableTo": "charges",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "payments_owner_id_owners_id_fk": {
           "name": "payments_owner_id_owners_id_fk",
           "tableFrom": "payments",
+          "tableTo": "owners",
           "columnsFrom": [
             "owner_id"
           ],
-          "tableTo": "owners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "payments_created_by_users_id_fk": {
           "name": "payments_created_by_users_id_fk",
           "tableFrom": "payments",
+          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3505,24 +3505,24 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "piers_marina_id_marinas_id_fk": {
           "name": "piers_marina_id_marinas_id_fk",
           "tableFrom": "piers",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3606,24 +3606,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "plan_features_marina_id_marinas_id_fk": {
           "name": "plan_features_marina_id_marinas_id_fk",
           "tableFrom": "plan_features",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3701,37 +3701,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "price_list_extras_marina_id_marinas_id_fk": {
           "name": "price_list_extras_marina_id_marinas_id_fk",
           "tableFrom": "price_list_extras",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "price_list_extras_price_list_id_price_lists_id_fk": {
           "name": "price_list_extras_price_list_id_price_lists_id_fk",
           "tableFrom": "price_list_extras",
+          "tableTo": "price_lists",
           "columnsFrom": [
             "price_list_id"
           ],
-          "tableTo": "price_lists",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3782,6 +3782,13 @@
           "notNull": true,
           "default": 22
         },
+        "vat_included": {
+          "name": "vat_included",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3808,24 +3815,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "price_lists_marina_id_marinas_id_fk": {
           "name": "price_lists_marina_id_marinas_id_fk",
           "tableFrom": "price_lists",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3928,50 +3935,50 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "privacy_consents_marina_id_marinas_id_fk": {
           "name": "privacy_consents_marina_id_marinas_id_fk",
           "tableFrom": "privacy_consents",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "privacy_consents_owner_id_owners_id_fk": {
           "name": "privacy_consents_owner_id_owners_id_fk",
           "tableFrom": "privacy_consents",
+          "tableTo": "owners",
           "columnsFrom": [
             "owner_id"
           ],
-          "tableTo": "owners",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "privacy_consents_recorded_by_users_id_fk": {
           "name": "privacy_consents_recorded_by_users_id_fk",
           "tableFrom": "privacy_consents",
+          "tableTo": "users",
           "columnsFrom": [
             "recorded_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4035,34 +4042,34 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "push_subscriptions_user_id_users_id_fk": {
           "name": "push_subscriptions_user_id_users_id_fk",
           "tableFrom": "push_subscriptions",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "push_subscriptions_endpoint_unique": {
           "name": "push_subscriptions_endpoint_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "endpoint"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -4166,6 +4173,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "service": {
+          "name": "service",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         }
       },
       "indexes": {},
@@ -4173,66 +4187,66 @@
         "rates_marina_id_marinas_id_fk": {
           "name": "rates_marina_id_marinas_id_fk",
           "tableFrom": "rates",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "rates_price_list_id_price_lists_id_fk": {
           "name": "rates_price_list_id_price_lists_id_fk",
           "tableFrom": "rates",
+          "tableTo": "price_lists",
           "columnsFrom": [
             "price_list_id"
           ],
-          "tableTo": "price_lists",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "rates_category_id_berth_categories_id_fk": {
           "name": "rates_category_id_berth_categories_id_fk",
           "tableFrom": "rates",
+          "tableTo": "berth_categories",
           "columnsFrom": [
             "category_id"
           ],
-          "tableTo": "berth_categories",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "rates_pier_id_piers_id_fk": {
           "name": "rates_pier_id_piers_id_fk",
           "tableFrom": "rates",
+          "tableTo": "piers",
           "columnsFrom": [
             "pier_id"
           ],
-          "tableTo": "piers",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "rates_list_category_pier_uq": {
           "name": "rates_list_category_pier_uq",
+          "nullsNotDistinct": true,
           "columns": [
             "price_list_id",
             "category_id",
             "pier_id"
-          ],
-          "nullsNotDistinct": true
+          ]
         }
       },
       "policies": {},
@@ -4294,37 +4308,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "season_periods_marina_id_marinas_id_fk": {
           "name": "season_periods_marina_id_marinas_id_fk",
           "tableFrom": "season_periods",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "season_periods_price_list_id_price_lists_id_fk": {
           "name": "season_periods_price_list_id_price_lists_id_fk",
           "tableFrom": "season_periods",
+          "tableTo": "price_lists",
           "columnsFrom": [
             "price_list_id"
           ],
-          "tableTo": "price_lists",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4387,9 +4401,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "sessions_owner_access_idx": {
           "name": "sessions_owner_access_idx",
@@ -4402,50 +4416,50 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "sessions_user_id_users_id_fk": {
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "sessions_marina_id_marinas_id_fk": {
           "name": "sessions_marina_id_marinas_id_fk",
           "tableFrom": "sessions",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         },
         "sessions_owner_access_id_owner_access_id_fk": {
           "name": "sessions_owner_access_id_owner_access_id_fk",
           "tableFrom": "sessions",
+          "tableTo": "owner_access",
           "columnsFrom": [
             "owner_access_id"
           ],
-          "tableTo": "owner_access",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4569,76 +4583,76 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "tasks_marina_id_marinas_id_fk": {
           "name": "tasks_marina_id_marinas_id_fk",
           "tableFrom": "tasks",
+          "tableTo": "marinas",
           "columnsFrom": [
             "marina_id"
           ],
-          "tableTo": "marinas",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "tasks_berth_id_berths_id_fk": {
           "name": "tasks_berth_id_berths_id_fk",
           "tableFrom": "tasks",
+          "tableTo": "berths",
           "columnsFrom": [
             "berth_id"
           ],
-          "tableTo": "berths",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         },
         "tasks_boat_id_boats_id_fk": {
           "name": "tasks_boat_id_boats_id_fk",
           "tableFrom": "tasks",
+          "tableTo": "boats",
           "columnsFrom": [
             "boat_id"
           ],
-          "tableTo": "boats",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         },
         "tasks_created_by_users_id_fk": {
           "name": "tasks_created_by_users_id_fk",
           "tableFrom": "tasks",
+          "tableTo": "users",
           "columnsFrom": [
             "created_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         },
         "tasks_closed_by_users_id_fk": {
           "name": "tasks_closed_by_users_id_fk",
           "tableFrom": "tasks",
+          "tableTo": "users",
           "columnsFrom": [
             "closed_by"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -4696,17 +4710,17 @@
       "uniqueConstraints": {
         "users_email_unique": {
           "name": "users_email_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "email"
-          ],
-          "nullsNotDistinct": false
+          ]
         },
         "users_firebase_uid_unique": {
           "name": "users_firebase_uid_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "firebase_uid"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -4916,10 +4930,10 @@
     }
   },
   "schemas": {},
-  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
+  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},

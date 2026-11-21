@@ -173,7 +173,7 @@ async function main() {
     const rateFor = new Map<string, RateRow>();
     for (const [i, cat] of categories.entries()) {
       const [dl, dm, dh, ml, mm, mh, an, waste] = RATES[i].map((v) => v * 100);
-      const row = { dailyLow: dl, dailyMid: dm, dailyHigh: dh, monthlyLow: ml, monthlyMid: mm, monthlyHigh: mh, annual: an, seasonal: 0, waste };
+      const row = { dailyLow: dl, dailyMid: dm, dailyHigh: dh, monthlyLow: ml, monthlyMid: mm, monthlyHigh: mh, annual: an, seasonal: 0, waste, service: 0 };
       rateFor.set(cat.id, row);
       await tx.insert(rates).values({ marinaId, priceListId: list.id, categoryId: cat.id, ...row });
     }
@@ -394,7 +394,7 @@ async function main() {
       // Come nell'app: sul pontile C il suo canone annuale, il resto dalla tariffa base.
       const base = rateFor.get(berth.categoryId!)!;
       const inZone = berthCode.startsWith("C");
-      const zoneRow = { ...base, dailyLow: 0, dailyMid: 0, dailyHigh: 0, monthlyLow: 0, monthlyMid: 0, monthlyHigh: 0, seasonal: 0, waste: 0, annual: zoneAnnual(berth.categoryId!) };
+      const zoneRow = { ...base, dailyLow: 0, dailyMid: 0, dailyHigh: 0, monthlyLow: 0, monthlyMid: 0, monthlyHigh: 0, seasonal: 0, waste: 0, service: 0, annual: zoneAnnual(berth.categoryId!) };
       const rows: (RateRow & { pierId: string | null })[] = [{ ...base, pierId: null }, ...(inZone ? [{ ...zoneRow, pierId: pierC }] : [])];
       const rate = pierRate(rows, inZone ? pierC : null)!;
       return quoteStay({ type, startDate, endDate, rate, periods }).totalCents;
