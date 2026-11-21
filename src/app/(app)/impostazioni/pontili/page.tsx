@@ -4,7 +4,7 @@ import { asc, eq } from "drizzle-orm";
 import { page } from "@/components/page";
 import { Badge, Card, Notice, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { berthCategories, berths, piers, tariffZones } from "@/db/schema";
+import { berthCategories, berths, piers } from "@/db/schema";
 import { requireMarina } from "@/lib/context";
 import { formatDimensions } from "@/lib/format";
 import { BERTH_STATUS_LABEL } from "@/lib/labels";
@@ -24,13 +24,11 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
   const ctx = await requireMarina(["admin"]);
   const welcome = one((await searchParams).benvenuto) === "1";
 
-  const [pierRows, berthRows, categories, zones] = await Promise.all([
+  const [pierRows, berthRows, categories] = await Promise.all([
     db.select().from(piers).where(eq(piers.marinaId, ctx.marinaId)).orderBy(asc(piers.sortOrder), asc(piers.code)),
     db.select().from(berths).where(eq(berths.marinaId, ctx.marinaId)).orderBy(asc(berths.code)),
     db.select().from(berthCategories).where(eq(berthCategories.marinaId, ctx.marinaId)).orderBy(asc(berthCategories.sortOrder), asc(berthCategories.maxLengthCm)),
-    db.select({ id: tariffZones.id, name: tariffZones.name }).from(tariffZones).where(eq(tariffZones.marinaId, ctx.marinaId)),
   ]);
-  const zoneName = new Map(zones.map((z) => [z.id, z.name]));
   const categoryOptions = categories.map((c) => ({ id: c.id, label: `${c.name} (${formatDimensions(c.maxLengthCm, c.maxBeamCm)})` }));
   const categoryName = new Map(categories.map((c) => [c.id, c.name]));
 
@@ -60,11 +58,9 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
               title={
                 <span className="flex flex-wrap items-center gap-2">
                   {pier.name} · {list.length} posti
-                  {pier.tariffZoneId && zoneName.has(pier.tariffZoneId) && (
-                    <Link href={`/tariffe?zona=${pier.tariffZoneId}`} title="Zona tariffaria" className="no-underline">
-                      <Badge tone="sea">{zoneName.get(pier.tariffZoneId)}</Badge>
-                    </Link>
-                  )}
+                  <Link href={`/tariffe?pontile=${pier.id}`} title="Tariffa del pontile" className="no-underline">
+                    <Badge tone={pier.baseRate ? "neutral" : "sea"}>{pier.baseRate ? "Tariffa base" : "Prezzi propri"}</Badge>
+                  </Link>
                 </span>
               }
               actions={<DeletePierButton pierId={pier.id} berthCount={list.length} />}

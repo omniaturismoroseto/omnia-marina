@@ -17,11 +17,14 @@ export function Form({
   children,
   className,
   resetOnSuccess = false,
+  confirm,
 }: {
   action: FormAction;
   children: ReactNode;
   className?: string;
   resetOnSuccess?: boolean;
+  /** Domanda di conferma prima dell'invio. */
+  confirm?: string;
 }) {
   const [state, dispatch, pending] = useActionState(action, undefined);
   const ref = useRef<HTMLFormElement>(null);
@@ -32,6 +35,7 @@ export function Form({
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (confirm && !window.confirm(confirm)) return;
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const data = new FormData(event.currentTarget, submitter);
     startTransition(() => dispatch(data));

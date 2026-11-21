@@ -26,17 +26,54 @@ export interface RateRow {
 export const RATE_FIELDS = ["dailyLow", "dailyMid", "dailyHigh", "monthlyLow", "monthlyMid", "monthlyHigh", "annual", "seasonal", "waste"] as const;
 
 /**
- * Tariffa di una categoria in una zona: ogni importo della zona, se compilato, prende il posto di quello della tariffa base.
- * Così una zona può ritoccare solo gli annuali e continuare a usare i prezzi base per transiti e mensili.
- * Restituisce null se non c'è nessuna delle due righe.
+ * Tariffa di una categoria su un pontile con prezzi propri (pierId vuoto = tariffa base): ogni importo del pontile,
+ * se compilato, prende il posto di quello della tariffa base. Così un pontile può ritoccare solo gli annuali e
+ * continuare a usare i prezzi base per transiti e mensili. Restituisce null se non c'è nessuna delle due righe.
+ * Per un pontile che usa la tariffa base (piers.base_rate) si passa null: vedi `ratePierId`.
  */
-export function zoneRate<T extends RateRow & { zoneId: string | null }>(rows: T[], zoneId: string | null): RateRow | null {
-  const base = rows.find((r) => r.zoneId === null) ?? null;
-  const zone = zoneId ? (rows.find((r) => r.zoneId === zoneId) ?? null) : null;
-  if (!base && !zone) return null;
+export function pierRate<T extends RateRow & { pierId: string | null }>(rows: T[], pierId: string | null): RateRow | null {
+  const base = rows.find((r) => r.pierId === null) ?? null;
+  const own = pierId ? (rows.find((r) => r.pierId === pierId) ?? null) : null;
+  if (!base && !own) return null;
   const merged = {} as RateRow;
-  for (const field of RATE_FIELDS) merged[field] = zone?.[field] || base?.[field] || 0;
+  for (const field of RATE_FIELDS) merged[field] = own?.[field] || base?.[field] || 0;
   return merged;
+}
+
+/** Pontili con lo stesso nome (maiuscole e spazi a parte) hanno un'unica tariffa: questa è la chiave che li unisce. */
+export function pierGroupKey(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLocaleLowerCase("it");
+}
+
+export interface PierGroup<T> {
+  key: string;
+  name: string;
+  piers: T[];
+  ids: string[];
+  /** Acceso se tutti i pontili del gruppo usano la tariffa base. */
+  baseRate: boolean;
+}
+
+/** Raggruppa i pontili per nome, nell'ordine in cui arrivano: in Tariffe ogni nome compare una volta sola. */
+export function groupPiersByName<T extends { id: string; name: string; baseRate: boolean }>(piers: T[]): PierGroup<T>[] {
+  const groups = new Map<string, PierGroup<T>>();
+  for (const pier of piers) {
+    const key = pierGroupKey(pier.name);
+    const group = groups.get(key);
+    if (group) {
+      group.piers.push(pier);
+      group.ids.push(pier.id);
+      group.baseRate &&= pier.baseRate;
+    } else {
+      groups.set(key, { key, name: pier.name.trim(), piers: [pier], ids: [pier.id], baseRate: pier.baseRate });
+    }
+  }
+  return [...groups.values()];
+}
+
+/** Il pontile di cui leggere i prezzi propri: nessuno se usa la tariffa base. */
+export function ratePierId(pier: { id: string; baseRate: boolean } | null | undefined): string | null {
+  return pier && !pier.baseRate ? pier.id : null;
 }
 
 export interface QuoteLine {
