@@ -169,6 +169,13 @@
       "when": 1795276821823,
       "tag": "0023_riallinea_database",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795276930572,
+      "tag": "0024_base_disegnata",
+      "breakpoints": true
     }
   ]
 }

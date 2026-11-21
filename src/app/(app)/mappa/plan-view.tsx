@@ -45,12 +45,15 @@ export function PlanView({
   hrefFor,
   features,
   bounds,
+  baseUrl,
 }: {
   mode: "foto" | "schema";
   // Sfondo (terra, acqua, verde, edifici) e servizi, già nell'ordine di disegno.
   features: PlanFeature[];
   // Area mostrata nello schema: tutto il porto disegnato.
   bounds: { x: number; y: number; width: number; height: number };
+  // Base disegnata (stessa inquadratura della foto): nello schema sostituisce il disegno automatico di terra e pontili.
+  baseUrl: string | null;
   berths: BoardBerth[];
   drawing: Drawing;
   width: number;
@@ -60,7 +63,7 @@ export function PlanView({
   selectedId: string | null;
   hrefFor: (berthId: string) => string;
 }) {
-  const view = mode === "schema" ? bounds : { x: 0, y: 0, width, height };
+  const view = mode === "schema" && !baseUrl ? bounds : { x: 0, y: 0, width, height };
   // Unità di disegno proporzionata all'area mostrata: spessori e testi non dipendono dalla risoluzione della foto.
   const u = Math.max(view.width, view.height) / 1000;
   const m = pxPerMeter;
@@ -76,6 +79,8 @@ export function PlanView({
     >
       {mode === "foto" ? (
         <image href={imageUrl} width={width} height={height} />
+      ) : baseUrl ? (
+        <image href={baseUrl} width={width} height={height} preserveAspectRatio="none" />
       ) : (
         <>
           <rect x={view.x} y={view.y} width={view.width} height={view.height} fill={WATER} />

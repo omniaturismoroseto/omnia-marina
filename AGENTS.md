@@ -57,7 +57,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Impostazioni → Pianta (`surroundings-editor.tsx`): terra e acqua dai colori della foto nel browser (`src/lib/land-mask.ts`, semi in acqua
   davanti alla prua dei posti, posti barca forzati ad acqua), edifici/verde/servizi da Claude (`analyzeSurroundings`, stesso limite
   giornaliero delle analisi; collaudi con `PLAN_SURROUNDINGS_FIXTURE`), poi ritocchi a mano e `savePlanFeatures` (sostituisce tutto).
-  Una foto con inquadratura diversa azzera posti, linee dei pontili e sfondo.
+  Base disegnata (`marina_plan_bases`, `/pianta/base`, `base-uploader.tsx`): PNG/JPEG fatto fuori dall'app ricalcando la foto, stesse
+  proporzioni (`baseMatchesPhoto` in `src/lib/plan-base.ts`, qualunque risoluzione); se c'è, lo schema mostra la base al posto del disegno
+  automatico (terra, forme, pontili) e sopra barche, nomi dei pontili (da Impostazioni → Pontili) e servizi (spostabili dalla direzione).
+  Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
 - Numerazione dei contratti: le bozze non hanno numero (`seq`/`number` vuoti, in stampa «BOZZA»); il numero nasce all'attivazione
   ed è il più basso libero dell'anno (`src/lib/contract-numbers.ts`, `assignContractNumber`). «Torna in bozza» (`revertToDraft`) libera
   numero e addebiti mai incassati; i buchi (`contractNumberGaps`) si segnalano in elenco contratti e cruscotto finché non vengono ripresi.
