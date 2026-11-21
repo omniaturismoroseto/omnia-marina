@@ -121,7 +121,12 @@ export async function verifyLogin(email: string, password: string): Promise<Logi
   }
 
   const res = await identityToolkit<{ localId: string }>("signInWithPassword", { email, password, returnSecureToken: true });
-  if (!res.ok) return { ok: false, reason: loginFailure(res.code) };
+  if (!res.ok) {
+    const reason = loginFailure(res.code);
+    // Gli errori di configurazione (chiave web sbagliata, metodo email/password spento…) finiscono nel registro col loro codice.
+    if (reason === "unavailable") console.error(`Accesso con Firebase non riuscito per ${email}: ${res.code}`);
+    return { ok: false, reason };
+  }
   // Solo gli account collegati a un utente dell'app entrano.
   const [linked] = await db.select({ id: users.id }).from(users).where(eq(users.firebaseUid, res.data.localId)).limit(1);
   return linked ? { ok: true, userId: linked.id } : { ok: false, reason: "credentials" };
