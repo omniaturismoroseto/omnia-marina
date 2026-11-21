@@ -56,7 +56,7 @@ export function PhotoUploader({ hasPhoto, placedCount }: { hasPhoto: boolean; pl
 
   async function onFile(file: File | undefined) {
     if (!file) return;
-    if (hasPhoto && placedCount > 0 && !window.confirm("Se la nuova foto ha un'inquadratura diversa, le posizioni dei posti già disposti verranno azzerate. Continuare?")) return;
+    if (hasPhoto && placedCount > 0 && !window.confirm("Se la nuova foto ha un'inquadratura diversa, le posizioni dei posti già disposti e lo sfondo della mappa verranno azzerati. Continuare?")) return;
     try {
       await send("POST", await prepare(file));
     } catch (error) {
@@ -88,7 +88,7 @@ export function PhotoUploader({ hasPhoto, placedCount }: { hasPhoto: boolean; pl
             className="btn btn-danger"
             disabled={busy}
             onClick={() => {
-              if (window.confirm("Rimuovere la foto? Scala e posizioni dei posti sulla pianta andranno perse. La mappa tornerà allo schema.")) void send("DELETE");
+              if (window.confirm("Rimuovere la foto? Scala, posizioni dei posti e sfondo della mappa andranno persi. La mappa tornerà allo schema.")) void send("DELETE");
             }}
           >
             <Trash2 size={16} aria-hidden="true" />

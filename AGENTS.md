@@ -47,6 +47,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   La linea di ogni pontile (`piers.plan_ax/ay/bx/by`, `plan_width_m`, 0 = banchina) si salva quando lo si traccia nell'editor o
   lo crea il riconoscimento automatico; senza linea la geometria si ricava dai posti. Senza pianta resta la griglia dei pontili.
   `PlanZoom` (`src/app/(app)/mappa/plan-zoom.tsx`): niente barre né pulsanti di zoom, si trascina e si ingrandisce con rotellina/dita.
+  Sfondo e servizi dello schema in `plan_features` (terra, acqua che scava la terra, edificio, verde, servizio = un punto con il tipo
+  del catalogo `src/lib/port-services.ts`, icone in `src/components/service-icon.tsx`; colori in `src/lib/plan-style.ts`). Editor in
+  Impostazioni → Pianta (`surroundings-editor.tsx`): terra e acqua dai colori della foto nel browser (`src/lib/land-mask.ts`, semi in acqua
+  davanti alla prua dei posti, posti barca forzati ad acqua), edifici/verde/servizi da Claude (`analyzeSurroundings`, stesso limite
+  giornaliero delle analisi; collaudi con `PLAN_SURROUNDINGS_FIXTURE`), poi ritocchi a mano e `savePlanFeatures` (sostituisce tutto).
+  Una foto con inquadratura diversa azzera posti, linee dei pontili e sfondo.
 - Numerazione dei contratti: le bozze non hanno numero (`seq`/`number` vuoti, in stampa «BOZZA»); il numero nasce all'attivazione
   ed è il più basso libero dell'anno (`src/lib/contract-numbers.ts`, `assignContractNumber`). «Torna in bozza» (`revertToDraft`) libera
   numero e addebiti mai incassati; i buchi (`contractNumberGaps`) si segnalano in elenco contratti e cruscotto finché non vengono ripresi.

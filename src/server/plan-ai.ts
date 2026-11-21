@@ -5,6 +5,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { AnthropicVertex } from "@anthropic-ai/vertex-sdk";
 import { z } from "zod";
 import type { AiAnalysis } from "@/lib/plan-analysis";
+import { SERVICE_KEYS } from "@/lib/port-services";
 
 /*
  * Riconoscimento automatico di pontili e banchine nella foto aerea, con Claude. Due strade (vedi COME-LAVORIAMO.md):
@@ -42,6 +43,39 @@ const AnalysisSchema = z.object({
   ),
   notes: z.string().describe("Al massimo due frasi in italiano su dubbi o parti della foto poco leggibili; vuoto se nessuno"),
 });
+
+// Intorno del porto: edifici, verde e servizi, per lo sfondo dello schema della mappa.
+const SurroundingsSchema = z.object({
+  buildings: z.array(
+    z.object({
+      name: z.string().describe("Che cos'è, se si capisce (es. «Capitaneria», «Capannone del cantiere»); vuoto altrimenti"),
+      outline: z.array(point).describe("Contorno del tetto: da 4 a 12 vertici in ordine, senza ripetere il primo"),
+    }),
+  ),
+  green: z.array(z.object({ outline: z.array(point).describe("Contorno dell'area verde: da 4 a 16 vertici in ordine") })),
+  services: z.array(
+    z.object({
+      type: z.enum(SERVICE_KEYS),
+      name: z.string().describe("Nome scritto o evidente (es. insegna); vuoto se non si legge"),
+      at: point.describe("Dove si trova il servizio: per un parcheggio il centro dell'area, per il carburante la pompa sulla banchina"),
+    }),
+  ),
+  notes: z.string().describe("Al massimo due frasi in italiano su dubbi; vuoto se nessuno"),
+});
+
+export type AiSurroundings = z.infer<typeof SurroundingsSchema>;
+
+function surroundingsPrompt(width: number, height: number): string {
+  return `Questa è una foto aerea, ripresa dall'alto, di un porto turistico (${width} × ${height} pixel). Serve a disegnare una mappa illustrata del porto, come quelle sui siti dei marina, con gli edifici e i servizi.
+
+Individua:
+- buildings: gli edifici a terra vicino al porto (tetti), ciascuno con il contorno semplificato (da 4 a 12 vertici). Ignora barche, pontili e moli: quelli sono già disegnati. Al massimo 60 edifici, i più vicini al porto.
+- green: le aree verdi evidenti (giardini, alberature, aiuole grandi), con il contorno semplificato. Al massimo 20.
+- services: i servizi che si riconoscono con buona sicurezza. Tipi possibili: ${SERVICE_KEYS.join(", ")}.
+  Per esempio: parcheggio dove ci sono file di auto; cantiere dove ci sono barche a terra su invasi e capannoni; gru dove c'è la vasca di alaggio del travel lift; scivolo dove una rampa entra in acqua; carburante dove c'è il distributore sulla banchina; bar e ristorante dove si vedono tavolini e ombrelloni o un'insegna. Non inventare servizi che non si vedono: meglio pochi e giusti.
+
+Le coordinate sono millesimi della foto: x da 0 (bordo sinistro) a 1000 (bordo destro), y da 0 (bordo in alto) a 1000 (bordo in basso). Sii preciso: i contorni verranno sovrapposti alla foto.`;
+}
 
 function buildPrompt(width: number, height: number, pxPerMeter: number | null): string {
   const scale = pxPerMeter
@@ -101,7 +135,7 @@ function configuredProvider(): Provider | null {
 }
 
 export function planAnalysisAvailable(): boolean {
-  return Boolean(configuredProvider() || process.env.PLAN_ANALYSIS_FIXTURE);
+  return Boolean(configuredProvider() || process.env.PLAN_ANALYSIS_FIXTURE || process.env.PLAN_SURROUNDINGS_FIXTURE);
 }
 
 function defaultClient(): Anthropic | AnthropicVertex {
@@ -119,19 +153,27 @@ function defaultClient(): Anthropic | AnthropicVertex {
   });
 }
 
+type Photo = { data: Buffer; mime: string; width: number; height: number };
+
 /**
  * Chiede a Claude di riconoscere pontili e banchine nella foto.
  * `client` si può sostituire nei test; in produzione è il client Vertex AI del progetto.
  */
-export async function analyzePlanPhoto(
-  photo: { data: Buffer; mime: string; width: number; height: number },
-  pxPerMeter: number | null,
-  client: Anthropic | AnthropicVertex | null = null,
-): Promise<AiAnalysis> {
+export async function analyzePlanPhoto(photo: Photo, pxPerMeter: number | null, client: Anthropic | AnthropicVertex | null = null): Promise<AiAnalysis> {
   // Solo per i collaudi: una risposta preparata, senza chiamare Google.
   const fixture = process.env.PLAN_ANALYSIS_FIXTURE;
   if (fixture && !client) return AnalysisSchema.parse(JSON.parse(await readFile(fixture, "utf8")));
+  return askAboutPhoto(photo, buildPrompt(photo.width, photo.height, pxPerMeter), AnalysisSchema, client);
+}
 
+/** Chiede a Claude edifici, aree verdi e servizi attorno al porto. */
+export async function analyzeSurroundingsPhoto(photo: Photo, client: Anthropic | AnthropicVertex | null = null): Promise<AiSurroundings> {
+  const fixture = process.env.PLAN_SURROUNDINGS_FIXTURE;
+  if (fixture && !client) return SurroundingsSchema.parse(JSON.parse(await readFile(fixture, "utf8")));
+  return askAboutPhoto(photo, surroundingsPrompt(photo.width, photo.height), SurroundingsSchema, client);
+}
+
+async function askAboutPhoto<T extends z.ZodType>(photo: Photo, prompt: string, schema: T, client: Anthropic | AnthropicVertex | null): Promise<z.infer<T>> {
   const api = client ?? defaultClient();
   const provider: Provider = api instanceof AnthropicVertex ? "vertex" : "anthropic";
   let message;
@@ -145,7 +187,7 @@ export async function analyzePlanPhoto(
         ...(provider === "anthropic" ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
         max_tokens: 16000,
         thinking: { type: "adaptive" },
-        output_config: { effort: "high", format: betaZodOutputFormat(AnalysisSchema) },
+        output_config: { effort: "high", format: betaZodOutputFormat(schema) },
         messages: [
           {
             role: "user",
@@ -154,7 +196,7 @@ export async function analyzePlanPhoto(
                 type: "image",
                 source: { type: "base64", media_type: photo.mime === "image/png" ? "image/png" : "image/jpeg", data: photo.data.toString("base64") },
               },
-              { type: "text", text: buildPrompt(photo.width, photo.height, pxPerMeter) },
+              { type: "text", text: prompt },
             ],
           },
         ],
@@ -184,7 +226,7 @@ export async function analyzePlanPhoto(
     throw new PlanAnalysisError("L'analisi non è riuscita. Riprova tra poco; se succede ancora, guarda il registro dell'app.");
   }
 
-  if (message.stop_reason === "refusal") throw new PlanAnalysisError("Il servizio di analisi ha rifiutato questa immagine. Disponi i pontili a mano.");
+  if (message.stop_reason === "refusal") throw new PlanAnalysisError("Il servizio di analisi ha rifiutato questa immagine: procedi a mano.");
   if (message.stop_reason === "max_tokens") throw new PlanAnalysisError("La risposta dell'analisi è incompleta. Riprova con una foto inquadrata più da vicino.");
 
   const text = message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
@@ -195,7 +237,7 @@ export async function analyzePlanPhoto(
     console.error("Risposta dell'analisi non in formato JSON:", text.slice(0, 500));
     throw new PlanAnalysisError("La risposta dell'analisi non è leggibile. Riprova.");
   }
-  const result = AnalysisSchema.safeParse(parsed);
+  const result = schema.safeParse(parsed);
   if (!result.success) {
     console.error("Risposta dell'analisi non conforme allo schema:", result.error.issues.slice(0, 5));
     throw new PlanAnalysisError("La risposta dell'analisi non è leggibile. Riprova.");

@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { berthSizePx } from "@/lib/plan";
+import { ServiceMarker } from "@/components/service-icon";
 import { boatPath, cabinPath, type Drawing } from "@/lib/plan-drawing";
+import { pathOf, type PlanFeature } from "@/lib/plan-features";
+import { PIER, SHAPE, WATER } from "@/lib/plan-style";
+import { serviceTitle } from "@/lib/port-services";
 import { STATE_LABEL, type BerthState, type BoardBerth } from "@/server/board";
 
 // Colori della barca per stato; «sagoma» = barca assegnata ma non in porto (tratteggiata).
@@ -39,8 +43,14 @@ export function PlanView({
   imageUrl,
   selectedId,
   hrefFor,
+  features,
+  bounds,
 }: {
   mode: "foto" | "schema";
+  // Sfondo (terra, acqua, verde, edifici) e servizi, già nell'ordine di disegno.
+  features: PlanFeature[];
+  // Area mostrata nello schema: tutto il porto disegnato.
+  bounds: { x: number; y: number; width: number; height: number };
   berths: BoardBerth[];
   drawing: Drawing;
   width: number;
@@ -50,11 +60,12 @@ export function PlanView({
   selectedId: string | null;
   hrefFor: (berthId: string) => string;
 }) {
-  const view = mode === "schema" ? drawing.bounds : { x: 0, y: 0, width, height };
+  const view = mode === "schema" ? bounds : { x: 0, y: 0, width, height };
   // Unità di disegno proporzionata all'area mostrata: spessori e testi non dipendono dalla risoluzione della foto.
   const u = Math.max(view.width, view.height) / 1000;
   const m = pxPerMeter;
   const labelSize = clamp(14 * u, 1.6 * m, 6 * m);
+  const markerSize = clamp(11 * u, 1.5 * m, 8 * m);
 
   return (
     <svg
@@ -67,13 +78,20 @@ export function PlanView({
         <image href={imageUrl} width={width} height={height} />
       ) : (
         <>
-          <rect x={view.x} y={view.y} width={view.width} height={view.height} fill="#eaf2f6" />
+          <rect x={view.x} y={view.y} width={view.width} height={view.height} fill={WATER} />
+          {features.map((f) =>
+            f.kind === "servizio" ? null : (
+              <path key={f.id} d={pathOf(f.points)} strokeLinejoin="round" strokeWidth={0.15 * m} {...SHAPE[f.kind]}>
+                {f.name && <title>{f.name}</title>}
+              </path>
+            ),
+          )}
           {drawing.piers.map((p) => (
             <polygon
               key={p.id}
               points={p.outline.map((q) => `${q.x},${q.y}`).join(" ")}
-              fill="#c4c9cd"
-              stroke="#a7aeb4"
+              fill={PIER.fill}
+              stroke={PIER.stroke}
               strokeWidth={0.12 * m}
               strokeLinejoin="round"
             />
@@ -156,6 +174,15 @@ export function PlanView({
         );
       })}
 
+      {features.map((f) =>
+        f.kind === "servizio" && f.service ? (
+          <g key={f.id}>
+            <title>{serviceTitle(f.service, f.name)}</title>
+            <ServiceMarker service={f.service} x={f.points[0].x} y={f.points[0].y} r={markerSize} />
+          </g>
+        ) : null,
+      )}
+
       {mode === "schema" &&
         drawing.piers.map((p) => (
           <text
@@ -168,7 +195,7 @@ export function PlanView({
             fontWeight={600}
             letterSpacing={labelSize * 0.06}
             fill="#2a4a63"
-            stroke="#eaf2f6"
+            stroke={WATER}
             strokeWidth={labelSize * 0.25}
             paintOrder="stroke"
             pointerEvents="none"
