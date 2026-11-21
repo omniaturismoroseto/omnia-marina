@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, startTransition, use, useActionState, useEffect, useId, useRef } from "react";
+import { createContext, startTransition, use, useActionState, useEffect, useId, useRef, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import type { ComponentProps, FormEvent, ReactNode } from "react";
 import type { FormState } from "@/lib/forms";
 
@@ -94,12 +95,44 @@ function FieldShell({
 
 type BaseProps = { name: string; label: string; hint?: ReactNode; wrapperClassName?: string };
 
-export function Field({ name, label, hint, wrapperClassName, required, ...props }: BaseProps & Omit<ComponentProps<"input">, "name">) {
+export function Field({ name, label, hint, wrapperClassName, required, type, ...props }: BaseProps & Omit<ComponentProps<"input">, "name">) {
   const id = useId();
   const error = useFieldError(name);
+  // Le password hanno accanto il pulsante per mostrarle o nasconderle.
+  const [shown, setShown] = useState(false);
+  const isPassword = type === "password";
+  const input = (
+    <input
+      id={id}
+      name={name}
+      required={required}
+      aria-invalid={error ? true : undefined}
+      aria-describedby={error ? `${id}-err` : undefined}
+      className={isPassword ? "input pr-11" : "input"}
+      type={isPassword && shown ? "text" : type}
+      {...props}
+    />
+  );
   return (
     <FieldShell id={id} label={label} hint={hint} error={error} required={required} className={wrapperClassName}>
-      <input id={id} name={name} required={required} aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-err` : undefined} className="input" {...props} />
+      {isPassword ? (
+        <div className="relative">
+          {input}
+          <button
+            type="button"
+            onClick={() => setShown((v) => !v)}
+            aria-label={shown ? "Nascondi la password" : "Mostra la password"}
+            aria-pressed={shown}
+            aria-controls={id}
+            title={shown ? "Nascondi la password" : "Mostra la password"}
+            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-md text-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-sea/40 focus-visible:outline-none"
+          >
+            {shown ? <EyeOff className="size-[18px]" aria-hidden="true" /> : <Eye className="size-[18px]" aria-hidden="true" />}
+          </button>
+        </div>
+      ) : (
+        input
+      )}
     </FieldShell>
   );
 }

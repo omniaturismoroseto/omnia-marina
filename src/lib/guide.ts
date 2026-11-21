@@ -381,7 +381,7 @@ export const GUIDE: GuideSection[] = [
         ],
       },
     ],
-    tips: ["Chi lavora in più porti trova «Cambia porto» nel menu."],
+    tips: ["Chi lavora in più porti trova «Cambia porto» nel menu.", "Tocca l'occhio a destra del campo password per vedere quello che stai scrivendo; toccalo di nuovo per nasconderlo."],
     link: { href: "/account", label: "Apri il mio account" },
   },
   {
