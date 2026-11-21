@@ -12,7 +12,7 @@ import { ITEM_KINDS } from "@/lib/contract-items";
 import { addMonths, isValidISODate } from "@/lib/dates";
 import { parseMoney } from "@/lib/format";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
-import { RATE_FIELDS, pierGroupKey, pierRate, quoteStay, ratePierId, type Quote } from "@/lib/pricing";
+import { RATE_FIELDS, grossQuote, pierGroupKey, pierRate, quoteStay, ratePierId, type Quote } from "@/lib/pricing";
 import { loadOfficialPriceList, OFFICIAL_LIST } from "./official-price-list";
 
 const ADMIN = ["admin" as const];
@@ -55,13 +55,16 @@ const listSchema = z.object({
   validFrom: f.date(),
   validTo: f.date(),
   vatRate: f.int(0, 30, "Aliquota non valida"),
+  // «inclusa»: i prezzi scritti comprendono l'IVA; «esclusa»: sono netti e l'IVA si aggiunge.
+  vatMode: f.choice(["esclusa", "inclusa"]),
 });
 
 export async function savePriceList(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
   const parsed = parseForm(listSchema, formData);
   if (!parsed.ok) return parsed.state;
-  const { id, ...data } = parsed.data;
+  const { id, vatMode, ...rest } = parsed.data;
+  const data = { ...rest, vatIncluded: vatMode === "inclusa" };
   if (data.validTo < data.validFrom) return fail("Controlla i campi evidenziati.", { validTo: "La fine precede l'inizio." });
 
   if (id) {
@@ -101,6 +104,7 @@ export async function duplicatePriceList(_prev: FormState, formData: FormData): 
         validFrom: addMonths(source.validFrom, 12),
         validTo: addMonths(source.validTo, 12),
         vatRate: source.vatRate,
+        vatIncluded: source.vatIncluded,
       })
       .returning({ id: priceLists.id });
     const periods = await tx.select().from(seasonPeriods).where(eq(seasonPeriods.priceListId, source.id));
@@ -291,7 +295,7 @@ export async function simulateQuote(input: {
   type: string;
   startDate: string;
   endDate: string;
-}): Promise<(Quote & { wasteCents: number }) | null> {
+}): Promise<(Quote & { wasteCents: number; serviceCents: number }) | null> {
   const ctx = await requireMarina(OFFICE);
   const types = ["annuale", "stagionale", "mensile", "transito"] as const;
   if (!types.includes(input.type as (typeof types)[number])) return null;
@@ -320,7 +324,8 @@ export async function simulateQuote(input: {
   const rate = pierRate(rateRows, pierId);
   if (!rate) return null;
   const type = input.type as (typeof types)[number];
-  return { ...quoteStay({ type, startDate: input.startDate, endDate: input.endDate, rate, periods }), wasteCents: type === "annuale" ? rate.waste : 0 };
+  // Il simulatore mostra gli importi IVA compresa, come li proporrà il contratto.
+  return grossQuote(quoteStay({ type, startDate: input.startDate, endDate: input.endDate, rate, periods }), rate, type, list);
 }
 
 // ───────────────────────── Tariffa base e pontili ─────────────────────────

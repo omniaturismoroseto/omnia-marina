@@ -21,9 +21,27 @@ export interface RateRow {
   seasonal: number;
   /** Quota rifiuti proposta nei contratti annuali come voce a parte (non entra nel canone). */
   waste: number;
+  /** Condominio (spese di gestione comuni) proposto nei contratti annuali come voce a parte. */
+  service: number;
 }
 
-export const RATE_FIELDS = ["dailyLow", "dailyMid", "dailyHigh", "monthlyLow", "monthlyMid", "monthlyHigh", "annual", "seasonal", "waste"] as const;
+export const RATE_FIELDS = ["dailyLow", "dailyMid", "dailyHigh", "monthlyLow", "monthlyMid", "monthlyHigh", "annual", "seasonal", "waste", "service"] as const;
+
+/** Importo IVA compresa: se il listino ha prezzi netti, aggiunge l'IVA. I contratti lavorano sempre IVA compresa. */
+export function withVat(cents: number, vatRate: number, vatIncluded: boolean): number {
+  return vatIncluded ? cents : Math.round((cents * (100 + vatRate)) / 100);
+}
+
+/**
+ * Costo di un anno, come nelle colonne «IVA» e «Totale annuo» delle tariffe: canone annuale, rifiuti e condominio, più l'IVA
+ * (o con l'IVA già dentro, se il listino ha prezzi IVA inclusa).
+ */
+export function annualTotal(rate: Pick<RateRow, "annual" | "waste" | "service">, vatRate: number, vatIncluded: boolean) {
+  const sum = rate.annual + rate.waste + rate.service;
+  const totalCents = withVat(sum, vatRate, vatIncluded);
+  const netCents = vatIncluded ? Math.round(sum / (1 + vatRate / 100)) : sum;
+  return { netCents, vatCents: totalCents - netCents, totalCents };
+}
 
 /**
  * Tariffa di una categoria su un pontile con prezzi propri (pierId vuoto = tariffa base): ogni importo del pontile,
@@ -193,6 +211,21 @@ export function quoteStay(input: {
   }
 
   return { lines, totalCents: lines.reduce((sum, l) => sum + l.amountCents, 0) };
+}
+
+/**
+ * Preventivo IVA compresa a partire da quello del listino: righe e totale con l'IVA aggiunta se il listino ha prezzi netti,
+ * e rifiuti e condominio da proporre come voci dei contratti annuali.
+ */
+export function grossQuote(quote: Quote, rate: RateRow, type: StayType, list: { vatRate: number; vatIncluded: boolean }): Quote & { wasteCents: number; serviceCents: number } {
+  const gross = (cents: number) => withVat(cents, list.vatRate, list.vatIncluded);
+  const lines = quote.lines.map((l) => ({ ...l, unitCents: gross(l.unitCents), amountCents: gross(l.unitCents) * l.quantity }));
+  return {
+    lines,
+    totalCents: lines.reduce((sum, l) => sum + l.amountCents, 0),
+    wasteCents: type === "annuale" ? gross(rate.waste) : 0,
+    serviceCents: type === "annuale" ? gross(rate.service) : 0,
+  };
 }
 
 // La categoria tariffaria più piccola in cui la barca rientra per lunghezza e larghezza.

@@ -119,7 +119,7 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
                 {list.name}
                 {list.validFrom <= today && today <= list.validTo ? <Badge tone="ok">In vigore</Badge> : list.validFrom > today ? <Badge tone="sea">Futuro</Badge> : <Badge>Scaduto</Badge>}
                 <span className="text-sm font-normal text-muted">
-                  dal {formatDate(list.validFrom)} al {formatDate(list.validTo)} · IVA {list.vatRate}% inclusa
+                  dal {formatDate(list.validFrom)} al {formatDate(list.validTo)} · {list.vatIncluded ? `IVA ${list.vatRate}% inclusa` : `prezzi senza IVA, più IVA ${list.vatRate}%`}
                 </span>
               </span>
             }
@@ -176,7 +176,15 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
                     )}
                   </div>
                 )}
-                <RatesGrid key={`${list.id}:${pier?.id ?? ""}`} listId={list.id} pierId={pier?.id ?? ""} rows={grid} editable={admin} />
+                <RatesGrid
+                  key={`${list.id}:${pier?.id ?? ""}:${list.vatRate}:${list.vatIncluded}`}
+                  listId={list.id}
+                  pierId={pier?.id ?? ""}
+                  rows={grid}
+                  editable={admin}
+                  vatRate={list.vatRate}
+                  vatIncluded={list.vatIncluded}
+                />
               </>
             )}
           </Card>
@@ -210,7 +218,7 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
 
             <Card title="Servizi e cauzioni">
               <p className="mb-3 text-sm text-muted">Posti auto, carrelli, cauzioni e altri servizi a prezzo fisso: si scelgono quando si crea un addebito.</p>
-              <PriceListExtras listId={list.id} extras={extras} editable={admin} />
+              <PriceListExtras listId={list.id} extras={extras} editable={admin} vatIncluded={list.vatIncluded} />
             </Card>
 
             <Card title="Simulatore">

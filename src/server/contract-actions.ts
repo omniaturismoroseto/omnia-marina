@@ -21,7 +21,7 @@ import {
   itemTitle,
   type ContractItemInput,
 } from "@/lib/contract-items";
-import { categoryForBoat, occupiedUntil, pierRate, quoteStay, ratePierId, type QuoteLine } from "@/lib/pricing";
+import { categoryForBoat, grossQuote, occupiedUntil, pierRate, quoteStay, ratePierId, type QuoteLine } from "@/lib/pricing";
 import { activateContract, addContractItem, cancelContract, createContract, removeContractItem, revertToDraft, updateDraftContract } from "./contracts";
 import { toFormState } from "./errors";
 import { extrasOfList, type ListExtra } from "./list-extras";
@@ -37,8 +37,18 @@ export interface BerthOption {
 
 export interface ContractOptions {
   berths: BerthOption[];
-  // wasteCents: quota rifiuti del listino per i contratti annuali, da proporre come voce «rifiuti» (0 = usa quella del porto).
-  quote: { listName: string; categoryName: string; pierName: string | null; lines: QuoteLine[]; totalCents: number; vatRate: number; wasteCents: number } | null;
+  // Importi IVA compresa. wasteCents e serviceCents: rifiuti e condominio del listino per i contratti annuali, da proporre
+  // come voci «rifiuti» e «spese di gestione» (0 = usa quelle del porto).
+  quote: {
+    listName: string;
+    categoryName: string;
+    pierName: string | null;
+    lines: QuoteLine[];
+    totalCents: number;
+    vatRate: number;
+    wasteCents: number;
+    serviceCents: number;
+  } | null;
   quoteNote: string | null;
   // Importi del listino per le voci del contratto (posti auto, carrello…), dai servizi collegati.
   itemPrices: Partial<Record<(typeof SPACE_ITEM_KINDS)[number], number>>;
@@ -144,7 +154,7 @@ export async function loadContractOptions(input: {
   const rate = pierRate(rateRows, pierId);
   if (!rate) return { berths: options, quote: null, quoteNote: `Il ${list.name} non ha tariffe per la categoria ${category.name}.`, itemPrices, listExtras };
 
-  const quote = quoteStay({ type, startDate: input.startDate, endDate: input.endDate, rate, periods });
+  const quote = grossQuote(quoteStay({ type, startDate: input.startDate, endDate: input.endDate, rate, periods }), rate, type, list);
   return {
     berths: options,
     quote: {
@@ -154,7 +164,8 @@ export async function loadContractOptions(input: {
       lines: quote.lines,
       totalCents: quote.totalCents,
       vatRate: list.vatRate,
-      wasteCents: type === "annuale" ? rate.waste : 0,
+      wasteCents: quote.wasteCents,
+      serviceCents: quote.serviceCents,
     },
     quoteNote: quote.totalCents === 0 ? "Le tariffe di questa categoria non sono ancora compilate." : null,
     itemPrices,
