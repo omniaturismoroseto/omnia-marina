@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryForBoat, occupiedUntil, quoteStay, seasonForDate, splitInstalments, annualTotal, grossQuote, groupPiersByName, pierRate, ratePierId, withVat, type RateRow, type SeasonPeriod } from "../src/lib/pricing";
+import { categoryForBoat, occupiedUntil, quoteStay, seasonForDate, splitInstalments, annualTotal, grossQuote, lowSeasonRanges, groupPiersByName, pierRate, ratePierId, withVat, type RateRow, type SeasonPeriod } from "../src/lib/pricing";
 import { addMonths, annualEnd, diffDays } from "../src/lib/dates";
 import { parseMeters, parseMoney, splitVat } from "../src/lib/format";
 
@@ -138,6 +138,20 @@ describe("tariffa del pontile", () => {
     expect(ratePierId({ id: "pontile-c", baseRate: true })).toBeNull();
     expect(ratePierId({ id: "pontile-c", baseRate: false })).toBe("pontile-c");
     expect(ratePierId(null)).toBeNull();
+  });
+});
+
+describe("bassa stagione", () => {
+  it("è il resto del listino, fuori dai periodi di media e alta", () => {
+    const p: SeasonPeriod[] = [
+      { season: "alta", startDate: "2026-07-01", endDate: "2026-08-31" },
+      { season: "media", startDate: "2026-09-01", endDate: "2026-09-30" },
+    ];
+    expect(lowSeasonRanges(p, "2026-01-01", "2026-12-31")).toEqual([
+      { startDate: "2026-01-01", endDate: "2026-06-30" },
+      { startDate: "2026-10-01", endDate: "2026-12-31" },
+    ]);
+    expect(lowSeasonRanges([], "2026-01-01", "2026-12-31")).toEqual([{ startDate: "2026-01-01", endDate: "2026-12-31" }]);
   });
 });
 

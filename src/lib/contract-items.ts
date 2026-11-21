@@ -40,3 +40,16 @@ export function itemTitle(item: { kind: ContractItemKind; reference: string | nu
 export function sortItems<T extends { kind: ContractItemKind }>(items: T[]): T[] {
   return [...items].sort((a, b) => ITEM_KINDS.indexOf(a.kind) - ITEM_KINDS.indexOf(b.kind));
 }
+
+/**
+ * Dal nome di un servizio del listino, la voce del contratto che rappresenta: i posti auto, il carrello e lo spazio a terra
+ * nel contratto hanno anche numero e periodo; tutto il resto (cauzioni, altri servizi) è un servizio con il suo nome.
+ */
+export function itemKindFromName(name: string): (typeof SPACE_ITEM_KINDS)[number] | null {
+  const n = name.toLocaleLowerCase("it").replace(/\s+/g, " ");
+  if (/cauzion/.test(n)) return null;
+  if (/posto auto|posti auto|parcheggio|park/.test(n)) return /scopert/.test(n) ? "auto_scoperto" : /copert/.test(n) ? "auto_coperto" : null;
+  if (/carrell|invas/.test(n)) return "carrello";
+  if (/(spazio|sosta|rimessaggio|posto) a terra|secca/.test(n)) return "secca";
+  return null;
+}

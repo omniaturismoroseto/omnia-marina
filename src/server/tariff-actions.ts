@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { berthCategories, piers, priceListExtras, priceLists, rates, seasonPeriods } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
-import { ITEM_KINDS } from "@/lib/contract-items";
+import { itemKindFromName } from "@/lib/contract-items";
 import { addMonths, isValidISODate } from "@/lib/dates";
 import { parseMoney } from "@/lib/format";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
@@ -236,14 +236,15 @@ const extraSchema = z.object({
   name: f.text("Scrivi il nome del servizio"),
   amount: f.money(),
   vatRate: f.int(0, 30, "Aliquota non valida"),
-  itemKind: z.preprocess((v) => (typeof v === "string" && v !== "" ? v : null), z.enum(ITEM_KINDS, "Voce non valida").nullable()),
 });
 
 export async function addPriceListExtra(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
   const parsed = parseForm(extraSchema, formData);
   if (!parsed.ok) return parsed.state;
-  const { listId, name, amount, vatRate, itemKind } = parsed.data;
+  const { listId, name, amount, vatRate } = parsed.data;
+  // Posti auto, carrello e spazio a terra si riconoscono dal nome: nel contratto avranno numero e periodo.
+  const itemKind = itemKindFromName(name);
   const list = await ownList(ctx.marinaId, listId);
   if (!list) return fail("Listino non trovato.");
   const existing = await db.select({ id: priceListExtras.id }).from(priceListExtras).where(eq(priceListExtras.priceListId, list.id));
@@ -253,14 +254,15 @@ export async function addPriceListExtra(_prev: FormState, formData: FormData): P
   return { ok: true };
 }
 
-// Modifica di un servizio o di una cauzione già nel listino: nome, importo, IVA e voce del contratto collegata.
+// Modifica di un servizio o di una cauzione già nel listino: nome, importo e IVA (la voce del contratto segue il nome).
 const extraUpdateSchema = extraSchema.omit({ listId: true }).extend({ extraId: f.id() });
 
 export async function updatePriceListExtra(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
   const parsed = parseForm(extraUpdateSchema, formData);
   if (!parsed.ok) return parsed.state;
-  const { extraId, name, amount, vatRate, itemKind } = parsed.data;
+  const { extraId, name, amount, vatRate } = parsed.data;
+  const itemKind = itemKindFromName(name);
   const updated = await db
     .update(priceListExtras)
     .set({ name, amountCents: amount, vatRate, itemKind })
