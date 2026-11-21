@@ -1,5 +1,5 @@
 {
-  "id": "2b7ae5c0-adb1-43e7-8b91-42141dad46eb",
+  "id": "2c11f816-f9d5-406a-b770-f25bdec045c5",
   "prevId": "745706e2-9bf5-4c36-84a8-c7fcebfc25a2",
   "version": "7",
   "dialect": "postgresql",
@@ -3455,12 +3455,35 @@
           "primaryKey": false,
           "notNull": false
         },
-        "base_rate": {
-          "name": "base_rate",
-          "type": "boolean",
+        "plan_ax": {
+          "name": "plan_ax",
+          "type": "real",
           "primaryKey": false,
-          "notNull": true,
-          "default": true
+          "notNull": false
+        },
+        "plan_ay": {
+          "name": "plan_ay",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_bx": {
+          "name": "plan_bx",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_by": {
+          "name": "plan_by",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_width_m": {
+          "name": "plan_width_m",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -3992,12 +4015,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "pier_id": {
-          "name": "pier_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "daily_low": {
           "name": "daily_low",
           "type": "integer",
@@ -4109,19 +4126,6 @@
           "tableTo": "tariff_zones",
           "columnsFrom": [
             "zone_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "rates_pier_id_piers_id_fk": {
-          "name": "rates_pier_id_piers_id_fk",
-          "tableFrom": "rates",
-          "tableTo": "piers",
-          "columnsFrom": [
-            "pier_id"
           ],
           "columnsTo": [
             "id"

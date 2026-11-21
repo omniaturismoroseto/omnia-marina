@@ -421,6 +421,13 @@ export const piers = pgTable(
     sortOrder: integer("sort_order").notNull().default(0),
     // Acceso: il pontile usa la tariffa base del listino; spento: usa i prezzi propri (rates.pier_id).
     baseRate: boolean("base_rate").notNull().default(true),
+    // Linea tracciata sulla foto (pixel), dalla radice (a) alla testata (b), e larghezza della passerella in metri
+    // (0 = banchina): serve a disegnare il pontile nello schema. Vuota se il pontile non è mai stato tracciato.
+    planAx: real("plan_ax"),
+    planAy: real("plan_ay"),
+    planBx: real("plan_bx"),
+    planBy: real("plan_by"),
+    planWidthM: real("plan_width_m"),
   },
   (t) => [uniqueIndex("piers_marina_code_uq").on(t.marinaId, t.code)],
 );

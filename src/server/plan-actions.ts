@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { auditLog, berthCategories, berths, marinaPlans, marinas, piers } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { requireMarina } from "@/lib/context";
-import { estimateScale, MAX_BERTHS_PER_SIDE, planBerths, toProposals, type StoredAnalysis } from "@/lib/plan-analysis";
+import { estimateScale, MAX_BERTHS_PER_SIDE, planBerths, structureWidthM, toProposals, type StoredAnalysis } from "@/lib/plan-analysis";
 import { analyzePlanPhoto, PlanAnalysisError, planAnalysisAvailable } from "./plan-ai";
 
 const layoutSchema = z.object({
@@ -21,16 +21,28 @@ const layoutSchema = z.object({
       }),
     )
     .max(5000),
+  // Linee dei pontili tracciate in questa sessione dell'editor (servono a disegnarli nello schema).
+  traces: z
+    .array(
+      z.object({
+        pierId: z.uuid(),
+        a: z.object({ x: z.number().finite(), y: z.number().finite() }),
+        b: z.object({ x: z.number().finite(), y: z.number().finite() }),
+        widthM: z.number().min(0).max(50),
+      }),
+    )
+    .max(500)
+    .default([]),
 });
 
 export type PlanLayoutInput = z.infer<typeof layoutSchema>;
 
 // Salva la scala della foto e la posizione di tutti i posti disposti nell'editor della pianta.
-export async function savePlanLayout(input: PlanLayoutInput): Promise<{ ok: boolean; message: string }> {
+export async function savePlanLayout(input: z.input<typeof layoutSchema>): Promise<{ ok: boolean; message: string }> {
   const ctx = await requireMarina(["admin"]);
   const parsed = layoutSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "Dati della pianta non validi." };
-  const { pxPerMeter, placements } = parsed.data;
+  const { pxPerMeter, placements, traces } = parsed.data;
 
   const [marina] = await db.select({ width: marinas.planWidth, height: marinas.planHeight }).from(marinas).where(eq(marinas.id, ctx.marinaId));
   if (!marina?.width || !marina.height) return { ok: false, message: "Carica prima la foto del porto." };
@@ -40,6 +52,7 @@ export async function savePlanLayout(input: PlanLayoutInput): Promise<{ ok: bool
   const inside = (p: { x: number; y: number }) =>
     p.x >= -marina.width! * margin && p.x <= marina.width! * (1 + margin) && p.y >= -marina.height! * margin && p.y <= marina.height! * (1 + margin);
   if (placements.some((p) => p.position && !inside(p.position))) return { ok: false, message: "Alcuni posti sono fuori dalla foto." };
+  if (traces.some((t) => !inside(t.a) || !inside(t.b))) return { ok: false, message: "Alcune linee dei pontili sono fuori dalla foto." };
 
   await db.transaction(async (tx) => {
     await tx.update(marinas).set({ planPxPerMeter: pxPerMeter }).where(eq(marinas.id, ctx.marinaId));
@@ -54,6 +67,13 @@ export async function savePlanLayout(input: PlanLayoutInput): Promise<{ ok: bool
         from (values ${rows}) as v(id, x, y, angle)
         where berths.id = v.id and berths.marina_id = ${ctx.marinaId}
       `);
+    }
+    for (const t of traces) {
+      // Il filtro sul porto impedisce di toccare pontili di altri porti.
+      await tx
+        .update(piers)
+        .set({ planAx: t.a.x, planAy: t.a.y, planBx: t.b.x, planBy: t.b.y, planWidthM: t.widthM })
+        .where(and(eq(piers.id, t.pierId), eq(piers.marinaId, ctx.marinaId)));
     }
     const placed = placements.filter((p) => p.position).length;
     await audit(ctx, "modifica", "pianta del porto", ctx.marinaId, `${placed} posti disposti sulla foto`, tx);
@@ -216,7 +236,17 @@ export async function createFromProposals(input: ProposalsInput): Promise<Result
     for (const { item, berths: rows } of planned) {
       const [pier] = await tx
         .insert(piers)
-        .values({ marinaId: ctx.marinaId, code: item.code, name: item.name, sortOrder: order++ })
+        .values({
+          marinaId: ctx.marinaId,
+          code: item.code,
+          name: item.name,
+          sortOrder: order++,
+          planAx: item.a.x,
+          planAy: item.a.y,
+          planBx: item.b.x,
+          planBy: item.b.y,
+          planWidthM: structureWidthM(item.kind),
+        })
         .returning({ id: piers.id });
       const categoryOf = new Map(item.sides.map((s) => [s.side, s.categoryId]));
       await tx.insert(berths).values(

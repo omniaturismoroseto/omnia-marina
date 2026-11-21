@@ -1,7 +1,7 @@
 // Popola il database con un porto dimostrativo. Uso:  pnpm db:seed
 // Il porto demo viene cancellato e ricreato a ogni esecuzione; gli altri porti non vengono toccati.
 import { readFileSync } from "node:fs";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   berthCategories,
@@ -258,7 +258,11 @@ async function main() {
     await tx.insert(marinaPlans).values({ marinaId, mime: photoInfo.mime, data: photo });
     await tx.update(marinas).set({ planWidth: photoInfo.width, planHeight: photoInfo.height, planPxPerMeter: PX_PER_METER, planVersion: 1 }).where(eq(marinas.id, marinaId));
     for (const [code, [from, to]] of Object.entries(AXES)) {
-      for (const p of layoutPier(berthsByPier.get(code)!, from, to, PX_PER_METER)) {
+      await tx
+        .update(piers)
+        .set({ planAx: from.x, planAy: from.y, planBx: to.x, planBy: to.y, planWidthM: code === "T" ? 0 : 2 })
+        .where(and(eq(piers.marinaId, marinaId), eq(piers.code, code)));
+      for (const p of layoutPier(berthsByPier.get(code)!, from, to, PX_PER_METER, code === "T" ? 0 : 2)) {
         await tx.update(berths).set({ planX: p.x, planY: p.y, planAngle: p.angle }).where(eq(berths.id, p.id));
       }
     }

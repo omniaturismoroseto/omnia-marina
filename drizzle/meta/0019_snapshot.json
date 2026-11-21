@@ -1,6 +1,6 @@
 {
-  "id": "8fec94eb-fd17-4d33-8bfd-6627c3093e87",
-  "prevId": "2b7ae5c0-adb1-43e7-8b91-42141dad46eb",
+  "id": "39246feb-7574-4528-bde1-23760964a6b0",
+  "prevId": "2c11f816-f9d5-406a-b770-f25bdec045c5",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3449,12 +3449,48 @@
           "notNull": true,
           "default": 0
         },
+        "tariff_zone_id": {
+          "name": "tariff_zone_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "base_rate": {
           "name": "base_rate",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
           "default": true
+        },
+        "plan_ax": {
+          "name": "plan_ax",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_ay": {
+          "name": "plan_ay",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_bx": {
+          "name": "plan_bx",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_by": {
+          "name": "plan_by",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plan_width_m": {
+          "name": "plan_width_m",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -3492,6 +3528,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "piers_tariff_zone_id_tariff_zones_id_fk": {
+          "name": "piers_tariff_zone_id_tariff_zones_id_fk",
+          "tableFrom": "piers",
+          "tableTo": "tariff_zones",
+          "columnsFrom": [
+            "tariff_zone_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -3967,6 +4016,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "zone_id": {
+          "name": "zone_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "pier_id": {
           "name": "pier_id",
           "type": "uuid",
@@ -4078,6 +4133,19 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
+        "rates_zone_id_tariff_zones_id_fk": {
+          "name": "rates_zone_id_tariff_zones_id_fk",
+          "tableFrom": "rates",
+          "tableTo": "tariff_zones",
+          "columnsFrom": [
+            "zone_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
         "rates_pier_id_piers_id_fk": {
           "name": "rates_pier_id_piers_id_fk",
           "tableFrom": "rates",
@@ -4094,13 +4162,13 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "rates_list_category_pier_uq": {
-          "name": "rates_list_category_pier_uq",
+        "rates_list_category_zone_uq": {
+          "name": "rates_list_category_zone_uq",
           "nullsNotDistinct": true,
           "columns": [
             "price_list_id",
             "category_id",
-            "pier_id"
+            "zone_id"
           ]
         }
       },
@@ -4309,6 +4377,88 @@
           "tableTo": "owner_access",
           "columnsFrom": [
             "owner_access_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.tariff_zones": {
+      "name": "tariff_zones",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "marina_id": {
+          "name": "marina_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "tariff_zones_marina_name_uq": {
+          "name": "tariff_zones_marina_name_uq",
+          "columns": [
+            {
+              "expression": "marina_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "tariff_zones_marina_id_marinas_id_fk": {
+          "name": "tariff_zones_marina_id_marinas_id_fk",
+          "tableFrom": "tariff_zones",
+          "tableTo": "marinas",
+          "columnsFrom": [
+            "marina_id"
           ],
           "columnsTo": [
             "id"
