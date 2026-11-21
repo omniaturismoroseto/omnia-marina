@@ -2,10 +2,10 @@ import "server-only";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { addDays, todayRome } from "@/lib/dates";
-import { bulletinSection, phenomenaFromTopojson, zonesFromTopojson, type CivilBulletin, type VigilanceBulletin } from "@/lib/civil-protection";
+import { bulletinSection, latestBulletinStem, phenomenaFromTopojson, zonesFromTopojson, type CivilBulletin, type VigilanceBulletin } from "@/lib/civil-protection";
 
 // Ultimo bollettino di criticità della Protezione Civile, dal repository pubblico su GitHub. Il nome del file cambia
-// a ogni emissione (files/AAAAMMGG_HHMM.json): lo si trova dall'ultimo commit che ha toccato la cartella. Si tiene in
+// a ogni emissione (files/AAAAMMGG_HHMM.json): lo si ricava dagli ultimi commit del repository. Si tiene in
 // memoria un'ora. GITHUB_TOKEN (facoltativo, sola lettura) alza il limite di richieste all'API di GitHub.
 // Per le prove locali DPC_FIXTURE (percorso dell'indice JSON, con i TopoJSON in «topojson/» accanto) sostituisce la rete.
 
@@ -26,17 +26,20 @@ async function getJson<T>(url: string, api = false): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** Percorso dell'indice più recente («files/20261117_1519.json»), dagli ultimi commit sulla cartella files. */
+/**
+ * Percorso dell'indice più recente («files/20261121_1449.json»). Il repository pubblica ogni file di un'emissione in un
+ * commit a parte (indice, mappe, anteprime, archivi), tutti con la stessa sigla: basta un file qualsiasi degli ultimi commit.
+ */
 async function latestIndexPath(): Promise<string> {
-  const commits = await getJson<{ sha: string }[]>(`https://api.github.com/repos/${REPO}/commits?path=files&per_page=3`, true);
-  let best = "";
+  const commits = await getJson<{ sha: string }[]>(`https://api.github.com/repos/${REPO}/commits?per_page=5`, true);
+  let best: string | null = null;
   for (const c of commits) {
     const detail = await getJson<{ files?: { filename: string }[] }>(`https://api.github.com/repos/${REPO}/commits/${c.sha}`, true);
-    for (const f of detail.files ?? []) if (/^files\/\d{8}_\d{4}\.json$/.test(f.filename) && f.filename > best) best = f.filename;
+    best = latestBulletinStem((detail.files ?? []).map((f) => f.filename));
     if (best) break;
   }
   if (!best) throw new Error("Nessun bollettino negli ultimi commit.");
-  return best;
+  return `files/${best}.json`;
 }
 
 async function load(): Promise<CivilBulletin> {

@@ -100,6 +100,21 @@ export function findZoneByComune(zones: CivilZone[], comune: string | null | und
 }
 
 /**
+ * La sigla più recente («20261121_1449») tra i file pubblicati nel repository dei bollettini di criticità: ogni emissione
+ * porta la sigla in tutti i suoi file (indice, topojson, geojson, anteprime, archivi), che arrivano in commit separati.
+ * L'indice è poi «files/<sigla>.json». Null se nessun file ne porta una.
+ */
+export function latestBulletinStem(filenames: string[]): string | null {
+  let best: string | null = null;
+  for (const name of filenames) {
+    if (!name.startsWith("files/")) continue;
+    const stem = /(?:^|\/)(\d{8}_\d{4})(?:[_.][^/]*)?$/.exec(name)?.[1];
+    if (stem && (!best || stem > best)) best = stem;
+  }
+  return best;
+}
+
+/**
  * I giorni del bollettino ancora validi da oggi in poi. Il bollettino esce nel pomeriggio: la mattina l'ultimo è quello
  * di ieri, e il suo «domani» è oggi.
  */

@@ -9,6 +9,7 @@ import {
   currentDays,
   distanceKm,
   findZoneByComune,
+  latestBulletinStem,
   levelFromText,
   nearbyPhenomena,
   normalizePlace,
@@ -99,5 +100,18 @@ describe("bollettino di vigilanza (estratto vero del 18/11/2026, Liguria e Alta 
     expect(vigilanceWorthSending(portVigilance(bulletin, "2026-11-18", PESCARA.lat, PESCARA.lon))).toBe(false);
     expect(portVigilance(bulletin, "2026-11-18", null, null)[0].nearby).toEqual([]);
     expect(portVigilance(bulletin, "2026-11-19", GENOVA.lat, GENOVA.lon)).toEqual([]);
+  });
+});
+
+describe("latestBulletinStem", () => {
+  it("ricava la sigla dell'emissione da qualunque file pubblicato", () => {
+    expect(latestBulletinStem(["files/preview/20261121_1449_domani.png"])).toBe("20261121_1449");
+    expect(latestBulletinStem(["files/topojson/20261121_1449_today.json", "files/20261120_1342.json"])).toBe("20261121_1449");
+    expect(latestBulletinStem(["files/all/20261121_1449_all.zip"])).toBe("20261121_1449");
+  });
+
+  it("ignora i file senza sigla o fuori dalla cartella files", () => {
+    expect(latestBulletinStem(["files/all/latest_all.zip", "README.md", "files/Legenda BCR vert.jpg"])).toBeNull();
+    expect(latestBulletinStem(["altro/20261121_1449.json"])).toBeNull();
   });
 });
