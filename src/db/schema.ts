@@ -132,6 +132,27 @@ export const marinaPlans = pgTable("marina_plans", {
   updatedAt: updatedAt(),
 });
 
+// Sfondo dello schema della mappa e servizi del porto, in pixel della foto aerea.
+// kind: terra (moli, banchine, piazzali), acqua (toglie terra), edificio, verde, servizio (un punto con il tipo in `service`).
+// source: da dove viene (manuale, colori = ricavato dai colori della foto, claude = proposto dal riconoscimento automatico).
+export const planFeatures = pgTable(
+  "plan_features",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<"terra" | "acqua" | "edificio" | "verde" | "servizio">().notNull(),
+    service: text("service"),
+    name: text("name"),
+    points: jsonb("points").$type<{ x: number; y: number }[]>().notNull(),
+    source: text("source").$type<"manuale" | "colori" | "claude">().notNull().default("manuale"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("plan_features_marina_idx").on(t.marinaId)],
+);
+
 // L'immagine del logo, a parte: le letture di marinas restano leggere.
 export const marinaLogos = pgTable("marina_logos", {
   marinaId: uuid("marina_id")

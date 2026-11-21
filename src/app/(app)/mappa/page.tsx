@@ -6,7 +6,7 @@ import { MovementButtons } from "@/components/movement-buttons";
 import { page } from "@/components/page";
 import { Badge, ButtonLink, Details, EmptyState, FilterTabs, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { boats, contracts, marinas } from "@/db/schema";
+import { boats, contracts, marinas, planFeatures } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, formatDateLong, isValidISODate, todayRome } from "@/lib/dates";
 import { formatDimensions, formatMeters } from "@/lib/format";
@@ -14,7 +14,10 @@ import { BERTH_STATUS_LABEL, CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { one, qs, uuidOrNull, type SearchParams } from "@/lib/params";
 import { contractNumberLabel } from "@/lib/contract-numbers";
 import { countStates, getBoard, STATE_LABEL, type BerthState, type BoardBerth, type BoardPier } from "@/server/board";
+import { ServiceIcon } from "@/components/service-icon";
 import { buildDrawing } from "@/lib/plan-drawing";
+import { drawingOrder, extendBounds } from "@/lib/plan-features";
+import { serviceTitle } from "@/lib/port-services";
 import { PlanView } from "./plan-view";
 import { PlanZoom } from "./plan-zoom";
 
@@ -234,13 +237,20 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
   const date = isValidISODate(one(sp.data)) ? one(sp.data) : today;
   const selectedId = uuidOrNull(sp.posto);
 
-  const [board, [plan]] = await Promise.all([
+  const [board, [plan], featureRows] = await Promise.all([
     getBoard(ctx.marinaId, date, today),
     db
       .select({ width: marinas.planWidth, height: marinas.planHeight, pxPerMeter: marinas.planPxPerMeter, version: marinas.planVersion })
       .from(marinas)
       .where(eq(marinas.id, ctx.marinaId)),
+    db
+      .select({ id: planFeatures.id, kind: planFeatures.kind, service: planFeatures.service, name: planFeatures.name, points: planFeatures.points, source: planFeatures.source })
+      .from(planFeatures)
+      .where(eq(planFeatures.marinaId, ctx.marinaId))
+      .orderBy(asc(planFeatures.sortOrder)),
   ]);
+  const features = drawingOrder(featureRows);
+  const services = features.filter((f) => f.kind === "servizio" && f.service);
   const counts = countStates(board);
   const allBerths = board.flatMap((p) => p.berths);
   const selected = allBerths.find((b) => b.id === selectedId) ?? null;
@@ -265,6 +275,8 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
         plan.pxPerMeter!,
       )
     : null;
+  // Lo schema mostra tutto il porto disegnato: posti, pontili e sfondo.
+  const schemaBounds = drawing ? extendBounds(drawing.bounds, features, plan.width!, plan.height!) : null;
   const view = drawing && one(sp.vista) === "foto" ? "foto" : "schema";
   const vista = view === "foto" ? "foto" : null;
   const hrefFor = (berthId: string) => `/mappa${qs({ data: date === today ? null : date, vista, posto: berthId })}#dettaglio`;
@@ -330,12 +342,14 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
               <div className="min-w-0">
                 <PlanZoom
                   key={view}
-                  width={view === "schema" ? drawing.bounds.width : plan.width!}
-                  height={view === "schema" ? drawing.bounds.height : plan.height!}
+                  width={view === "schema" ? schemaBounds!.width : plan.width!}
+                  height={view === "schema" ? schemaBounds!.height : plan.height!}
                 >
                   <PlanView
                     mode={view}
                     drawing={drawing}
+                    features={features}
+                    bounds={schemaBounds!}
                     berths={allBerths}
                     width={plan.width!}
                     height={plan.height!}
@@ -345,6 +359,18 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
                     hrefFor={hrefFor}
                   />
                 </PlanZoom>
+                {services.length > 0 && (
+                  <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm" aria-label="Servizi del porto">
+                    {services.map((f) => (
+                      <li key={f.id} className="inline-flex items-center gap-1.5 text-ink">
+                        <span className="grid size-6 place-items-center rounded-full bg-[#1d3f63] text-white" aria-hidden="true">
+                          <ServiceIcon service={f.service!} size={13} />
+                        </span>
+                        {serviceTitle(f.service!, f.name)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {offPlan.length > 0 && (
                   <div className="mt-3">
                     <p className="text-sm text-muted">Posti non ancora disposti sulla foto:</p>

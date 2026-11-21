@@ -1,5 +1,5 @@
 {
-  "id": "39246feb-7574-4528-bde1-23760964a6b0",
+  "id": "ad58fe42-f77c-45db-872e-909b8bf4dcfa",
   "prevId": "2c11f816-f9d5-406a-b770-f25bdec045c5",
   "version": "7",
   "dialect": "postgresql",
@@ -3455,13 +3455,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "base_rate": {
-          "name": "base_rate",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
         "plan_ax": {
           "name": "plan_ax",
           "type": "real",
@@ -3541,6 +3534,107 @@
             "id"
           ],
           "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.plan_features": {
+      "name": "plan_features",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "marina_id": {
+          "name": "marina_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "service": {
+          "name": "service",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "points": {
+          "name": "points",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manuale'"
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "plan_features_marina_idx": {
+          "name": "plan_features_marina_idx",
+          "columns": [
+            {
+              "expression": "marina_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "plan_features_marina_id_marinas_id_fk": {
+          "name": "plan_features_marina_id_marinas_id_fk",
+          "tableFrom": "plan_features",
+          "tableTo": "marinas",
+          "columnsFrom": [
+            "marina_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -4022,12 +4116,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "pier_id": {
-          "name": "pier_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "daily_low": {
           "name": "daily_low",
           "type": "integer",
@@ -4139,19 +4227,6 @@
           "tableTo": "tariff_zones",
           "columnsFrom": [
             "zone_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "rates_pier_id_piers_id_fk": {
-          "name": "rates_pier_id_piers_id_fk",
-          "tableFrom": "rates",
-          "tableTo": "piers",
-          "columnsFrom": [
-            "pier_id"
           ],
           "columnsTo": [
             "id"

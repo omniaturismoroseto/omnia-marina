@@ -138,15 +138,22 @@
     {
       "idx": 19,
       "version": "7",
-      "when": 1795254294288,
-      "tag": "0019_tariffa_per_pontile",
+      "when": 1795254829404,
+      "tag": "0019_sfondo_e_servizi",
       "breakpoints": true
     },
     {
       "idx": 20,
       "version": "7",
-      "when": 1795254302440,
-      "tag": "0020_via_zone_tariffarie",
+      "when": 1795255663101,
+      "tag": "0020_tariffa_per_pontile",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795255664071,
+      "tag": "0021_via_zone_tariffarie",
       "breakpoints": true
     }
   ]
