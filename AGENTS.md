@@ -57,7 +57,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Impostazioni → Pianta (`surroundings-editor.tsx`): terra e acqua dai colori della foto nel browser (`src/lib/land-mask.ts`, semi in acqua
   davanti alla prua dei posti, posti barca forzati ad acqua), edifici/verde/servizi da Claude (`analyzeSurroundings`, stesso limite
   giornaliero delle analisi; collaudi con `PLAN_SURROUNDINGS_FIXTURE`), poi ritocchi a mano e `savePlanFeatures` (sostituisce tutto).
-  Una foto con inquadratura diversa azzera posti, linee dei pontili e sfondo.
+  Base disegnata (`marina_plan_bases`, `/pianta/base`, `base-uploader.tsx`): PNG/JPEG fatto fuori dall'app ricalcando la foto, stesse
+  proporzioni (`baseMatchesPhoto` in `src/lib/plan-base.ts`, qualunque risoluzione); se c'è, lo schema mostra la base al posto del disegno
+  automatico (terra, forme, pontili) e sopra barche, nomi dei pontili (da Impostazioni → Pontili) e servizi (spostabili dalla direzione).
+  Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
 - Numerazione dei contratti: le bozze non hanno numero (`seq`/`number` vuoti, in stampa «BOZZA»); il numero nasce all'attivazione
   ed è il più basso libero dell'anno (`src/lib/contract-numbers.ts`, `assignContractNumber`). «Torna in bozza» (`revertToDraft`) libera
   numero e addebiti mai incassati; i buchi (`contractNumberGaps`) si segnalano in elenco contratti e cruscotto finché non vengono ripresi.
@@ -112,7 +115,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   `gcloud run deploy omnia-marina --source . --region europe-west1 --project omnia-marina` dopo un `git pull`;
   i comandi per l'utente stanno in `COME-LAVORIAMO.md`. Quando una modifica va online, ricordaglielo e dagli **sempre e solo
   il comando unico** di «Pubblicare» in `COME-LAVORIAMO.md` (prima `git pull`, poi pubblica solo se il pull riesce), in un
-  unico blocco da copiare: mai `git pull` e pubblicazione come comandi separati.
+  unico blocco da copiare: mai `git pull` e pubblicazione come comandi separati. Se l'utente è in Google Cloud Shell (bash,
+`~/omnia-marina`) dagli la versione bash dello stesso comando unico, anch'essa in `COME-LAVORIAMO.md`.
 - Consegna: aprire sempre la pull request, dare il comando unico per PowerShell e chiedere l'unione con un **pulsante in chat**
   (domanda a scelta: «Unisci» / «Non ancora»), non con una domanda da scrivere; con «Unisci» unire la pull request (prima
   allineando il ramo a `main` se è cambiato).

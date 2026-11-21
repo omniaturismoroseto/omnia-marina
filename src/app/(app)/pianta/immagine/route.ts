@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { berths, marinaPlans, marinas, piers, planFeatures } from "@/db/schema";
+import { berths, marinaPlanBases, marinaPlans, marinas, piers, planFeatures } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { requireMarina } from "@/lib/context";
 import { imageInfo } from "@/lib/plan";
@@ -72,6 +72,7 @@ export async function POST(request: Request) {
       await tx.update(berths).set({ planX: null, planY: null, planAngle: null }).where(eq(berths.marinaId, ctx.marinaId));
       await tx.update(piers).set({ planAx: null, planAy: null, planBx: null, planBy: null }).where(eq(piers.marinaId, ctx.marinaId));
       await tx.delete(planFeatures).where(eq(planFeatures.marinaId, ctx.marinaId));
+      await tx.delete(marinaPlanBases).where(eq(marinaPlanBases.marinaId, ctx.marinaId));
     }
     await audit(ctx, "caricamento", "pianta del porto", ctx.marinaId, `Foto ${info.width} × ${info.height} px`, tx);
     return !sameFrame && marina.width !== null;
@@ -93,6 +94,7 @@ export async function DELETE(request: Request) {
     await tx.update(berths).set({ planX: null, planY: null, planAngle: null }).where(eq(berths.marinaId, ctx.marinaId));
     await tx.update(piers).set({ planAx: null, planAy: null, planBx: null, planBy: null }).where(eq(piers.marinaId, ctx.marinaId));
     await tx.delete(planFeatures).where(eq(planFeatures.marinaId, ctx.marinaId));
+    await tx.delete(marinaPlanBases).where(eq(marinaPlanBases.marinaId, ctx.marinaId));
     await audit(ctx, "rimozione", "pianta del porto", ctx.marinaId, undefined, tx);
   });
   revalidatePath("/", "layout");

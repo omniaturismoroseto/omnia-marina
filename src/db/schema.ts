@@ -132,6 +132,19 @@ export const marinaPlans = pgTable("marina_plans", {
   updatedAt: updatedAt(),
 });
 
+// Base disegnata dello schema della mappa (fatta fuori dall'app ricalcando la foto aerea, stessa inquadratura):
+// se c'è, lo schema la usa come sfondo al posto del disegno automatico. Solo PNG o JPEG.
+export const marinaPlanBases = pgTable("marina_plan_bases", {
+  marinaId: uuid("marina_id")
+    .primaryKey()
+    .references(() => marinas.id, { onDelete: "cascade" }),
+  mime: text("mime").notNull(),
+  data: bytea("data").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  updatedAt: updatedAt(),
+});
+
 // Sfondo dello schema della mappa e servizi del porto, in pixel della foto aerea.
 // kind: terra (moli, banchine, piazzali), acqua (toglie terra), edificio, verde, servizio (un punto con il tipo in `service`).
 // source: da dove viene (manuale, colori = ricavato dai colori della foto, claude = proposto dal riconoscimento automatico).

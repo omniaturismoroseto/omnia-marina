@@ -6,7 +6,7 @@ import { MovementButtons } from "@/components/movement-buttons";
 import { page } from "@/components/page";
 import { Badge, ButtonLink, Details, EmptyState, FilterTabs, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { boats, contracts, marinas, planFeatures } from "@/db/schema";
+import { boats, contracts, marinaPlanBases, marinas, planFeatures } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, formatDateLong, isValidISODate, todayRome } from "@/lib/dates";
 import { formatDimensions, formatMeters } from "@/lib/format";
@@ -237,7 +237,7 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
   const date = isValidISODate(one(sp.data)) ? one(sp.data) : today;
   const selectedId = uuidOrNull(sp.posto);
 
-  const [board, [plan], featureRows] = await Promise.all([
+  const [board, [plan], featureRows, [base]] = await Promise.all([
     getBoard(ctx.marinaId, date, today),
     db
       .select({ width: marinas.planWidth, height: marinas.planHeight, pxPerMeter: marinas.planPxPerMeter, version: marinas.planVersion })
@@ -248,7 +248,9 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
       .from(planFeatures)
       .where(eq(planFeatures.marinaId, ctx.marinaId))
       .orderBy(asc(planFeatures.sortOrder)),
+    db.select({ updatedAt: marinaPlanBases.updatedAt }).from(marinaPlanBases).where(eq(marinaPlanBases.marinaId, ctx.marinaId)),
   ]);
+  const baseUrl = base ? `/pianta/base?v=${base.updatedAt.getTime()}` : null;
   const features = drawingOrder(featureRows);
   const services = features.filter((f) => f.kind === "servizio" && f.service);
   const counts = countStates(board);
@@ -276,7 +278,12 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
       )
     : null;
   // Lo schema mostra tutto il porto disegnato: posti, pontili e sfondo.
-  const schemaBounds = drawing ? extendBounds(drawing.bounds, features, plan.width!, plan.height!) : null;
+  // Con la base disegnata lo schema mostra tutta la base, che ha l'inquadratura della foto.
+  const schemaBounds = drawing
+    ? baseUrl
+      ? { x: 0, y: 0, width: plan.width!, height: plan.height! }
+      : extendBounds(drawing.bounds, features, plan.width!, plan.height!)
+    : null;
   const view = drawing && one(sp.vista) === "foto" ? "foto" : "schema";
   const vista = view === "foto" ? "foto" : null;
   const hrefFor = (berthId: string) => `/mappa${qs({ data: date === today ? null : date, vista, posto: berthId })}#dettaglio`;
@@ -350,6 +357,7 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
                     drawing={drawing}
                     features={features}
                     bounds={schemaBounds!}
+                    baseUrl={baseUrl}
                     berths={allBerths}
                     width={plan.width!}
                     height={plan.height!}
