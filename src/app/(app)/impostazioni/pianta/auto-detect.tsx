@@ -233,7 +233,7 @@ function Review({
           Ogni linea arancione è una struttura riconosciuta, dalla radice (pallino pieno) alla testata. Trascina i pallini per correggerla; i rettangoli sono i
           posti che verranno creati.
         </p>
-        <PlanZoom>
+        <PlanZoom width={width} height={height}>
           <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} className="block h-auto w-full select-none" aria-label="Proposte sulla foto">
             <image href={imageUrl} width={width} height={height} />
             {scale &&

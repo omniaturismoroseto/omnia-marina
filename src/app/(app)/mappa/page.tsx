@@ -311,7 +311,7 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
           <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
             {view === "pianta" ? (
               <div className="min-w-0">
-                <PlanZoom>
+                <PlanZoom width={plan.width!} height={plan.height!}>
                   <PlanView
                     berths={allBerths}
                     width={plan.width!}

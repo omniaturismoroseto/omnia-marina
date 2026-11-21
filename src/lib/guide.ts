@@ -118,6 +118,7 @@ export const GUIDE: GuideSection[] = [
           "Tocca un posto per vedere barca, proprietario, telefono, contratto e prossime assegnazioni.",
           "Cambia la data in alto per vedere il porto in un altro giorno (per esempio a ferragosto).",
           "Passa da «Schema» a «Pianta dal vero» per vedere i posti sopra la foto aerea, se è stata caricata.",
+          "Sulla pianta trascina con il mouse o con un dito per spostarti; ingrandisci con la rotellina, allargando due dita o con un doppio clic. Quando sei ingrandito, il pulsante in basso a destra torna alla foto intera.",
           "Su un posto libero l'ufficio trova «Assegna il posto»: apre un contratto nuovo già con posto e data.",
         ],
       },
