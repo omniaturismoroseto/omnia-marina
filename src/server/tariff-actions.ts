@@ -12,7 +12,7 @@ import { ITEM_KINDS } from "@/lib/contract-items";
 import { addMonths, isValidISODate } from "@/lib/dates";
 import { parseMoney } from "@/lib/format";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
-import { RATE_FIELDS, pierRate, quoteStay, ratePierId, type Quote } from "@/lib/pricing";
+import { RATE_FIELDS, pierGroupKey, pierRate, quoteStay, ratePierId, type Quote } from "@/lib/pricing";
 import { loadOfficialPriceList, OFFICIAL_LIST } from "./official-price-list";
 
 const ADMIN = ["admin" as const];
@@ -35,6 +35,18 @@ async function ownPier(marinaId: string, pierId: string) {
     .where(and(eq(piers.id, pierId), eq(piers.marinaId, marinaId)))
     .limit(1);
   return pier ?? null;
+}
+
+// Il pontile e quelli del porto con lo stesso nome: in Tariffe sono una scheda sola e condividono i prezzi.
+async function ownPierGroup(marinaId: string, pierId: string) {
+  const pier = await ownPier(marinaId, pierId);
+  if (!pier) return null;
+  const all = await db.select({ id: piers.id, name: piers.name, baseRate: piers.baseRate }).from(piers).where(eq(piers.marinaId, marinaId));
+  const key = pierGroupKey(pier.name);
+  const members = all.filter((p) => pierGroupKey(p.name) === key);
+  // Come nella pagina: il gruppo usa la tariffa base solo se la usano tutti; `mixed` se non sono allineati.
+  const baseRate = members.every((p) => p.baseRate);
+  return { ...pier, ids: members.map((p) => p.id), baseRate, mixed: members.some((p) => p.baseRate !== baseRate) };
 }
 
 const listSchema = z.object({
@@ -133,12 +145,14 @@ export async function saveRates(_prev: FormState, formData: FormData): Promise<F
   const list = await ownList(ctx.marinaId, String(formData.get("listId") ?? ""));
   if (!list) return fail("Listino non trovato.");
   const pierField = String(formData.get("pierId") ?? "");
-  const pier = pierField ? await ownPier(ctx.marinaId, pierField) : null;
+  const pier = pierField ? await ownPierGroup(ctx.marinaId, pierField) : null;
   if (pierField && !pier) return fail("Pontile non trovato.");
+  // I prezzi di un pontile valgono anche per quelli con lo stesso nome.
+  const targets: (string | null)[] = pier ? pier.ids : [null];
   const categories = await db.select({ id: berthCategories.id }).from(berthCategories).where(eq(berthCategories.marinaId, ctx.marinaId));
 
   const errors: Record<string, string> = {};
-  const rows = categories.map((cat) => {
+  const rows = categories.flatMap((cat) => {
     const values = {} as Record<(typeof RATE_FIELDS)[number], number>;
     for (const field of RATE_FIELDS) {
       const key = `${cat.id}:${field}`;
@@ -147,11 +161,13 @@ export async function saveRates(_prev: FormState, formData: FormData): Promise<F
       if (cents === null || cents < 0) errors[key] = "Importo non valido";
       values[field] = cents ?? 0;
     }
-    return { marinaId: ctx.marinaId, priceListId: list.id, categoryId: cat.id, pierId: pier?.id ?? null, ...values };
+    return targets.map((pierId) => ({ marinaId: ctx.marinaId, priceListId: list.id, categoryId: cat.id, pierId, ...values }));
   });
   if (Object.keys(errors).length > 0) return fail("Alcuni importi non sono validi: usa il formato 1234,50.", errors);
 
   await db.transaction(async (tx) => {
+    // Pontili con lo stesso nome ma impostati diversamente: si allineano a quello che mostra la scheda.
+    if (pier?.mixed) await tx.update(piers).set({ baseRate: pier.baseRate }).where(and(inArray(piers.id, pier.ids), eq(piers.marinaId, ctx.marinaId)));
     for (const row of rows) {
       const { marinaId: _m, priceListId: _l, categoryId: _c, pierId: _p, ...values } = row;
       await tx
@@ -313,9 +329,11 @@ export async function simulateQuote(input: {
 // pontile spuntato. Gli altri usano i propri prezzi. Vale per tutti i listini.
 export async function saveBaseRatePiers(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
-  const pierRows = await db.select({ id: piers.id, baseRate: piers.baseRate }).from(piers).where(eq(piers.marinaId, ctx.marinaId));
-  const ids = new Set(pierRows.map((p) => p.id));
-  const chosen = new Set(formData.getAll("base").map(String).filter((id) => ids.has(id)));
+  const pierRows = await db.select({ id: piers.id, name: piers.name, baseRate: piers.baseRate }).from(piers).where(eq(piers.marinaId, ctx.marinaId));
+  // Spuntare un nome vale per tutti i pontili che lo portano.
+  const picked = new Set(formData.getAll("base").map(String));
+  const keys = new Set(pierRows.filter((p) => picked.has(p.id)).map((p) => pierGroupKey(p.name)));
+  const chosen = new Set(pierRows.filter((p) => keys.has(pierGroupKey(p.name))).map((p) => p.id));
   const on = pierRows.filter((p) => chosen.has(p.id) && !p.baseRate).map((p) => p.id);
   const off = pierRows.filter((p) => !chosen.has(p.id) && p.baseRate).map((p) => p.id);
   if (on.length === 0 && off.length === 0) return { ok: true, message: "Nessuna modifica." };
@@ -332,10 +350,10 @@ export async function saveBaseRatePiers(_prev: FormState, formData: FormData): P
 // Accende o spegne la tariffa base per un pontile solo (dalla sua scheda in Tariffe).
 export async function setPierBaseRate(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
-  const pier = await ownPier(ctx.marinaId, String(formData.get("pierId") ?? ""));
+  const pier = await ownPierGroup(ctx.marinaId, String(formData.get("pierId") ?? ""));
   if (!pier) return fail("Pontile non trovato.");
   const baseRate = formData.get("baseRate") === "1";
-  await db.update(piers).set({ baseRate }).where(and(eq(piers.id, pier.id), eq(piers.marinaId, ctx.marinaId)));
+  await db.update(piers).set({ baseRate }).where(and(inArray(piers.id, pier.ids), eq(piers.marinaId, ctx.marinaId)));
   await audit(ctx, "modifica", "tariffe", null, `${pier.name}: ${baseRate ? "usa la tariffa base" : "usa i suoi prezzi"}`);
   revalidatePath("/", "layout");
   return { ok: true };
@@ -347,21 +365,21 @@ export async function copyPierRates(_prev: FormState, formData: FormData): Promi
   const ctx = await requireMarina(ADMIN);
   const list = await ownList(ctx.marinaId, String(formData.get("listId") ?? ""));
   if (!list) return fail("Listino non trovato.");
-  const target = await ownPier(ctx.marinaId, String(formData.get("pierId") ?? ""));
+  const target = await ownPierGroup(ctx.marinaId, String(formData.get("pierId") ?? ""));
   if (!target) return fail("Pontile non trovato.");
   const fromField = String(formData.get("from") ?? "");
   const source = fromField ? await ownPier(ctx.marinaId, fromField) : null;
   if (fromField && !source) return fail("Scegli da dove copiare i prezzi.");
-  if (source?.id === target.id) return fail("Scegli un altro pontile da cui copiare.");
+  if (source && target.ids.includes(source.id)) return fail("Scegli un altro pontile da cui copiare.");
 
   const copied = await db.transaction(async (tx) => {
     const sourceRows = await tx
       .select()
       .from(rates)
       .where(and(eq(rates.priceListId, list.id), eq(rates.marinaId, ctx.marinaId), source ? eq(rates.pierId, source.id) : isNull(rates.pierId)));
-    await tx.delete(rates).where(and(eq(rates.priceListId, list.id), eq(rates.marinaId, ctx.marinaId), eq(rates.pierId, target.id)));
+    await tx.delete(rates).where(and(eq(rates.priceListId, list.id), eq(rates.marinaId, ctx.marinaId), inArray(rates.pierId, target.ids)));
     if (sourceRows.length > 0) {
-      await tx.insert(rates).values(sourceRows.map(({ id: _id, pierId: _p, ...r }) => ({ ...r, pierId: target.id })));
+      await tx.insert(rates).values(target.ids.flatMap((pierId) => sourceRows.map(({ id: _id, pierId: _p, ...r }) => ({ ...r, pierId }))));
     }
     await audit(ctx, "modifica", "tariffe", list.id, `${list.name} · ${target.name}: prezzi copiati da ${source?.name ?? "tariffa base"}`, tx);
     return sourceRows.length;

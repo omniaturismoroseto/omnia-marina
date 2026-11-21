@@ -40,6 +40,37 @@ export function pierRate<T extends RateRow & { pierId: string | null }>(rows: T[
   return merged;
 }
 
+/** Pontili con lo stesso nome (maiuscole e spazi a parte) hanno un'unica tariffa: questa è la chiave che li unisce. */
+export function pierGroupKey(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLocaleLowerCase("it");
+}
+
+export interface PierGroup<T> {
+  key: string;
+  name: string;
+  piers: T[];
+  ids: string[];
+  /** Acceso se tutti i pontili del gruppo usano la tariffa base. */
+  baseRate: boolean;
+}
+
+/** Raggruppa i pontili per nome, nell'ordine in cui arrivano: in Tariffe ogni nome compare una volta sola. */
+export function groupPiersByName<T extends { id: string; name: string; baseRate: boolean }>(piers: T[]): PierGroup<T>[] {
+  const groups = new Map<string, PierGroup<T>>();
+  for (const pier of piers) {
+    const key = pierGroupKey(pier.name);
+    const group = groups.get(key);
+    if (group) {
+      group.piers.push(pier);
+      group.ids.push(pier.id);
+      group.baseRate &&= pier.baseRate;
+    } else {
+      groups.set(key, { key, name: pier.name.trim(), piers: [pier], ids: [pier.id], baseRate: pier.baseRate });
+    }
+  }
+  return [...groups.values()];
+}
+
 /** Il pontile di cui leggere i prezzi propri: nessuno se usa la tariffa base. */
 export function ratePierId(pier: { id: string; baseRate: boolean } | null | undefined): string | null {
   return pier && !pier.baseRate ? pier.id : null;

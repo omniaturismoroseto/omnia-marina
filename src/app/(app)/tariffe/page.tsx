@@ -8,7 +8,7 @@ import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, todayRome, yearOf } from "@/lib/dates";
 import { formatDimensions, moneyInput } from "@/lib/format";
 import { SEASON_LABEL } from "@/lib/labels";
-import { RATE_FIELDS } from "@/lib/pricing";
+import { RATE_FIELDS, groupPiersByName } from "@/lib/pricing";
 import { uuidOrNull, type SearchParams } from "@/lib/params";
 import { OFFICIAL_CATEGORIES, OFFICIAL_LIST } from "@/server/official-price-list";
 import {
@@ -54,8 +54,10 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
   ]);
   // Senza scelta esplicita si apre il listino in vigore oggi, altrimenti il più recente.
   const list = lists.find((l) => l.id === selectedId) ?? lists.find((l) => l.validFrom <= today && today <= l.validTo) ?? lists[0];
-  const pier = pierRows.find((p) => p.id === selectedPierId) ?? null;
-  const basePierNames = pierRows.filter((p) => p.baseRate).map((p) => p.name);
+  // Pontili con lo stesso nome: una scheda sola, prezzi condivisi.
+  const groups = groupPiersByName(pierRows);
+  const group = groups.find((g) => selectedPierId !== null && g.ids.includes(selectedPierId)) ?? null;
+  const basePierNames = groups.filter((g) => g.baseRate).map((g) => g.name);
 
   const [rateRows, periods, extras] = list
     ? await Promise.all([
@@ -64,6 +66,10 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
         db.select().from(priceListExtras).where(eq(priceListExtras.priceListId, list.id)).orderBy(asc(priceListExtras.sortOrder), asc(priceListExtras.name)),
       ])
     : [[], [], []];
+  // Dentro un gruppo i prezzi si leggono dal primo pontile che ne ha in questo listino (salvando valgono per tutti).
+  const pier = group
+    ? { id: group.ids.find((id) => rateRows.some((r) => r.pierId === id)) ?? group.ids[0], name: group.name, baseRate: group.baseRate, count: group.ids.length }
+    : null;
 
   const show = (cents: number | undefined) => (cents ? moneyInput(cents) : "");
   const valuesOf = (r: (typeof rateRows)[number] | undefined) => Object.fromEntries(RATE_FIELDS.map((k) => [k, show(r?.[k])])) as RateGridRow["values"];
@@ -79,7 +85,7 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
     };
   });
   const empty = rateRows.every((r) => RATE_FIELDS.every((k) => r[k] === 0));
-  const listHref = (pierId: string | null) => `/tariffe?listino=${list?.id ?? ""}${pierId ? `&pontile=${pierId}` : ""}`;
+  const listHref = (pierId: string | null | undefined) => `/tariffe?listino=${list?.id ?? ""}${pierId ? `&pontile=${pierId}` : ""}`;
   const pierHasPrices = (pierId: string) => rateRows.some((r) => r.pierId === pierId && RATE_FIELDS.some((k) => r[k] > 0));
 
   return (
@@ -121,18 +127,18 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
           >
             {categories.length > 0 && (
               <>
-                {pierRows.length > 0 && (
+                {groups.length > 0 && (
                   <div className="space-y-3 border-b border-line-soft p-4">
                     <FilterTabs
-                      current={pier?.id ?? "base"}
+                      current={group?.key ?? "base"}
                       items={[
                         { value: "base", label: "Tariffa base", href: listHref(null) },
-                        ...pierRows.map((p) => ({ value: p.id, label: p.baseRate ? `${p.name} · base` : p.name, href: listHref(p.id) })),
+                        ...groups.map((g) => ({ value: g.key, label: g.baseRate ? `${g.name} · base` : g.name, href: listHref(g.ids[0]) })),
                       ]}
                     />
                     {!pier ? (
                       admin ? (
-                        <BaseRatePiersForm piers={pierRows} />
+                        <BaseRatePiersForm piers={groups.map((g) => ({ id: g.ids[0], name: g.name, baseRate: g.baseRate }))} />
                       ) : (
                         <p className="text-sm text-muted">
                           La tariffa base vale per {listOrNone(basePierNames)} e per le caselle lasciate vuote nei prezzi degli altri pontili.
@@ -140,6 +146,11 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
                       )
                     ) : (
                       <div className="space-y-3">
+                        {pier.count > 1 && (
+                          <p className="text-sm text-muted">
+                            Ci sono {pier.count} pontili chiamati «{pier.name}»: hanno un&apos;unica tariffa e i prezzi salvati qui valgono per tutti.
+                          </p>
+                        )}
                         {pier.baseRate ? (
                           <Notice>
                             {pier.name} usa la tariffa base: i prezzi qui sotto non si applicano finché non la spegni.
@@ -157,7 +168,7 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
                               key={`${list.id}:${pier.id}`}
                               listId={list.id}
                               pierId={pier.id}
-                              sources={pierRows.filter((p) => p.id !== pier.id).map((p) => ({ id: p.id, name: p.name }))}
+                              sources={groups.filter((g) => g !== group).map((g) => ({ id: g.ids.find((id) => rateRows.some((r) => r.pierId === id)) ?? g.ids[0], name: g.name }))}
                             />
                           </div>
                         )}
@@ -208,7 +219,7 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
                   key={list.id}
                   listId={list.id}
                   categories={categories.map((c) => ({ id: c.id, name: c.name }))}
-                  piers={pierRows.map((p) => ({ id: p.id, name: p.baseRate ? `${p.name} (tariffa base)` : p.name }))}
+                  piers={groups.map((g) => ({ id: g.ids[0], name: g.baseRate ? `${g.name} (tariffa base)` : g.name }))}
                   today={today}
                 />
               ) : (

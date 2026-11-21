@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryForBoat, occupiedUntil, quoteStay, seasonForDate, splitInstalments, pierRate, ratePierId, type RateRow, type SeasonPeriod } from "../src/lib/pricing";
+import { categoryForBoat, occupiedUntil, quoteStay, seasonForDate, splitInstalments, groupPiersByName, pierRate, ratePierId, type RateRow, type SeasonPeriod } from "../src/lib/pricing";
 import { addMonths, annualEnd, diffDays } from "../src/lib/dates";
 import { parseMeters, parseMoney, splitVat } from "../src/lib/format";
 
@@ -117,6 +117,20 @@ describe("tariffa del pontile", () => {
   it("nessuna riga: nessuna tariffa", () => {
     expect(pierRate([], "pontile-c")).toBeNull();
     expect(pierRate([darsenaC], null)).toBeNull();
+  });
+
+  it("i pontili con lo stesso nome sono una scheda sola, nell'ordine di arrivo", () => {
+    const groups = groupPiersByName([
+      { id: "1", name: "Darsena C", baseRate: false },
+      { id: "2", name: "Pontile A", baseRate: true },
+      { id: "3", name: " darsena  c ", baseRate: true },
+    ]);
+    expect(groups.map((g) => [g.name, g.ids])).toEqual([
+      ["Darsena C", ["1", "3"]],
+      ["Pontile A", ["2"]],
+    ]);
+    // La tariffa base risulta accesa solo se tutti i pontili del gruppo la usano.
+    expect(groups.map((g) => g.baseRate)).toEqual([false, true]);
   });
 
   it("un pontile con la tariffa base accesa non legge i suoi prezzi", () => {
