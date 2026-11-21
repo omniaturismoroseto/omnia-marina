@@ -9,7 +9,8 @@ import { berthCategories, piers, priceListExtras, priceLists, rates, type Contra
 // Il foglio non indica le larghezze: quelle qui sotto sono indicative e si correggono in Impostazioni → Categorie.
 // Importi in euro, IVA inclusa.
 
-export const OFFICIAL_LIST = { name: "Listino 2026", validFrom: "2026-01-01", validTo: "2026-12-31", vatRate: 22 };
+// Il foglio ufficiale riporta importi IVA inclusa.
+export const OFFICIAL_LIST = { name: "Listino 2026", validFrom: "2026-01-01", validTo: "2026-12-31", vatRate: 22, vatIncluded: true };
 export const OFFICIAL_ZONE = "Darsena C";
 
 /** Il pontile della darsena C: codice «C» oppure nome che finisce con «C» (es. «Darsena C»). */
@@ -112,6 +113,8 @@ export async function loadOfficialPriceList(tx: Tx, marinaId: string): Promise<{
     .where(and(eq(priceLists.marinaId, marinaId), eq(priceLists.name, OFFICIAL_LIST.name)))
     .limit(1);
   if (!list) [list] = await tx.insert(priceLists).values({ marinaId, ...OFFICIAL_LIST }).returning({ id: priceLists.id });
+  // Gli importi del foglio comprendono l'IVA: il listino deve dirlo anche se era stato impostato a prezzi netti.
+  else await tx.update(priceLists).set({ vatIncluded: true }).where(eq(priceLists.id, list.id));
 
   for (const c of OFFICIAL_CATEGORIES) {
     const categoryId = categoryIds.get(c.name)!;

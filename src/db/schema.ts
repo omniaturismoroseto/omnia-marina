@@ -510,8 +510,9 @@ export const priceLists = pgTable(
     name: text("name").notNull(),
     validFrom: date("valid_from").notNull(),
     validTo: date("valid_to").notNull(),
-    // I prezzi del listino si intendono IVA inclusa.
     vatRate: integer("vat_rate").notNull().default(22),
+    // Acceso: i prezzi del listino (tariffe e servizi) comprendono l'IVA; spento: sono netti e l'IVA si aggiunge.
+    vatIncluded: boolean("vat_included").notNull().default(true),
     createdAt: createdAt(),
   },
   (t) => [index("price_lists_marina_idx").on(t.marinaId, t.validFrom)],
@@ -561,6 +562,8 @@ export const rates = pgTable(
     seasonal: integer("seasonal").notNull().default(0),
     // Contributo rifiuti aggiunto ai contratti annuali.
     waste: integer("waste").notNull().default(0),
+    // Condominio (spese di gestione comuni) proposto nei contratti annuali.
+    service: integer("service").notNull().default(0),
   },
   // Una sola riga per listino, categoria e pontile; la riga della tariffa base (pontile vuoto) è unica anch'essa.
   (t) => [unique("rates_list_category_pier_uq").on(t.priceListId, t.categoryId, t.pierId).nullsNotDistinct()],

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryForBoat, occupiedUntil, quoteStay, seasonForDate, splitInstalments, groupPiersByName, pierRate, ratePierId, type RateRow, type SeasonPeriod } from "../src/lib/pricing";
+import { categoryForBoat, occupiedUntil, quoteStay, seasonForDate, splitInstalments, annualTotal, grossQuote, groupPiersByName, pierRate, ratePierId, withVat, type RateRow, type SeasonPeriod } from "../src/lib/pricing";
 import { addMonths, annualEnd, diffDays } from "../src/lib/dates";
 import { parseMeters, parseMoney, splitVat } from "../src/lib/format";
 
@@ -19,6 +19,7 @@ const rate: RateRow = {
   annual: 350000,
   seasonal: 0,
   waste: 0,
+  service: 0,
 };
 
 describe("stagioni", () => {
@@ -89,7 +90,7 @@ describe("preventivo", () => {
 });
 
 describe("tariffa del pontile", () => {
-  const zero = { dailyLow: 0, dailyMid: 0, dailyHigh: 0, monthlyLow: 0, monthlyMid: 0, monthlyHigh: 0, annual: 0, seasonal: 0, waste: 0 };
+  const zero = { dailyLow: 0, dailyMid: 0, dailyHigh: 0, monthlyLow: 0, monthlyMid: 0, monthlyHigh: 0, annual: 0, seasonal: 0, waste: 0, service: 0 };
   const base = { ...rate, waste: 4000, pierId: null };
   // Come a Portorose: nella darsena C il canone annuale costa di più, transiti e mensili restano quelli base.
   const darsenaC = { ...zero, annual: 171000, pierId: "pontile-c" };
@@ -137,6 +138,30 @@ describe("tariffa del pontile", () => {
     expect(ratePierId({ id: "pontile-c", baseRate: true })).toBeNull();
     expect(ratePierId({ id: "pontile-c", baseRate: false })).toBe("pontile-c");
     expect(ratePierId(null)).toBeNull();
+  });
+});
+
+describe("IVA e totale annuo", () => {
+  it("prezzi senza IVA: l'IVA si aggiunge", () => {
+    expect(withVat(100000, 22, false)).toBe(122000);
+    expect(withVat(100000, 22, true)).toBe(100000);
+    // Annuale 1.500 + rifiuti 40 + condominio 160 = 1.700 netti, IVA 374, totale 2.074.
+    expect(annualTotal({ annual: 150000, waste: 4000, service: 16000 }, 22, false)).toEqual({ netCents: 170000, vatCents: 37400, totalCents: 207400 });
+  });
+
+  it("prezzi IVA inclusa: l'IVA è già dentro il totale", () => {
+    expect(annualTotal({ annual: 183000, waste: 4880, service: 19520 }, 22, true)).toEqual({ netCents: 170000, vatCents: 37400, totalCents: 207400 });
+  });
+
+  it("il preventivo dei contratti esce IVA compresa, con rifiuti e condominio solo per gli annuali", () => {
+    const r = { ...rate, annual: 150000, waste: 4000, service: 16000 };
+    const annual = grossQuote(quoteStay({ type: "annuale", startDate: "2026-01-01", endDate: "2026-12-31", rate: r, periods }), r, "annuale", { vatRate: 22, vatIncluded: false });
+    expect(annual).toMatchObject({ totalCents: 183000, wasteCents: 4880, serviceCents: 19520 });
+    const transit = grossQuote(quoteStay({ type: "transito", startDate: "2026-03-01", endDate: "2026-03-03", rate: r, periods }), r, "transito", { vatRate: 10, vatIncluded: false });
+    expect(transit.totalCents).toBe(Math.round((rate.dailyLow * 110) / 100) * 2);
+    expect(transit).toMatchObject({ wasteCents: 0, serviceCents: 0 });
+    // Listino IVA inclusa: importi invariati.
+    expect(grossQuote(quoteStay({ type: "annuale", startDate: "2026-01-01", endDate: "2026-12-31", rate: r, periods }), r, "annuale", { vatRate: 22, vatIncluded: true }).totalCents).toBe(150000);
   });
 });
 

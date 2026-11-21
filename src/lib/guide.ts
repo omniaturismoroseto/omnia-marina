@@ -320,6 +320,8 @@ export const GUIDE: GuideSection[] = [
         title: "Come si usa",
         items: [
           "Un listino ha un periodo di validità e i prezzi per ogni categoria di posto e tipo di contratto (annuale, stagionale, mensile, transito).",
+          "In «Dati del listino» scegli l'aliquota e se i prezzi che scrivi sono «Senza IVA» (l'IVA si aggiunge) o «IVA inclusa». I contratti propongono sempre gli importi IVA compresa.",
+          "Per ogni categoria: rifiuti e condominio, proposti come voci dei contratti annuali. Le colonne «IVA» e «Totale annuo» (annuale + rifiuti + condominio + IVA) si calcolano da sole.",
           "«Stagioni»: indica i periodi di media e alta stagione; il resto dell'anno è bassa stagione.",
           "Sopra la griglia c'è una scheda per la «Tariffa base» e una per ogni pontile o darsena: ogni pontile creato ha la sua. I pontili con lo stesso nome hanno una scheda sola e gli stessi prezzi.",
           "Nella scheda «Tariffa base» spunta i pontili a cui si applica (uno, alcuni o «Tutti»; nessuno = spenta). Gli altri usano i prezzi della loro scheda.",

@@ -4,9 +4,9 @@ import { useState, useTransition } from "react";
 import { ActionButton, Field, Form, FormMessage, SelectField, Submit } from "@/components/form";
 import { addDays, formatDate, isValidISODate } from "@/lib/dates";
 import { SPACE_ITEM_KINDS } from "@/lib/contract-items";
-import { formatMoney, moneyInput } from "@/lib/format";
+import { formatMoney, moneyInput, parseMoney } from "@/lib/format";
 import { CONTRACT_ITEM_LABEL } from "@/lib/labels";
-import type { Quote } from "@/lib/pricing";
+import { annualTotal, type Quote } from "@/lib/pricing";
 import {
   addPriceListExtra,
   addSeasonPeriod,
@@ -26,15 +26,32 @@ import {
 
 const VAT_OPTIONS = [22, 10, 5, 4, 0].map((r) => ({ value: String(r), label: `${r}%` }));
 
-export function PriceListForm({ list, defaultYear }: { list?: { id: string; name: string; validFrom: string; validTo: string; vatRate: number }; defaultYear: number }) {
+export function PriceListForm({
+  list,
+  defaultYear,
+}: {
+  list?: { id: string; name: string; validFrom: string; validTo: string; vatRate: number; vatIncluded: boolean };
+  defaultYear: number;
+}) {
   return (
-    <Form action={savePriceList} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+    <Form action={savePriceList} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7">
       {list && <input type="hidden" name="id" value={list.id} />}
       <Field name="name" label="Nome" defaultValue={list?.name ?? `Listino ${defaultYear}`} required wrapperClassName="lg:col-span-2" />
       <Field name="validFrom" label="Valido dal" type="date" defaultValue={list?.validFrom ?? `${defaultYear}-01-01`} required />
       <Field name="validTo" label="Valido fino al" type="date" defaultValue={list?.validTo ?? `${defaultYear}-12-31`} required />
-      <SelectField name="vatRate" label="IVA inclusa nei prezzi" defaultValue={String(list?.vatRate ?? 22)} options={VAT_OPTIONS} />
-      <div className="flex items-center gap-3 sm:col-span-2 lg:col-span-5">
+      <SelectField name="vatRate" label="Aliquota IVA" defaultValue={String(list?.vatRate ?? 22)} options={VAT_OPTIONS} />
+      <SelectField
+        name="vatMode"
+        label="I prezzi scritti sono"
+        defaultValue={list && list.vatIncluded ? "inclusa" : "esclusa"}
+        options={[
+          { value: "esclusa", label: "Senza IVA (si aggiunge)" },
+          { value: "inclusa", label: "IVA inclusa" },
+        ]}
+        hint="Vale per tariffe e servizi del listino. Cambiarlo non modifica gli importi già scritti."
+        wrapperClassName="sm:col-span-2 lg:col-span-2"
+      />
+      <div className="flex items-center gap-3 sm:col-span-2 lg:col-span-7">
         <Submit variant={list ? "secondary" : "primary"} size="sm">
           {list ? "Salva" : "Crea listino"}
         </Submit>
@@ -67,6 +84,7 @@ const COLUMNS = [
   ["annual", "Anno", ""],
   ["seasonal", "Stagionale", ""],
   ["waste", "Rifiuti", ""],
+  ["service", "Condominio", ""],
 ] as const;
 
 type RateKey = (typeof COLUMNS)[number][0];
@@ -83,11 +101,34 @@ export interface RateGridRow {
 // In sola lettura l'importo si mostra con il separatore delle migliaia (1.900,00).
 const readable = (v: string) => v.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
-// Griglia tariffe di un pontile (o della tariffa base): una riga per categoria, una colonna per periodo e stagione.
-export function RatesGrid({ listId, pierId, rows, editable }: { listId: string; pierId: string; rows: RateGridRow[]; editable: boolean }) {
+/**
+ * Griglia tariffe di un pontile (o della tariffa base): una riga per categoria, una colonna per periodo e stagione,
+ * e in fondo IVA e totale di un anno (annuale + rifiuti + condominio), ricalcolati mentre si scrive.
+ */
+export function RatesGrid({
+  listId,
+  pierId,
+  rows,
+  editable,
+  vatRate,
+  vatIncluded,
+}: {
+  listId: string;
+  pierId: string;
+  rows: RateGridRow[];
+  editable: boolean;
+  vatRate: number;
+  vatIncluded: boolean;
+}) {
+  const [values, setValues] = useState(() => Object.fromEntries(rows.map((r) => [r.categoryId, r.values])) as Record<string, Record<RateKey, string>>);
+  // Importo valido della casella: quello scritto o, nei pontili, quello della tariffa base.
+  const cents = (row: RateGridRow, key: RateKey) => parseMoney(values[row.categoryId]?.[key] || row.fallback?.[key] || "") ?? 0;
+  const yearOf = (row: RateGridRow) => annualTotal({ annual: cents(row, "annual"), waste: cents(row, "waste"), service: cents(row, "service") }, vatRate, vatIncluded);
+  const vatLabel = vatIncluded ? `${vatRate}% inclusa` : `${vatRate}% in più`;
+
   const table = (
     <div className="overflow-x-auto">
-      <table className="tbl min-w-[920px]">
+      <table className="tbl min-w-[1180px]">
         <thead>
           <tr>
             <th rowSpan={2}>Categoria</th>
@@ -108,6 +149,18 @@ export function RatesGrid({ listId, pierId, rows, editable }: { listId: string; 
               Rifiuti
               <span className="block text-[11px] font-normal normal-case text-muted">voce degli annuali</span>
             </th>
+            <th rowSpan={2} className="num border-l border-line">
+              Condominio
+              <span className="block text-[11px] font-normal normal-case text-muted">voce degli annuali</span>
+            </th>
+            <th rowSpan={2} className="num border-l border-line">
+              IVA
+              <span className="block text-[11px] font-normal normal-case text-muted">{vatLabel}</span>
+            </th>
+            <th rowSpan={2} className="num border-l border-line">
+              Totale annuo
+              <span className="block text-[11px] font-normal normal-case text-muted">con rifiuti, condominio e IVA</span>
+            </th>
           </tr>
           <tr>
             {COLUMNS.slice(0, 6).map(([key, , season], i) => (
@@ -118,36 +171,42 @@ export function RatesGrid({ listId, pierId, rows, editable }: { listId: string; 
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.categoryId}>
-              <th scope="row" className="border-b border-line-soft px-3 py-2 text-left font-medium whitespace-nowrap">
-                {row.categoryName}
-                <span className="block text-xs font-normal text-muted">{row.size}</span>
-              </th>
-              {COLUMNS.map(([key, period, season]) => (
-                <td key={key} className={editable ? "num px-1! py-1.5!" : "num"}>
-                  {editable ? (
-                    <input
-                      name={`${row.categoryId}:${key}`}
-                      defaultValue={row.values[key]}
-                      placeholder={row.fallback?.[key] || undefined}
-                      inputMode="decimal"
-                      aria-label={`${row.categoryName}, ${period.toLowerCase()} ${season}`.trim()}
-                      className="input ml-auto w-[5.25rem] px-2 py-1 text-right tabular-nums placeholder:text-faint"
-                    />
-                  ) : row.values[key] ? (
-                    readable(row.values[key])
-                  ) : row.fallback?.[key] ? (
-                    <span className="text-faint" title="Come la tariffa base">
-                      {readable(row.fallback[key])}
-                    </span>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const year = yearOf(row);
+            return (
+              <tr key={row.categoryId}>
+                <th scope="row" className="border-b border-line-soft px-3 py-2 text-left font-medium whitespace-nowrap">
+                  {row.categoryName}
+                  <span className="block text-xs font-normal text-muted">{row.size}</span>
+                </th>
+                {COLUMNS.map(([key, period, season]) => (
+                  <td key={key} className={editable ? "num px-1! py-1.5!" : "num"}>
+                    {editable ? (
+                      <input
+                        name={`${row.categoryId}:${key}`}
+                        value={values[row.categoryId]?.[key] ?? ""}
+                        onChange={(e) => setValues((v) => ({ ...v, [row.categoryId]: { ...v[row.categoryId], [key]: e.target.value } }))}
+                        placeholder={row.fallback?.[key] || undefined}
+                        inputMode="decimal"
+                        aria-label={`${row.categoryName}, ${period.toLowerCase()} ${season}`.trim()}
+                        className="input ml-auto w-[5.25rem] px-2 py-1 text-right tabular-nums placeholder:text-faint"
+                      />
+                    ) : row.values[key] ? (
+                      readable(row.values[key])
+                    ) : row.fallback?.[key] ? (
+                      <span className="text-faint" title="Come la tariffa base">
+                        {readable(row.fallback[key])}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                ))}
+                <td className="num border-l border-line text-muted">{year.totalCents ? formatMoney(year.vatCents) : "—"}</td>
+                <td className="num font-semibold">{year.totalCents ? formatMoney(year.totalCents) : "—"}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -163,7 +222,7 @@ export function RatesGrid({ listId, pierId, rows, editable }: { listId: string; 
         <Submit>Salva tariffe</Submit>
         <FormMessage />
         <span className="text-sm text-muted">
-          Importi in euro, IVA inclusa.{pierId ? " Le caselle vuote usano la tariffa base, mostrata in grigio." : ""}
+          Importi in euro, {vatIncluded ? "IVA inclusa" : "senza IVA"}.{pierId ? " Le caselle vuote usano la tariffa base, mostrata in grigio." : ""}
         </span>
       </div>
     </Form>
@@ -293,7 +352,7 @@ export function Simulator({
   const [type, setType] = useState("transito");
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(addDays(today, 3));
-  const [quote, setQuote] = useState<(Quote & { wasteCents: number }) | null | "none">(null);
+  const [quote, setQuote] = useState<(Quote & { wasteCents: number; serviceCents: number }) | null | "none">(null);
   const [pending, startTransition] = useTransition();
   const valid = categoryId && isValidISODate(startDate) && isValidISODate(endDate) && endDate >= startDate;
 
@@ -381,7 +440,16 @@ export function Simulator({
               </span>
               <span className="tabular-nums">{formatMoney(quote.totalCents)}</span>
             </p>
-            {quote.wasteCents > 0 && <p className="mt-1 text-xs text-muted">Più la quota rifiuti di {formatMoney(quote.wasteCents)}, voce a parte del contratto.</p>}
+            {(quote.wasteCents > 0 || quote.serviceCents > 0) && (
+              <p className="mt-1 text-xs text-muted">
+                Più{" "}
+                {[quote.wasteCents > 0 && `la quota rifiuti di ${formatMoney(quote.wasteCents)}`, quote.serviceCents > 0 && `il condominio di ${formatMoney(quote.serviceCents)}`]
+                  .filter(Boolean)
+                  .join(" e ")}
+                , voci a parte del contratto.
+              </p>
+            )}
+            <p className="mt-1 text-xs text-muted">Importi IVA inclusa, come li propone il contratto.</p>
           </div>
         )}
       </div>
@@ -400,11 +468,11 @@ export interface ExtraRow {
 const EXTRA_VAT_OPTIONS = [...VAT_OPTIONS.slice(0, -1), { value: "0", label: "Senza IVA (cauzione)" }];
 
 // Campi comuni al modulo di aggiunta e a quello di modifica.
-function ExtraFields({ extra }: { extra?: ExtraRow }) {
+function ExtraFields({ extra, vatIncluded }: { extra?: ExtraRow; vatIncluded: boolean }) {
   return (
     <>
       <Field name="name" label="Servizio" placeholder="Es. Posto auto coperto" defaultValue={extra?.name} required />
-      <Field name="amount" label="Importo" inputMode="decimal" placeholder="0,00" defaultValue={extra ? moneyInput(extra.amountCents) : undefined} required />
+      <Field name="amount" label={vatIncluded ? "Importo (IVA inclusa)" : "Importo (senza IVA)"} inputMode="decimal" placeholder="0,00" defaultValue={extra ? moneyInput(extra.amountCents) : undefined} required />
       <SelectField name="vatRate" label="IVA" defaultValue={String(extra?.vatRate ?? 22)} options={EXTRA_VAT_OPTIONS} />
       <SelectField
         name="itemKind"
@@ -418,7 +486,7 @@ function ExtraFields({ extra }: { extra?: ExtraRow }) {
   );
 }
 
-function ExtraItem({ extra, editable }: { extra: ExtraRow; editable: boolean }) {
+function ExtraItem({ extra, editable, vatIncluded }: { extra: ExtraRow; editable: boolean; vatIncluded: boolean }) {
   const [editing, setEditing] = useState(false);
   return (
     <li className="py-2 text-sm">
@@ -426,7 +494,11 @@ function ExtraItem({ extra, editable }: { extra: ExtraRow; editable: boolean }) 
         <span>
           {extra.name}
           <span className="block text-xs text-muted">
-            {extra.vatRate === 0 ? "senza IVA" : `IVA ${extra.vatRate}% inclusa`}
+            {extra.vatRate === 0
+              ? "senza IVA"
+              : vatIncluded
+                ? `IVA ${extra.vatRate}% inclusa`
+                : `più IVA ${extra.vatRate}%: ${formatMoney(Math.round((extra.amountCents * (100 + extra.vatRate)) / 100))}`}
             {extra.itemKind && ` · nel contratto come «${CONTRACT_ITEM_LABEL[extra.itemKind].toLowerCase()}», con periodo`}
           </span>
         </span>
@@ -447,7 +519,7 @@ function ExtraItem({ extra, editable }: { extra: ExtraRow; editable: boolean }) 
       {editing && (
         <Form action={updatePriceListExtra} className="mt-3 grid grid-cols-1 gap-3 rounded-md border border-line-soft bg-paper p-3 sm:grid-cols-2">
           <input type="hidden" name="extraId" value={extra.id} />
-          <ExtraFields extra={extra} />
+          <ExtraFields extra={extra} vatIncluded={vatIncluded} />
           <div className="flex items-center gap-2 sm:col-span-2">
             <Submit variant="secondary" size="sm">
               Salva
@@ -464,7 +536,7 @@ function ExtraItem({ extra, editable }: { extra: ExtraRow; editable: boolean }) 
 }
 
 // Servizi e cauzioni a prezzo fisso: si propongono quando si crea un addebito.
-export function PriceListExtras({ listId, extras, editable }: { listId: string; extras: ExtraRow[]; editable: boolean }) {
+export function PriceListExtras({ listId, extras, editable, vatIncluded }: { listId: string; extras: ExtraRow[]; editable: boolean; vatIncluded: boolean }) {
   return (
     <div className="space-y-4">
       {extras.length === 0 ? (
@@ -473,14 +545,14 @@ export function PriceListExtras({ listId, extras, editable }: { listId: string; 
         <ul className="divide-y divide-line-soft">
           {extras.map((e) => (
             // La chiave cambia con i valori: dopo un salvataggio la riga si richiude da sola.
-            <ExtraItem key={`${e.id}:${e.name}:${e.amountCents}:${e.vatRate}:${e.itemKind ?? ""}`} extra={e} editable={editable} />
+            <ExtraItem key={`${e.id}:${e.name}:${e.amountCents}:${e.vatRate}:${e.itemKind ?? ""}`} extra={e} editable={editable} vatIncluded={vatIncluded} />
           ))}
         </ul>
       )}
       {editable && (
         <Form action={addPriceListExtra} resetOnSuccess className="grid grid-cols-1 gap-3 border-t border-line-soft pt-4 sm:grid-cols-2">
           <input type="hidden" name="listId" value={listId} />
-          <ExtraFields />
+          <ExtraFields vatIncluded={vatIncluded} />
           <div className="flex items-center gap-3 sm:col-span-2">
             <Submit variant="secondary">Aggiungi</Submit>
             <FormMessage />
