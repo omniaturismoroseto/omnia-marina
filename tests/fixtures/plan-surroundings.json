@@ -1,0 +1,18 @@
+{
+  "buildings": [
+    { "name": "Capitaneria", "outline": [{ "x": 14, "y": 14 }, { "x": 129, "y": 14 }, { "x": 129, "y": 51 }, { "x": 14, "y": 51 }] },
+    { "name": "", "outline": [{ "x": 150, "y": 10 }, { "x": 225, "y": 10 }, { "x": 225, "y": 53 }, { "x": 150, "y": 53 }] },
+    { "name": "Capannone", "outline": [{ "x": 260, "y": 16 }, { "x": 420, "y": 16 }, { "x": 420, "y": 48 }, { "x": 260, "y": 48 }] },
+    { "name": "troppo piccolo", "outline": [{ "x": 500, "y": 500 }, { "x": 500.5, "y": 500 }] }
+  ],
+  "green": [{ "outline": [{ "x": 0, "y": 86 }, { "x": 97, "y": 86 }, { "x": 97, "y": 986 }, { "x": 0, "y": 986 }] }],
+  "services": [
+    { "type": "parcheggio", "name": "", "at": { "x": 615, "y": 39 } },
+    { "type": "ristorante", "name": "Da Mario", "at": { "x": 187, "y": 31 } },
+    { "type": "ufficio", "name": "", "at": { "x": 71, "y": 32 } },
+    { "type": "carburante", "name": "", "at": { "x": 774, "y": 775 } },
+    { "type": "servizi", "name": "", "at": { "x": 450, "y": 60 } },
+    { "type": "bar", "name": "Bar del molo", "at": { "x": 1200, "y": 60 } }
+  ],
+  "notes": ""
+}
