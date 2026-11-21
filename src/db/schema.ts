@@ -409,21 +409,6 @@ export const boats = pgTable(
 
 // ───────────────────────── Pontili e posti barca ─────────────────────────
 
-// Zona tariffaria: gruppo di pontili con prezzi propri (es. una darsena più cara). I pontili senza zona usano la tariffa base.
-export const tariffZones = pgTable(
-  "tariff_zones",
-  {
-    id: id(),
-    marinaId: uuid("marina_id")
-      .notNull()
-      .references(() => marinas.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: createdAt(),
-  },
-  (t) => [uniqueIndex("tariff_zones_marina_name_uq").on(t.marinaId, t.name)],
-);
-
 export const piers = pgTable(
   "piers",
   {
@@ -434,7 +419,8 @@ export const piers = pgTable(
     code: text("code").notNull(),
     name: text("name").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
-    tariffZoneId: uuid("tariff_zone_id").references(() => tariffZones.id, { onDelete: "set null" }),
+    // Acceso: il pontile usa la tariffa base del listino; spento: usa i prezzi propri (rates.pier_id).
+    baseRate: boolean("base_rate").notNull().default(true),
   },
   (t) => [uniqueIndex("piers_marina_code_uq").on(t.marinaId, t.code)],
 );
@@ -534,8 +520,8 @@ export const rates = pgTable(
     categoryId: uuid("category_id")
       .notNull()
       .references(() => berthCategories.id, { onDelete: "cascade" }),
-    // Vuota = tariffa base. Nelle righe di una zona gli importi a zero significano «come la tariffa base».
-    zoneId: uuid("zone_id").references(() => tariffZones.id, { onDelete: "cascade" }),
+    // Vuoto = tariffa base. Nelle righe di un pontile gli importi a zero significano «come la tariffa base».
+    pierId: uuid("pier_id").references(() => piers.id, { onDelete: "cascade" }),
     dailyLow: integer("daily_low").notNull().default(0),
     dailyMid: integer("daily_mid").notNull().default(0),
     dailyHigh: integer("daily_high").notNull().default(0),
@@ -548,8 +534,8 @@ export const rates = pgTable(
     // Contributo rifiuti aggiunto ai contratti annuali.
     waste: integer("waste").notNull().default(0),
   },
-  // Una sola riga per listino, categoria e zona; la riga della tariffa base (zona vuota) è unica anch'essa.
-  (t) => [unique("rates_list_category_zone_uq").on(t.priceListId, t.categoryId, t.zoneId).nullsNotDistinct()],
+  // Una sola riga per listino, categoria e pontile; la riga della tariffa base (pontile vuoto) è unica anch'essa.
+  (t) => [unique("rates_list_category_pier_uq").on(t.priceListId, t.categoryId, t.pierId).nullsNotDistinct()],
 );
 
 // Servizi a prezzo fisso del listino (posti auto, carrelli, cauzioni…), da proporre negli addebiti.

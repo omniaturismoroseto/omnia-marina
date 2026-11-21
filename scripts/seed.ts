@@ -20,14 +20,13 @@ import {
   privacyConsents,
   rates,
   seasonPeriods,
-  tariffZones,
   tasks,
   users,
 } from "@/db/schema";
 import { hashPassword } from "@/lib/auth/password";
 import { addDays, addMonths, todayRome, yearOf } from "@/lib/dates";
 import { imageInfo, layoutPier, type PlanBerth, type Point } from "@/lib/plan";
-import { quoteStay, zoneRate, type RateRow, type SeasonPeriod } from "@/lib/pricing";
+import { pierRate, quoteStay, type RateRow, type SeasonPeriod } from "@/lib/pricing";
 import { createCharge, registerPayment } from "@/server/accounting";
 import { createContract, recordMovement } from "@/server/contracts";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
@@ -61,7 +60,7 @@ const RATES: number[][] = [
   [58, 82, 115, 950, 1450, 2050, 6600, 80],
   [78, 110, 155, 1300, 1950, 2750, 9000, 90],
 ];
-// Il pontile C è una zona più cara: solo il canone annuale cambia (+10%), il resto segue la tariffa base.
+// Il pontile C ha prezzi propri: solo il canone annuale cambia (+10%), il resto segue la tariffa base.
 const ZONE_C_ANNUAL_MARKUP = 1.1;
 
 const PEOPLE: [first: string, last: string, city: string, province: string][] = [
@@ -178,9 +177,7 @@ async function main() {
       rateFor.set(cat.id, row);
       await tx.insert(rates).values({ marinaId, priceListId: list.id, categoryId: cat.id, ...row });
     }
-    const [zoneC] = await tx.insert(tariffZones).values({ marinaId, name: "Pontile C" }).returning({ id: tariffZones.id });
     const zoneAnnual = (catId: string) => Math.round((rateFor.get(catId)!.annual * ZONE_C_ANNUAL_MARKUP) / 1000) * 1000;
-    for (const cat of categories) await tx.insert(rates).values({ marinaId, priceListId: list.id, categoryId: cat.id, zoneId: zoneC.id, annual: zoneAnnual(cat.id) });
     const periods: SeasonPeriod[] = await tx.select().from(seasonPeriods).where(eq(seasonPeriods.priceListId, list.id));
 
     // Listino dell'anno successivo, con le stesse tariffe, per i rinnovi.
@@ -193,7 +190,6 @@ async function main() {
     );
     for (const cat of categories) {
       await tx.insert(rates).values({ marinaId, priceListId: nextList.id, categoryId: cat.id, ...rateFor.get(cat.id)! });
-      await tx.insert(rates).values({ marinaId, priceListId: nextList.id, categoryId: cat.id, zoneId: zoneC.id, annual: zoneAnnual(cat.id) });
     }
 
     // ── Pontili e posti ──
@@ -204,13 +200,20 @@ async function main() {
       ["C", "Pontile C", 6, 3, ["sx", "dx"]],
       ["T", "Banchina transiti", 8, 4, ["sx"]],
     ];
+    let pierC = "";
     const berthByCode = new Map<string, { id: string; categoryId: string | null; lengthCm: number; beamCm: number }>();
     const berthsByPier = new Map<string, PlanBerth[]>();
     for (const [i, [code, name, perSide, catIndex, sides]] of PIERS.entries()) {
       const [pier] = await tx
         .insert(piers)
-        .values({ marinaId, code, name, sortOrder: i, tariffZoneId: code === "C" ? zoneC.id : null })
+        .values({ marinaId, code, name, sortOrder: i, baseRate: code !== "C" })
         .returning({ id: piers.id });
+      if (code === "C") {
+        pierC = pier.id;
+        for (const l of [list.id, nextList.id]) {
+          for (const cat of categories) await tx.insert(rates).values({ marinaId, priceListId: l, categoryId: cat.id, pierId: pier.id, annual: zoneAnnual(cat.id) });
+        }
+      }
       berthsByPier.set(code, []);
       let n = 1;
       for (let pos = 0; pos < perSide; pos++) {
@@ -384,12 +387,12 @@ async function main() {
 
     const priceOf = (berthCode: string, type: "annuale" | "stagionale" | "mensile" | "transito", startDate: string, endDate: string) => {
       const berth = berthByCode.get(berthCode)!;
-      // Come nell'app: sul pontile C il canone annuale della zona, il resto dalla tariffa base.
+      // Come nell'app: sul pontile C il suo canone annuale, il resto dalla tariffa base.
       const base = rateFor.get(berth.categoryId!)!;
       const inZone = berthCode.startsWith("C");
       const zoneRow = { ...base, dailyLow: 0, dailyMid: 0, dailyHigh: 0, monthlyLow: 0, monthlyMid: 0, monthlyHigh: 0, seasonal: 0, waste: 0, annual: zoneAnnual(berth.categoryId!) };
-      const rows: (RateRow & { zoneId: string | null })[] = [{ ...base, zoneId: null }, ...(inZone ? [{ ...zoneRow, zoneId: zoneC.id }] : [])];
-      const rate = zoneRate(rows, inZone ? zoneC.id : null)!;
+      const rows: (RateRow & { pierId: string | null })[] = [{ ...base, pierId: null }, ...(inZone ? [{ ...zoneRow, pierId: pierC }] : [])];
+      const rate = pierRate(rows, inZone ? pierC : null)!;
       return quoteStay({ type, startDate, endDate, rate, periods }).totalCents;
     };
 

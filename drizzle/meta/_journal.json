@@ -127,6 +127,20 @@
       "when": 1794985931794,
       "tag": "0017_meteo_marino_protezione_civile",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795250588811,
+      "tag": "0018_tariffa_per_pontile",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795250605276,
+      "tag": "0019_via_zone_tariffarie",
+      "breakpoints": true
     }
   ]
 }

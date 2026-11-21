@@ -26,17 +26,23 @@ export interface RateRow {
 export const RATE_FIELDS = ["dailyLow", "dailyMid", "dailyHigh", "monthlyLow", "monthlyMid", "monthlyHigh", "annual", "seasonal", "waste"] as const;
 
 /**
- * Tariffa di una categoria in una zona: ogni importo della zona, se compilato, prende il posto di quello della tariffa base.
- * Così una zona può ritoccare solo gli annuali e continuare a usare i prezzi base per transiti e mensili.
- * Restituisce null se non c'è nessuna delle due righe.
+ * Tariffa di una categoria su un pontile con prezzi propri (pierId vuoto = tariffa base): ogni importo del pontile,
+ * se compilato, prende il posto di quello della tariffa base. Così un pontile può ritoccare solo gli annuali e
+ * continuare a usare i prezzi base per transiti e mensili. Restituisce null se non c'è nessuna delle due righe.
+ * Per un pontile che usa la tariffa base (piers.base_rate) si passa null: vedi `ratePierId`.
  */
-export function zoneRate<T extends RateRow & { zoneId: string | null }>(rows: T[], zoneId: string | null): RateRow | null {
-  const base = rows.find((r) => r.zoneId === null) ?? null;
-  const zone = zoneId ? (rows.find((r) => r.zoneId === zoneId) ?? null) : null;
-  if (!base && !zone) return null;
+export function pierRate<T extends RateRow & { pierId: string | null }>(rows: T[], pierId: string | null): RateRow | null {
+  const base = rows.find((r) => r.pierId === null) ?? null;
+  const own = pierId ? (rows.find((r) => r.pierId === pierId) ?? null) : null;
+  if (!base && !own) return null;
   const merged = {} as RateRow;
-  for (const field of RATE_FIELDS) merged[field] = zone?.[field] || base?.[field] || 0;
+  for (const field of RATE_FIELDS) merged[field] = own?.[field] || base?.[field] || 0;
   return merged;
+}
+
+/** Il pontile di cui leggere i prezzi propri: nessuno se usa la tariffa base. */
+export function ratePierId(pier: { id: string; baseRate: boolean } | null | undefined): string | null {
+  return pier && !pier.baseRate ? pier.id : null;
 }
 
 export interface QuoteLine {

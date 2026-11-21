@@ -5,7 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { db } from "@/db";
-import { berthCategories, berths, boats, charges, contractItems, contracts, ledgerEntries, ledgerImports, marinas, movements, owners, piers, priceListExtras, priceLists, rates, tariffZones, users } from "@/db/schema";
+import { berthCategories, berths, boats, charges, contractItems, contracts, ledgerEntries, ledgerImports, marinas, movements, owners, piers, priceListExtras, priceLists, rates, users } from "@/db/schema";
 import { addDays, todayRome } from "@/lib/dates";
 import { deletePayment, importLedger, registerPayment, undoLedgerImport } from "@/server/accounting";
 import {
@@ -27,7 +27,7 @@ import { ownerKey, type ImportBoat, type ImportOwner, type ImportRow } from "@/l
 import { CONTRACT_APPROVAL_TEMPLATE, CONTRACT_TERMS_TEMPLATE } from "@/lib/contract-texts";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
 import { loadOfficialPriceList, OFFICIAL_CATEGORIES, OFFICIAL_EXTRAS } from "@/server/official-price-list";
-import { zoneRate } from "@/lib/pricing";
+import { pierRate } from "@/lib/pricing";
 
 async function databaseAvailable(): Promise<boolean> {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 2000 });
@@ -193,7 +193,9 @@ describe.skipIf(!available)("regole del porto (database)", () => {
     expect(rows.every((r) => r.netCents + r.vatCents === r.grossCents)).toBe(true);
   });
 
-  it("il listino ufficiale 2026 si carica con la zona della darsena C e ricaricandolo non duplica nulla", async () => {
+  it("il listino ufficiale 2026 si carica con i prezzi della darsena C e ricaricandolo non duplica nulla", async () => {
+    // La darsena C è il pontile con codice «C»: riceve i suoi prezzi e smette di usare la tariffa base.
+    const [pierC] = await db.insert(piers).values({ marinaId: b.marinaId, code: "C", name: "Darsena C" }).returning({ id: piers.id });
     const first = await db.transaction((tx) => loadOfficialPriceList(tx, b.marinaId));
     expect(first.createdCategories).toBe(OFFICIAL_CATEGORIES.length);
     const again = await db.transaction((tx) => loadOfficialPriceList(tx, b.marinaId));
@@ -201,7 +203,8 @@ describe.skipIf(!available)("regole del porto (database)", () => {
 
     // Il porto aveva già il "Listino 2026": viene riempito, non duplicato.
     expect(await db.select().from(priceLists).where(and(eq(priceLists.marinaId, b.marinaId), eq(priceLists.name, "Listino 2026")))).toHaveLength(1);
-    expect(await db.select().from(tariffZones).where(eq(tariffZones.marinaId, b.marinaId))).toHaveLength(1);
+    expect(first.darsenaC).toEqual([pierC.id]);
+    expect((await db.select().from(piers).where(eq(piers.id, pierC.id)))[0].baseRate).toBe(false);
     const extras = await db.select().from(priceListExtras).where(eq(priceListExtras.priceListId, first.listId));
     expect(extras).toHaveLength(OFFICIAL_EXTRAS.length);
     expect(extras.find((e) => e.name === "Posto auto coperto")?.itemKind).toBe("auto_coperto");
@@ -211,22 +214,22 @@ describe.skipIf(!available)("regole del porto (database)", () => {
       .from(rates)
       .innerJoin(berthCategories, eq(berthCategories.id, rates.categoryId))
       .where(eq(rates.priceListId, first.listId));
-    const priceOf = (name: string, zoneId: string | null) =>
-      zoneRate(
+    const priceOf = (name: string, pierId: string | null) =>
+      pierRate(
         rows.filter((r) => r.name === name).map((r) => r.rate),
-        zoneId,
+        pierId,
       );
     expect(priceOf("B · fino a 6 m", null)).toMatchObject({ annual: 131000, waste: 4000, seasonal: 90000, monthlyLow: 25000, monthlyHigh: 25000 });
-    expect(priceOf("B · fino a 6 m", first.zoneId)).toMatchObject({ annual: 146000, waste: 4000, seasonal: 90000, monthlyLow: 25000 });
+    expect(priceOf("B · fino a 6 m", pierC.id)).toMatchObject({ annual: 146000, waste: 4000, seasonal: 90000, monthlyLow: 25000 });
     expect(priceOf("H · fino a 12 m", null)).toBeNull(); // solo nella darsena C
-    expect(priceOf("I · oltre 12 m", first.zoneId)).toMatchObject({ annual: 350000, waste: 9000, seasonal: 0 });
+    expect(priceOf("I · oltre 12 m", pierC.id)).toMatchObject({ annual: 350000, waste: 9000, seasonal: 0 });
     // I totali del foglio (annuale + rifiuti) tornano per ogni riga.
-    const total = (name: string, zoneId: string | null) => {
-      const r = priceOf(name, zoneId)!;
+    const total = (name: string, pierId: string | null) => {
+      const r = priceOf(name, pierId)!;
       return (r.annual + r.waste) / 100;
     };
     expect(OFFICIAL_CATEGORIES.filter((c) => c.base).map((c) => total(c.name, null))).toEqual([1350, 1660, 1820, 2070, 2190, 2390]);
-    expect(OFFICIAL_CATEGORIES.map((c) => total(c.name, first.zoneId))).toEqual([1500, 1760, 2020, 2270, 2540, 2890, 3290, 3590]);
+    expect(OFFICIAL_CATEGORIES.map((c) => total(c.name, pierC.id))).toEqual([1500, 1760, 2020, 2270, 2540, 2890, 3290, 3590]);
   });
 
   it("arrivo, uscita, rientro e partenza anticipata liberano il posto", async () => {
@@ -546,34 +549,33 @@ describe.skipIf(!available)("regole del porto (database)", () => {
     expect(await db.select().from(owners).where(eq(owners.id, created[0].id))).toHaveLength(0);
   });
 
-  it("tariffe: una sola riga per listino, categoria e zona, anche per la tariffa base", async () => {
+  it("tariffe: una sola riga per listino, categoria e pontile, anche per la tariffa base", async () => {
     const [list] = await db.select().from(priceLists).where(eq(priceLists.marinaId, a.marinaId)).limit(1);
     const [cat] = await db.select().from(berthCategories).where(eq(berthCategories.marinaId, a.marinaId)).limit(1);
-    const [zone] = await db.insert(tariffZones).values({ marinaId: a.marinaId, name: "Darsena C" }).returning({ id: tariffZones.id });
-    // Come saveRates: inserisce o aggiorna la riga di quella zona.
-    const save = (zoneId: string | null, annual: number) =>
+    const [pier] = await db.insert(piers).values({ marinaId: a.marinaId, code: "TZ", name: "Pontile prove tariffe", baseRate: false }).returning({ id: piers.id });
+    // Come saveRates: inserisce o aggiorna la riga di quel pontile.
+    const save = (pierId: string | null, annual: number) =>
       db
         .insert(rates)
-        .values({ marinaId: a.marinaId, priceListId: list.id, categoryId: cat.id, zoneId, annual })
-        .onConflictDoUpdate({ target: [rates.priceListId, rates.categoryId, rates.zoneId], set: { annual } });
+        .values({ marinaId: a.marinaId, priceListId: list.id, categoryId: cat.id, pierId, annual })
+        .onConflictDoUpdate({ target: [rates.priceListId, rates.categoryId, rates.pierId], set: { annual } });
 
     await save(null, 131000);
     await save(null, 132000);
-    await save(zone.id, 171000);
-    await save(zone.id, 172000);
+    await save(pier.id, 171000);
+    await save(pier.id, 172000);
     const rows = await db.select().from(rates).where(and(eq(rates.priceListId, list.id), eq(rates.categoryId, cat.id)));
-    expect(rows.map((r) => [r.zoneId, r.annual]).sort()).toEqual([
+    expect(rows.filter((r) => r.pierId === null || r.pierId === pier.id).map((r) => [r.pierId, r.annual]).sort()).toEqual([
       [null, 132000],
-      [zone.id, 172000],
+      [pier.id, 172000],
     ].sort());
     // Senza aggiornamento, una seconda riga base è rifiutata.
     await expect(db.insert(rates).values({ marinaId: a.marinaId, priceListId: list.id, categoryId: cat.id, annual: 1 })).rejects.toThrow();
 
-    // Eliminando la zona, i suoi prezzi spariscono e i pontili tornano alla tariffa base.
-    const [pier] = await db.select().from(piers).where(eq(piers.marinaId, a.marinaId)).limit(1);
-    await db.update(piers).set({ tariffZoneId: zone.id }).where(eq(piers.id, pier.id));
-    await db.delete(tariffZones).where(eq(tariffZones.id, zone.id));
-    expect((await db.select().from(rates).where(eq(rates.categoryId, cat.id))).map((r) => r.zoneId)).toEqual([null]);
-    expect((await db.select().from(piers).where(eq(piers.id, pier.id)))[0].tariffZoneId).toBeNull();
+    // Eliminando il pontile, i suoi prezzi spariscono con lui; la tariffa base resta.
+    await db.delete(piers).where(eq(piers.id, pier.id));
+    expect((await db.select().from(rates).where(eq(rates.categoryId, cat.id))).map((r) => r.pierId)).not.toContain(pier.id);
+    expect((await db.select().from(rates).where(and(eq(rates.categoryId, cat.id), eq(rates.priceListId, list.id)))).some((r) => r.pierId === null)).toBe(true);
   });
+
 });

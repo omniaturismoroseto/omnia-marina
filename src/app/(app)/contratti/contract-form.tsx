@@ -372,7 +372,7 @@ export function ContractForm({
           <>
             <p className="mt-1 text-xs text-muted">
               {options.quote.listName} · categoria {options.quote.categoryName}
-              {options.quote.zoneName ? ` · ${options.quote.zoneName}` : ""}
+              {options.quote.pierName ? ` · tariffa di ${options.quote.pierName}` : ""}
             </p>
             <table className="mt-3 w-full text-sm">
               <tbody>
