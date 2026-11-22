@@ -61,6 +61,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   proporzioni (`baseMatchesPhoto` in `src/lib/plan-base.ts`, qualunque risoluzione); se c'è, lo schema mostra la base al posto del disegno
   automatico (terra, forme, pontili) e sopra barche, codici dei posti (scritti lungo il posto) e servizi (spostabili dalla direzione).
   Sulla mappa niente nomi dei pontili (troppe scritte): il nome compare nel riquadro del posto; i servizi hanno icona sulla mappa e legenda sotto.
+  Con la pianta la pagina Mappa è a tutta larghezza (`data-wide`, il layout toglie `max-w-6xl`) e `PlanZoom fillScreen` arriva al fondo
+  dello schermo; il riquadro del posto sta sopra la mappa sugli schermi grandi (`?posto=`, X per chiudere), sotto sul telefono.
+  Le icone dei servizi restano della stessa misura a ogni ingrandimento (`--plan-zoom` impostato da `PlanZoom`).
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
 - Numerazione dei contratti: le bozze non hanno numero (`seq`/`number` vuoti, in stampa «BOZZA»); il numero nasce all'attivazione
   ed è il più basso libero dell'anno (`src/lib/contract-numbers.ts`, `assignContractNumber`). «Torna in bozza» (`revertToDraft`) libera

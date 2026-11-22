@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { and, asc, eq, gt, inArray } from "drizzle-orm";
-import { ArrowDownToLine, ArrowUpFromLine, Clock, Droplets, Phone, Waves, Wrench, Zap } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Clock, Droplets, Phone, Waves, Wrench, X, Zap } from "lucide-react";
 import { MovementButtons } from "@/components/movement-buttons";
 import { page } from "@/components/page";
 import { Badge, ButtonLink, Details, EmptyState, FilterTabs, PageHeader } from "@/components/ui";
@@ -20,6 +20,7 @@ import { drawingOrder, extendBounds } from "@/lib/plan-features";
 import { serviceTitle } from "@/lib/port-services";
 import { PlanView } from "./plan-view";
 import { PlanZoom } from "./plan-zoom";
+import { ScrollIntoViewOnPhone } from "./scroll-into-view";
 
 export const metadata: Metadata = { title: "Mappa dei posti barca" };
 
@@ -105,7 +106,9 @@ async function BerthPanel({
   today,
   marinaId,
   office,
+  closeHref,
 }: {
+  closeHref: string | null;
   berth: BoardBerth;
   pierName: string | null;
   date: string;
@@ -129,7 +132,14 @@ async function BerthPanel({
           <p className="text-xs font-medium text-muted">Posto barca{pierName ? ` · ${pierName}` : ""}</p>
           <h2 className="font-display text-3xl leading-none font-semibold">{berth.code}</h2>
         </div>
-        <Badge tone={STATE_TONE[berth.state]}>{STATE_LABEL[berth.state]}</Badge>
+        <div className="flex items-center gap-1">
+          <Badge tone={STATE_TONE[berth.state]}>{STATE_LABEL[berth.state]}</Badge>
+          {closeHref && (
+            <Link href={closeHref} className="btn btn-ghost btn-sm -mr-2" aria-label="Chiudi il riquadro del posto">
+              <X size={16} aria-hidden="true" />
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
@@ -300,7 +310,9 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
     : null;
   const view = drawing && one(sp.vista) === "foto" ? "foto" : "schema";
   const vista = view === "foto" ? "foto" : null;
-  const hrefFor = (berthId: string) => `/mappa${qs({ data: date === today ? null : date, vista, posto: berthId })}#dettaglio`;
+  // Con la pianta il riquadro del posto si apre sopra la mappa (su schermi grandi): niente salto di pagina.
+  const hrefFor = (berthId: string) => `/mappa${qs({ data: date === today ? null : date, vista, posto: berthId })}${drawing ? "" : "#dettaglio"}`;
+  const closeHref = `/mappa${qs({ data: date === today ? null : date, vista })}`;
 
   return (
     <>
@@ -358,11 +370,13 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
             ))}
           </ul>
 
-          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
-            {drawing ? (
-              <div className="min-w-0">
+          {drawing ? (
+            // data-wide: la mappa usa tutta la larghezza della pagina (vedi il layout).
+            <div data-wide>
+              <div className="relative">
                 <PlanZoom
                   key={view}
+                  fillScreen
                   width={view === "schema" ? schemaBounds!.width : plan.width!}
                   height={view === "schema" ? schemaBounds!.height : plan.height!}
                 >
@@ -381,51 +395,78 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
                     hrefFor={hrefFor}
                   />
                 </PlanZoom>
-                {services.length > 0 && (
-                  <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm" aria-label="Servizi del porto">
-                    {services.map((f) => (
-                      <li key={f.id} className="inline-flex items-center gap-1.5 text-ink">
-                        <span className="grid size-6 place-items-center rounded-full bg-[#1d3f63] text-white" aria-hidden="true">
-                          <ServiceIcon service={f.service!} size={13} />
-                        </span>
-                        {serviceTitle(f.service!, f.name)}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {offPlan.length > 0 && (
-                  <div className="mt-3">
-                    <p className="text-sm text-muted">Posti non ancora disposti sulla foto:</p>
-                    <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                      {offPlan.map((b) => (
-                        <li key={b.id}>
-                          <Link
-                            href={hrefFor(b.id)}
-                            title={`Posto ${b.code}: ${STATE_LABEL[b.state]}`}
-                            className={`inline-flex min-w-11 justify-center rounded border px-1.5 py-0.5 text-[13px] font-semibold ${CELL[b.state]} ${b.id === selectedId ? "ring-2 ring-ink ring-offset-1" : ""}`}
-                          >
-                            {b.code}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
+                {selected && (
+                  <div
+                    id="dettaglio"
+                    className="mt-4 scroll-mt-20 lg:absolute lg:top-3 lg:right-3 lg:z-10 lg:mt-0 lg:max-h-[calc(100%-1.5rem)] lg:w-80 lg:overflow-y-auto lg:rounded-lg lg:shadow-xl"
+                  >
+                    <ScrollIntoViewOnPhone key={selected.id} />
+                    <BerthPanel
+                      berth={selected}
+                      pierName={board.find((p) => p.id === selected.pierId)?.name ?? null}
+                      date={date}
+                      today={today}
+                      marinaId={ctx.marinaId}
+                      office={office}
+                      closeHref={closeHref}
+                    />
                   </div>
                 )}
               </div>
-            ) : (
+              {!selected && <p className="mt-2 text-sm text-muted">Tocca un posto sulla mappa per vedere chi lo occupa e registrare arrivi e partenze.</p>}
+              {services.length > 0 && (
+                <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm" aria-label="Servizi del porto">
+                  {services.map((f) => (
+                    <li key={f.id} className="inline-flex items-center gap-1.5 text-ink">
+                      <span className="grid size-6 place-items-center rounded-full bg-[#1d3f63] text-white" aria-hidden="true">
+                        <ServiceIcon service={f.service!} size={13} />
+                      </span>
+                      {serviceTitle(f.service!, f.name)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {offPlan.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-sm text-muted">Posti non ancora disposti sulla foto:</p>
+                  <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                    {offPlan.map((b) => (
+                      <li key={b.id}>
+                        <Link
+                          href={hrefFor(b.id)}
+                          title={`Posto ${b.code}: ${STATE_LABEL[b.state]}`}
+                          className={`inline-flex min-w-11 justify-center rounded border px-1.5 py-0.5 text-[13px] font-semibold ${CELL[b.state]} ${b.id === selectedId ? "ring-2 ring-ink ring-offset-1" : ""}`}
+                        >
+                          {b.code}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
               <div className="chart-water space-y-6 rounded-lg border border-sea/20 p-4">
                 {board.map((pier) => (pier.berths.length > 0 ? <Pier key={pier.id} pier={pier} hrefFor={hrefFor} selectedId={selectedId} /> : null))}
               </div>
-            )}
-
-            <div id="dettaglio" className="scroll-mt-20 lg:sticky lg:top-6">
-              {selected ? (
-                <BerthPanel berth={selected} pierName={board.find((p) => p.id === selected.pierId)?.name ?? null} date={date} today={today} marinaId={ctx.marinaId} office={office} />
-              ) : (
-                <div className="card p-4 text-sm text-muted">Tocca un posto sulla mappa per vedere chi lo occupa e registrare arrivi e partenze.</div>
-              )}
+              <div id="dettaglio" className="scroll-mt-20 lg:sticky lg:top-6">
+                {selected ? (
+                  <BerthPanel
+                    berth={selected}
+                    pierName={board.find((p) => p.id === selected.pierId)?.name ?? null}
+                    date={date}
+                    today={today}
+                    marinaId={ctx.marinaId}
+                    office={office}
+                    closeHref={null}
+                  />
+                ) : (
+                  <div className="card p-4 text-sm text-muted">Tocca un posto sulla mappa per vedere chi lo occupa e registrare arrivi e partenze.</div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
     </>

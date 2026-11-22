@@ -33,12 +33,35 @@ export function PlanZoom({
   width,
   height,
   children,
+  fillScreen = false,
 }: {
   width: number;
   height: number;
   children: ReactNode;
+  // Mappa: alta fino al fondo dello schermo, qualunque siano le proporzioni della pianta.
+  fillScreen?: boolean;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
+  const outerRef = useRef<HTMLDivElement>(null);
+  const [fillHeight, setFillHeight] = useState<number | null>(null);
+
+  // Altezza = dal punto in cui comincia la mappa al fondo della finestra (meno la barra in basso sul telefono).
+  useLayoutEffect(() => {
+    if (!fillScreen) return;
+    const measure = () => {
+      const el = outerRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      const gap = window.innerWidth >= 1024 ? 20 : 84;
+      let h = window.innerHeight - top - gap;
+      // Se sopra la mappa c'è molto (telefono): alta quasi quanto lo schermo, la si porta in vista scorrendo.
+      if (h < window.innerHeight * 0.6) h = window.innerHeight - gap - 70;
+      setFillHeight(Math.max(320, Math.round(h)));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [fillScreen]);
   const [box, setBox] = useState<Size | null>(null);
   const [view, setView] = useState<View | null>(null);
   // Finché l'utente non ingrandisce o sposta, la foto resta adattata allo schermo anche se cambia la finestra.
@@ -258,8 +281,13 @@ export function PlanZoom({
   const atFit = zoom <= 1.001;
 
   return (
-    // Alto quanto la pianta alla larghezza disponibile, ma mai più dello schermo: niente fasce vuote sopra e sotto.
-    <div className="relative max-h-[calc(100dvh-9rem)] min-h-64 lg:max-h-[calc(100dvh-5rem)]" style={{ aspectRatio: `${width} / ${height}` }}>
+    // Negli editor: alto quanto la pianta alla larghezza disponibile, ma mai più dello schermo.
+    // Nella mappa (fillScreen): tutta la larghezza e tutta l'altezza fino al fondo dello schermo.
+    <div
+      ref={outerRef}
+      className={fillScreen ? "relative overflow-hidden rounded-lg bg-[#edf2f5]" : "relative max-h-[calc(100dvh-9rem)] min-h-64 lg:max-h-[calc(100dvh-5rem)]"}
+      style={fillScreen ? { height: fillHeight ?? "70dvh" } : { aspectRatio: `${width} / ${height}` }}
+    >
       <div
         ref={boxRef}
         tabIndex={0}
@@ -284,6 +312,8 @@ export function PlanZoom({
             width,
             height,
             transformOrigin: "0 0",
+            // Le icone dei servizi si rimpiccioliscono di quanto si ingrandisce: sullo schermo restano della stessa misura.
+            ["--plan-zoom" as string]: zoom,
             transform: view
               ? `translate(${view.x}px, ${view.y}px) scale(${view.s})`
               : undefined,

@@ -77,8 +77,9 @@ export function ServiceIcon({ service, size = 16, className }: { service: string
  */
 export function ServiceMarker({ service, x, y, r, selected = false }: { service: string; x: number; y: number; r: number; selected?: boolean }) {
   const s = r * 1.15;
+  // --plan-zoom lo imposta PlanZoom: il segnaposto resta della stessa misura sullo schermo a qualunque ingrandimento.
   return (
-    <g>
+    <g style={{ transform: "scale(calc(1 / var(--plan-zoom, 1)))", transformBox: "fill-box", transformOrigin: "center" }}>
       <circle cx={x} cy={y} r={r} fill="#1d3f63" stroke={selected ? "#d4502a" : "#ffffff"} strokeWidth={r * (selected ? 0.22 : 0.14)} />
       {createElement(serviceIcon(service), { x: x - s / 2, y: y - s / 2, width: s, height: s, color: "#ffffff", strokeWidth: 2.2, "aria-hidden": true })}
     </g>
