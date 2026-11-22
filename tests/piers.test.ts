@@ -134,3 +134,34 @@ describe.skipIf(!hasDb)("unione dei pontili (database)", () => {
     expect(await db.select().from(piers).where(eq(piers.id, theirs.id))).toHaveLength(1);
   });
 });
+
+describe("nuovi codici dei posti", () => {
+  const list = [
+    { id: "s1", code: "CS01" },
+    { id: "n10", code: "CN10" },
+    { id: "n2", code: "CN2" },
+    { id: "n1", code: "CN01" },
+  ];
+
+  it("rinumera in fila in ordine di codice naturale", async () => {
+    const { renameCodes } = await import("@/lib/berth-codes");
+    const r = renameCodes(list, " g ", { mode: "rinumera", from: 1 });
+    expect(r).toEqual({
+      ok: true,
+      codes: [
+        { id: "n1", code: "G01" },
+        { id: "n2", code: "G02" },
+        { id: "n10", code: "G03" },
+        { id: "s1", code: "G04" },
+      ],
+    });
+  });
+
+  it("mantenendo i numeri rifiuta i doppioni e i codici senza numero", async () => {
+    const { renameCodes } = await import("@/lib/berth-codes");
+    expect(renameCodes(list, "G", { mode: "mantieni" })).toMatchObject({ ok: false, message: expect.stringMatching(/CN01 e CS01 diventerebbero entrambi G01/) });
+    expect(renameCodes([{ id: "x", code: "CN07" }], "G", { mode: "mantieni" })).toEqual({ ok: true, codes: [{ id: "x", code: "G07" }] });
+    expect(renameCodes([{ id: "x", code: "TESTA" }], "G", { mode: "mantieni" })).toMatchObject({ ok: false });
+    expect(renameCodes(list, "  ", { mode: "mantieni" })).toMatchObject({ ok: false });
+  });
+});

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ActionButton, CheckboxField, Field, Form, FormMessage, SelectField, Submit } from "@/components/form";
-import { deleteBerths, updateBerths } from "@/server/settings-actions";
+import { deleteBerths, renameBerths, updateBerths } from "@/server/settings-actions";
 
 export interface BerthChip {
   id: string;
@@ -19,7 +19,18 @@ const KEEP = "Non cambiare";
  * Posti di un pontile: toccandone uno si apre la sua scheda; con «Scegli più posti» si selezionano e si cambiano
  * insieme (categoria, misure, stato, acqua e corrente) o si eliminano.
  */
-export function BerthList({ pierId, berths, categories }: { pierId: string; berths: BerthChip[]; categories: { id: string; label: string }[] }) {
+export function BerthList({
+  pierId,
+  pierCode,
+  berths,
+  categories,
+}: {
+  pierId: string;
+  /** Sigla del pontile: proposta come nuova sigla dei posti. */
+  pierCode: string;
+  berths: BerthChip[];
+  categories: { id: string; label: string }[];
+}) {
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   // Solo i posti ancora presenti (dopo un'eliminazione la pagina si aggiorna).
@@ -136,6 +147,34 @@ export function BerthList({ pierId, berths, categories }: { pierId: string; bert
             <div className="flex flex-wrap items-center gap-3">
               <Submit variant="secondary">
                 Applica {selected.length === 1 ? "al posto scelto" : `ai ${selected.length} posti`}
+              </Submit>
+              <FormMessage />
+            </div>
+          </Form>
+          <Form action={renameBerths} className="mt-3 space-y-3 border-t border-line-soft pt-3">
+            <input type="hidden" name="pierId" value={pierId} />
+            <input type="hidden" name="berthIds" value={ids} />
+            <h3 className="text-sm font-semibold text-ink">Cambia i codici</h3>
+            <p className="text-sm text-muted">
+              Nuova sigla per i posti scelti, per esempio da CN01 a {pierCode || "G"}01. Se i posti hanno sigle diverse con gli stessi numeri
+              (CN01 e CS01), scegli «Rinumera in fila»: in ordine di codice prendono i numeri dal primo in poi. Contratti e pianta restano collegati.
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field name="prefix" label="Nuova sigla" defaultValue={pierCode} maxLength={6} required />
+              <SelectField
+                name="numbering"
+                label="Numeri"
+                defaultValue="mantieni"
+                options={[
+                  { value: "mantieni", label: "Mantieni i numeri" },
+                  { value: "rinumera", label: "Rinumera in fila" },
+                ]}
+              />
+              <Field name="from" label="Primo numero (se rinumeri)" defaultValue="1" inputMode="numeric" />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Submit variant="secondary">
+                Cambia {selected.length === 1 ? "il codice" : `i ${selected.length} codici`}
               </Submit>
               <FormMessage />
             </div>
