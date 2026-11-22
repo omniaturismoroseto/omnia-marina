@@ -11,7 +11,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from "react";
-import { Maximize } from "lucide-react";
+import { Maximize } from "@/components/icons";
 
 // Ingrandimento massimo rispetto alla foto intera adattata allo schermo.
 const MAX_ZOOM = 8;

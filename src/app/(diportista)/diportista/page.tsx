@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { eq } from "drizzle-orm";
-import { ChevronRight, FileText, Mail, Phone, Radio } from "lucide-react";
+import { ChevronRight, FileText, Mail, Phone, Radio } from "@/components/icons";
 import { page } from "@/components/page";
 import { Badge, Card } from "@/components/ui";
 import { db } from "@/db";

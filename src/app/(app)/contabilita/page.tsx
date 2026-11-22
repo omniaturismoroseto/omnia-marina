@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Download, Plus } from "lucide-react";
+import { Download, Plus } from "@/components/icons";
 import { page } from "@/components/page";
 import { ChargeStatusBadge } from "@/components/status";
 import { ButtonLink, EmptyState, FilterTabs, PageHeader, SearchBox } from "@/components/ui";

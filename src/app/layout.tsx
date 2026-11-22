@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import "@fontsource-variable/ibm-plex-sans";
-import "@fontsource-variable/fraunces";
+import "@fontsource-variable/figtree";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0c2130",
+  themeColor: "#101e35",
   width: "device-width",
   initialScale: 1,
 };

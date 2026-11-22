@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowUpFromLine, Undo2, Waves } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Undo2, Waves } from "@/components/icons";
 import { ActionButton } from "@/components/form";
 import { registerMovement } from "@/server/dock-actions";
 

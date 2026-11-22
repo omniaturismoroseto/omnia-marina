@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowLeftRight, LogOut, TriangleAlert } from "lucide-react";
+import { ArrowLeftRight, LogOut, TriangleAlert } from "@/components/icons";
 import { eq } from "drizzle-orm";
 import { BrandWide } from "@/components/brand";
 import { OwnerNav } from "@/components/owner-nav";

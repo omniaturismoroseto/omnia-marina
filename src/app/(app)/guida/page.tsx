@@ -17,8 +17,8 @@ import {
   UserRound,
   Users,
   Wallet,
-  type LucideIcon,
-} from "lucide-react";
+  type AppIcon,
+} from "@/components/icons";
 import { page } from "@/components/page";
 import { PrintButton } from "@/components/print-button";
 import { PageHeader } from "@/components/ui";
@@ -29,7 +29,7 @@ import { ScrollToHash } from "./scroll-to-hash";
 
 export const metadata: Metadata = { title: "Guida" };
 
-const ICONS: Record<GuideIcon, LucideIcon> = {
+const ICONS: Record<GuideIcon, AppIcon> = {
   start: Flag,
   dashboard: LayoutDashboard,
   dock: Anchor,

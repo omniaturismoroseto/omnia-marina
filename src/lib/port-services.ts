@@ -1,4 +1,4 @@
-// Servizi del porto che si possono segnare sulla mappa. Le icone sono di lucide-react (vedi `ServiceIcon`).
+// Servizi del porto che si possono segnare sulla mappa. Le icone sono Material Symbols (`src/components/icons.tsx`) (vedi `ServiceIcon`).
 
 export const PORT_SERVICES = [
   { key: "carburante", label: "Distributore di carburante" },

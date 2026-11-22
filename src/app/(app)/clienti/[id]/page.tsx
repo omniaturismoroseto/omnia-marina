@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, desc, eq } from "drizzle-orm";
-import { Download, Pencil, Plus, Printer } from "lucide-react";
+import { Download, Pencil, Plus, Printer } from "@/components/icons";
 import { page } from "@/components/page";
 import { ChargeStatusBadge, ContractStatusBadge } from "@/components/status";
 import { Badge, ButtonLink, Card, Details, EmptyState, Notice, PageHeader } from "@/components/ui";

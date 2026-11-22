@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Phone } from "lucide-react";
+import { Phone } from "@/components/icons";
 import { page } from "@/components/page";
 import { Badge, Card, Notice, PageHeader } from "@/components/ui";
 import { EVERYONE, requireMarina } from "@/lib/context";

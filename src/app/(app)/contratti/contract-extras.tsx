@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, X } from "@/components/icons";
 import { Field } from "@/components/form";
 import { annualEnd, isValidISODate } from "@/lib/dates";
 import { formatMoney, moneyInput, parseMoney } from "@/lib/format";

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ImageUp, Trash2 } from "lucide-react";
+import { ImageUp, Trash2 } from "@/components/icons";
 
 // Le foto molto grandi vengono ridotte nel browser prima dell'invio: bastano per vedere bene ogni posto
 // e restano leggere da caricare e da mostrare sul telefono.

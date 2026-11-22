@@ -1,5 +1,5 @@
 import { and, asc, eq } from "drizzle-orm";
-import { Mail, MessageCircle, Printer } from "lucide-react";
+import { Mail, MessageCircle, Printer } from "@/components/icons";
 import { CopyButton } from "@/components/copy-button";
 import { ActionButton, Field, Form, FormMessage, Submit } from "@/components/form";
 import { Badge, ButtonLink, Card } from "@/components/ui";

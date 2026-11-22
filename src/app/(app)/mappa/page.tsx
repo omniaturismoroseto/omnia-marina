@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { and, asc, eq, gt, inArray } from "drizzle-orm";
-import { ArrowDownToLine, ArrowUpFromLine, Clock, Droplets, Phone, Waves, Wrench, X, Zap } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Clock, Droplets, Phone, Waves, Wrench, X, Zap } from "@/components/icons";
 import { MovementButtons } from "@/components/movement-buttons";
 import { page } from "@/components/page";
 import { Badge, ButtonLink, Details, EmptyState, FilterTabs, PageHeader } from "@/components/ui";

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { and, eq, gte, lte, notInArray, sql } from "drizzle-orm";
-import { Download } from "lucide-react";
+import { Download } from "@/components/icons";
 import { page } from "@/components/page";
 import { Card, EmptyState, FilterTabs, PageHeader, Stat } from "@/components/ui";
 import { db } from "@/db";

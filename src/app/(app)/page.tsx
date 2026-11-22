@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { and, asc, eq, gte, lte, ne, sql } from "drizzle-orm";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight } from "@/components/icons";
 import { page } from "@/components/page";
 import { PortWeatherCard } from "@/components/port-weather";
 import { Badge, ButtonLink, Card, EmptyState, PageHeader, Stat } from "@/components/ui";

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { KeyboardEvent, MouseEvent, PointerEvent } from "react";
-import { Minus, MousePointer2, Plus, Ruler, Spline } from "lucide-react";
+import { Minus, MousePointer2, Plus, Ruler, Spline } from "@/components/icons";
 import { parseMeters } from "@/lib/format";
 import {
   berthSizePx,
@@ -558,7 +558,7 @@ export function PlanEditor({
                     width={w}
                     height={l}
                     rx={u}
-                    fill={active ? "#d4502a" : "#0f6480"}
+                    fill={active ? "#d4502a" : "#24497a"}
                     fillOpacity={active ? 0.75 : 0.6}
                     stroke="#fff"
                     strokeWidth={(active ? 2.4 : 1.2) * u}

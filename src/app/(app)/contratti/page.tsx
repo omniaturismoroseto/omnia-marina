@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { and, asc, desc, eq, gte, ilike, lte, ne, or, sql } from "drizzle-orm";
-import { Plus } from "lucide-react";
+import { Plus } from "@/components/icons";
 import { page } from "@/components/page";
 import { ContractStatusBadge } from "@/components/status";
 import { ButtonLink, EmptyState, FilterTabs, Notice, PageHeader, SearchBox } from "@/components/ui";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Map as MapIcon, X } from "lucide-react";
+import { Map as MapIcon, X } from "@/components/icons";
 import { buildDrawing } from "@/lib/plan-drawing";
 import { extendBounds } from "@/lib/plan-features";
 import type { BerthOption } from "@/server/contract-actions";

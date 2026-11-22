@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft } from "@/components/icons";
 import { ContractDocument, loadContractDocument } from "@/components/contract-document";
 import { DocumentTitle } from "@/components/document-title";
 import { page } from "@/components/page";

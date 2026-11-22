@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft } from "@/components/icons";
 import { MarkRead } from "@/components/mark-read";
 import { page } from "@/components/page";
 import { Badge, Card } from "@/components/ui";

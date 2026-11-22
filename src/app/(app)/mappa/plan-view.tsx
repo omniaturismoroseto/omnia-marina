@@ -18,11 +18,11 @@ export type PlanViewBerth = Pick<BoardBerth, "id" | "code" | "planX" | "planY" |
 const BOAT: Record<BerthState, { fill: string; stroke: string; text: string; ghost?: boolean } | null> = {
   libero: null,
   fermo: null,
-  occupato: { fill: "#0f6480", stroke: "#ffffff", text: "#ffffff" },
+  occupato: { fill: "#24497a", stroke: "#ffffff", text: "#ffffff" },
   partenza: { fill: "#d4502a", stroke: "#ffffff", text: "#ffffff" },
   ritardo: { fill: "#a93229", stroke: "#ffffff", text: "#ffffff" },
   atteso: { fill: "#fbefd2", stroke: "#875400", text: "#875400", ghost: true },
-  fuori: { fill: "#ffffff", stroke: "#0f6480", text: "#0b4d63", ghost: true },
+  fuori: { fill: "#ffffff", stroke: "#24497a", text: "#1a3860", ghost: true },
 };
 
 // Aspetto del posto (lo specchio d'acqua) sotto la barca.
@@ -30,8 +30,8 @@ function slotStyle(state: BerthState, mode: "foto" | "schema") {
   if (state === "libero") return { fill: mode === "foto" ? "#ffffff" : "#dff1e9", fillOpacity: mode === "foto" ? 0.75 : 1, stroke: "#1b6b4f", text: "#1b6b4f" };
   if (state === "fermo") return { fill: "#d9d6cc", fillOpacity: 0.9, stroke: "#8794a0", text: "#566876" };
   return mode === "foto"
-    ? { fill: "#ffffff", fillOpacity: 0.18, stroke: "#ffffff", text: "#12283a" }
-    : { fill: "#ffffff", fillOpacity: 0.55, stroke: "#b5c4ce", text: "#12283a" };
+    ? { fill: "#ffffff", fillOpacity: 0.18, stroke: "#ffffff", text: "#15243a" }
+    : { fill: "#ffffff", fillOpacity: 0.55, stroke: "#b5c4ce", text: "#15243a" };
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -150,7 +150,7 @@ export function PlanView({
             <title>{label}</title>
             <g transform={`translate(${b.planX} ${b.planY}) rotate(${b.planAngle ?? 0})`}>
               {selected && (
-                <rect x={-w / 2 - 0.35 * m} y={-l / 2 - 0.35 * m} width={w + 0.7 * m} height={l + 0.7 * m} rx={0.3 * m} fill="none" stroke="#12283a" strokeWidth={0.3 * m} />
+                <rect x={-w / 2 - 0.35 * m} y={-l / 2 - 0.35 * m} width={w + 0.7 * m} height={l + 0.7 * m} rx={0.3 * m} fill="none" stroke="#15243a" strokeWidth={0.3 * m} />
               )}
               <rect
                 x={-w / 2}
