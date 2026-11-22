@@ -64,6 +64,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Con la pianta la pagina Mappa è a tutta larghezza (`data-wide`, il layout toglie `max-w-6xl`) e `PlanZoom fillScreen` arriva al fondo
   dello schermo; il riquadro del posto sta sopra la mappa sugli schermi grandi (`?posto=`, X per chiudere), sotto sul telefono.
   Le icone dei servizi restano della stessa misura a ogni ingrandimento (`--plan-zoom` impostato da `PlanZoom`).
+  Editor dei posti (`plan-editor.tsx`): «Sposta: pontile intero / posto singolo»; con pontile intero trascinamento, frecce e rotazione
+  (attorno al centro dei posti) valgono per tutti i posti del pontile e anche per la sua linea salvata, che si risalva con la pianta.
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
 - Numerazione dei contratti: le bozze non hanno numero (`seq`/`number` vuoti, in stampa «BOZZA»); il numero nasce all'attivazione
   ed è il più basso libero dell'anno (`src/lib/contract-numbers.ts`, `assignContractNumber`). «Torna in bozza» (`revertToDraft`) libera

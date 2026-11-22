@@ -6,7 +6,7 @@ import { MovementButtons } from "@/components/movement-buttons";
 import { page } from "@/components/page";
 import { Badge, ButtonLink, Details, EmptyState, FilterTabs, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { boats, contracts, marinaPlanBases, marinas, planFeatures } from "@/db/schema";
+import { boats, contracts, marinaPlanBases, marinas, owners, planFeatures } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDate, formatDateLong, isValidISODate, todayRome } from "@/lib/dates";
 import { formatDimensions, formatMeters } from "@/lib/format";
@@ -118,9 +118,10 @@ async function BerthPanel({
 }) {
   const o = berth.occupant;
   const upcoming = await db
-    .select({ id: contracts.id, number: contracts.number, type: contracts.type, status: contracts.status, startDate: contracts.startDate, endDate: contracts.endDate, boatName: boats.name })
+    .select({ id: contracts.id, number: contracts.number, type: contracts.type, status: contracts.status, startDate: contracts.startDate, endDate: contracts.endDate, boatName: boats.name, ownerName: owners.displayName })
     .from(contracts)
     .innerJoin(boats, eq(boats.id, contracts.boatId))
+    .innerJoin(owners, eq(owners.id, contracts.ownerId))
     .where(and(eq(contracts.marinaId, marinaId), eq(contracts.berthId, berth.id), inArray(contracts.status, ["attivo", "bozza"]), gt(contracts.startDate, date)))
     .orderBy(asc(contracts.startDate))
     .limit(4);
@@ -238,9 +239,19 @@ async function BerthPanel({
           <ul className="mt-2 space-y-1.5 text-sm">
             {upcoming.map((u) => (
               <li key={u.id} className="flex items-baseline justify-between gap-2">
-                <span className="truncate">
-                  {u.boatName}
-                  {u.status === "bozza" && <span className="text-muted"> (bozza)</span>}
+                <span className="min-w-0">
+                  {/* A chi è intestato il contratto, poi la barca; l'ufficio apre il contratto. */}
+                  {office ? (
+                    <Link href={`/contratti/${u.id}`} className="link block truncate font-medium">
+                      {u.ownerName}
+                    </Link>
+                  ) : (
+                    <span className="block truncate font-medium">{u.ownerName}</span>
+                  )}
+                  <span className="block truncate text-xs text-muted">
+                    {u.boatName}
+                    {u.status === "bozza" ? " · bozza" : u.number ? ` · ${contractNumberLabel(u.number)}` : ""}
+                  </span>
                 </span>
                 <span className="shrink-0 text-xs text-muted tabular-nums">
                   {formatDate(u.startDate)} – {formatDate(u.endDate)}
