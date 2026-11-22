@@ -14,6 +14,7 @@ const fail = (status: number, message: string) => Response.json({ ok: false, mes
 
 async function viewerMarinaId(): Promise<string | null> {
   const user = await requireUser();
+  if (user.previewOwnerId) return user.activeMarinaId;
   if (user.activeOwnerAccessId) return user.ownerAreas.find((a) => a.accessId === user.activeOwnerAccessId)?.marinaId ?? null;
   return (await requireMarina()).marinaId;
 }

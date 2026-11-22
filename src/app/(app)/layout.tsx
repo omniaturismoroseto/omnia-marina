@@ -45,6 +45,8 @@ async function Navigation() {
   const items = NAV.filter((i) => i.roles.includes(ctx.role)).map(({ key, href, label }) => ({ key, href, label }));
   // L'account manager torna sempre alla scelta: da lì entra negli altri porti e ne crea di nuovi.
   const canSwitch = ctx.memberships.length > 1 || ctx.accountManager;
+  // Solo l'account manager vede con quale ruolo sta provando il porto.
+  const roleText = ctx.accountManager ? `Account manager · come ${ROLE_LABEL[ctx.role]}` : ROLE_LABEL[ctx.role];
   const [marina] = await db
     .select({ logoVersion: marinas.logoVersion, logoWidth: marinas.logoWidth, logoHeight: marinas.logoHeight })
     .from(marinas)
@@ -80,7 +82,7 @@ async function Navigation() {
           <Link href="/account" className="block truncate text-sm font-medium text-white hover:underline">
             {ctx.user.name}
           </Link>
-          <p className="text-xs text-white/55">{ROLE_LABEL[ctx.role]}</p>
+          <p className="text-xs text-white/55">{roleText}</p>
           <LogoutButton className="mt-3 inline-flex cursor-pointer items-center gap-1.5 text-sm text-white/70 hover:text-white shorter:mt-1.5" />
         </div>
       </aside>
@@ -94,7 +96,7 @@ async function Navigation() {
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm leading-tight font-semibold">{ctx.marinaName}</p>
           <p className="truncate text-[11px] leading-tight text-white/60">
-            {ctx.user.name} · {ROLE_LABEL[ctx.role]}
+            {ctx.user.name} · {roleText}
           </p>
         </div>
       </header>

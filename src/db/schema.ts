@@ -203,6 +203,10 @@ export const sessions = pgTable(
     marinaId: uuid("marina_id").references(() => marinas.id, { onDelete: "set null" }),
     // Valorizzato quando la sessione è nell'area diportista: vale solo per quel cliente, mai per il gestionale.
     ownerAccessId: uuid("owner_access_id").references(() => ownerAccess.id, { onDelete: "cascade" }),
+    // Solo per l'account manager, che prova l'app nei panni degli altri: il ruolo scelto nel porto (vuoto = Direzione)
+    // oppure il cliente di cui vede l'area diportista. Per tutti gli altri restano vuoti e non contano.
+    previewRole: roleEnum("preview_role"),
+    previewOwnerId: uuid("preview_owner_id").references(() => owners.id, { onDelete: "set null" }),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: createdAt(),
   },

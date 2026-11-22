@@ -325,7 +325,8 @@ L'accesso di `gcloud` è scaduto: rifai `gcloud auth login`.
 | Nuovi porti e loro direttori | li crea solo l'account manager, da «Dove vuoi entrare?» |
 | Account manager | variabile `ACCOUNT_MANAGER_EMAILS` del servizio, sotto |
 
-L'**account manager** entra in tutti i porti con i permessi della direzione, è l'unico che crea i porti (con il loro
+L'**account manager** entra in tutti i porti scegliendo ogni volta il ruolo con cui provarli (Direzione, Ufficio,
+Banchina, oppure Diportista di un cliente a scelta, senza segnare messaggi come letti), è l'unico che crea i porti (con il loro
 direttore e una password provvisoria) e nei porti non compare: né tra gli utenti, né nel registro delle operazioni,
 né accanto a incassi, movimenti, consensi, segnalazioni e messaggi. Si riconosce dall'email, che sta in una
 variabile del servizio (non nel codice). L'account con quell'email deve già esistere: nessuno può crearne uno nuovo

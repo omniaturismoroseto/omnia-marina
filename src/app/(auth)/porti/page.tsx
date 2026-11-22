@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { ActionButton, Field, Form, FormMessage, Submit } from "@/components/form";
 import { requireUser } from "@/lib/context";
@@ -13,7 +14,7 @@ async function MarinaList() {
     <>
       {ctx.accountManager && (
         <p className="mt-4 rounded-md bg-sea-soft px-3 py-2 text-sm text-sea">
-          Account manager: entri in tutti i porti con i permessi della direzione. Nei porti non compari tra gli utenti, nel registro delle operazioni né accanto alle modifiche che fai.
+          Account manager: entri in tutti i porti e scegli con quale ruolo provarli, anche come diportista. Nei porti non compari tra gli utenti, nel registro delle operazioni né accanto alle modifiche che fai.
         </p>
       )}
       {ctx.memberships.length === 0 && ctx.ownerAreas.length === 0 && !ctx.accountManager ? (
@@ -22,11 +23,28 @@ async function MarinaList() {
         </p>
       ) : ctx.memberships.length === 0 ? null : (
         <ul className="mt-5 space-y-2">
-          {ctx.memberships.map((m) => (
+          {ctx.accountManager
+            ? ctx.memberships.map((m) => (
+                <li key={m.marinaId} className="card p-3">
+                  <p className="truncate font-medium text-ink">{m.marinaName}</p>
+                  <p className="text-xs text-muted">Entra come</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {(["admin", "ufficio", "banchina"] as const).map((role) => (
+                      <ActionButton key={role} action={selectMarina} fields={{ marinaId: m.marinaId, role }} variant={role === "admin" ? "primary" : "secondary"} size="sm">
+                        {ROLE_LABEL[role]}
+                      </ActionButton>
+                    ))}
+                    <Link href={`/porti/diportista?porto=${m.marinaId}`} className="btn btn-secondary btn-sm">
+                      Diportista
+                    </Link>
+                  </div>
+                </li>
+              ))
+            : ctx.memberships.map((m) => (
             <li key={m.marinaId} className="card flex items-center justify-between gap-3 p-3">
               <div className="min-w-0">
                 <p className="truncate font-medium text-ink">{m.marinaName}</p>
-                <p className="text-xs text-muted">{ctx.accountManager ? "Account manager" : ROLE_LABEL[m.role]}</p>
+                <p className="text-xs text-muted">{ROLE_LABEL[m.role]}</p>
               </div>
               <ActionButton action={selectMarina} fields={{ marinaId: m.marinaId }} variant="primary" size="sm">
                 Entra

@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { connection } from "next/server";
 import { and, eq, gt, lt, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { sessions, users } from "@/db/schema";
+import { sessions, users, type Role } from "@/db/schema";
 
 const COOKIE = "omnia_marina_session";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
@@ -47,6 +47,9 @@ export interface SessionInfo {
   marinaId: string | null;
   // Area diportista: l'accesso del cliente su cui si sta lavorando. Null nel gestionale.
   ownerAccessId: string | null;
+  // Prove dell'account manager (vedi sessions.previewRole/previewOwnerId): contano solo per lui.
+  previewRole: Role | null;
+  previewOwnerId: string | null;
   user: { id: string; name: string; email: string };
 }
 
@@ -62,6 +65,8 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
       sessionId: sessions.id,
       marinaId: sessions.marinaId,
       ownerAccessId: sessions.ownerAccessId,
+      previewRole: sessions.previewRole,
+      previewOwnerId: sessions.previewOwnerId,
       userId: users.id,
       name: users.name,
       email: users.email,
@@ -71,17 +76,32 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
     .where(and(eq(sessions.id, hashToken(token)), gt(sessions.expiresAt, new Date())))
     .limit(1);
   if (!row) return null;
-  return { sessionId: row.sessionId, marinaId: row.marinaId, ownerAccessId: row.ownerAccessId, user: { id: row.userId, name: row.name, email: row.email } };
+  return {
+    sessionId: row.sessionId,
+    marinaId: row.marinaId,
+    ownerAccessId: row.ownerAccessId,
+    previewRole: row.previewRole,
+    previewOwnerId: row.previewOwnerId,
+    user: { id: row.userId, name: row.name, email: row.email },
+  };
 });
 
-/** Porta la sessione nel gestionale di un porto (esce dall'area diportista, se c'era). */
-export async function setSessionMarina(sessionId: string, marinaId: string): Promise<void> {
-  await db.update(sessions).set({ marinaId, ownerAccessId: null }).where(eq(sessions.id, sessionId));
+/**
+ * Porta la sessione nel gestionale di un porto (esce dall'area diportista, se c'era). `previewRole`: solo per l'account
+ * manager, il ruolo con cui prova il porto (vuoto = Direzione).
+ */
+export async function setSessionMarina(sessionId: string, marinaId: string, previewRole: Role | null = null): Promise<void> {
+  await db.update(sessions).set({ marinaId, ownerAccessId: null, previewRole, previewOwnerId: null }).where(eq(sessions.id, sessionId));
 }
 
 /** Porta la sessione nell'area diportista di un cliente. */
 export async function setSessionOwnerArea(sessionId: string, marinaId: string, ownerAccessId: string): Promise<void> {
-  await db.update(sessions).set({ marinaId, ownerAccessId }).where(eq(sessions.id, sessionId));
+  await db.update(sessions).set({ marinaId, ownerAccessId, previewRole: null, previewOwnerId: null }).where(eq(sessions.id, sessionId));
+}
+
+/** Solo per l'account manager: vede l'area diportista di un cliente del porto, senza un accesso del cliente. */
+export async function setSessionOwnerPreview(sessionId: string, marinaId: string, ownerId: string): Promise<void> {
+  await db.update(sessions).set({ marinaId, ownerAccessId: null, previewRole: null, previewOwnerId: ownerId }).where(eq(sessions.id, sessionId));
 }
 
 // Chiude le sessioni di un utente dopo un cambio di password, tranne quella indicata (di chi sta operando).

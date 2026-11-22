@@ -1,16 +1,16 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { memberships, users } from "@/db/schema";
+import { memberships, owners, users } from "@/db/schema";
 import { isAccountManagerEmail } from "@/lib/account-manager";
 import { audit } from "@/lib/audit";
-import { createSession, destroySession, setSessionMarina, setSessionOwnerArea } from "@/lib/auth/session";
+import { createSession, destroySession, setSessionMarina, setSessionOwnerArea, setSessionOwnerPreview } from "@/lib/auth/session";
 import { homeFor, ownerAreasFor, requireUser } from "@/lib/context";
 import { todayRome, yearOf } from "@/lib/dates";
-import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { f, fail, formId, parseForm, type FormState } from "@/lib/forms";
 import { createRateLimiter } from "@/lib/rate-limit";
 import { createAccount, isEmailVerified, requestPasswordReset as sendPasswordReset, sendVerificationEmail, verifyLogin } from "./credentials";
 import { DomainError, toFormState } from "./errors";
@@ -135,13 +135,38 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
   redirect("/impostazioni/pontili?benvenuto=1");
 }
 
+const PREVIEW_ROLES = ["admin", "ufficio", "banchina"] as const;
+
 export async function selectMarina(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireUser();
   const marinaId = String(formData.get("marinaId") ?? "");
   const membership = ctx.memberships.find((m) => m.marinaId === marinaId);
   if (!membership) return fail("Non hai accesso a questo porto.");
+  // L'account manager sceglie con quale ruolo entrare, per provare il porto come lo vede chi ci lavora.
+  const asRole = PREVIEW_ROLES.find((r) => r === formData.get("role"));
+  if (ctx.accountManager && asRole) {
+    await setSessionMarina(ctx.sessionId, marinaId, asRole === "admin" ? null : asRole);
+    redirect(homeFor(asRole));
+  }
   await setSessionMarina(ctx.sessionId, marinaId);
   redirect(homeFor(membership.role));
+}
+
+/** Solo l'account manager: entra nell'area diportista di un cliente del porto, per vederla come la vede lui. */
+export async function previewOwnerArea(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireUser();
+  if (!ctx.accountManager) return fail("Non hai accesso a quest'area.");
+  const marinaId = formId(formData, "marinaId");
+  const ownerId = formId(formData, "ownerId");
+  if (!marinaId || !ownerId) return fail("Cliente non trovato.");
+  const [owner] = await db
+    .select({ id: owners.id })
+    .from(owners)
+    .where(and(eq(owners.id, ownerId), eq(owners.marinaId, marinaId), isNull(owners.anonymizedAt)))
+    .limit(1);
+  if (!owner) return fail("Cliente non trovato.");
+  await setSessionOwnerPreview(ctx.sessionId, marinaId, ownerId);
+  redirect("/diportista");
 }
 
 export async function selectOwnerArea(_prev: FormState, formData: FormData): Promise<FormState> {

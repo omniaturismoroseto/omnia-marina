@@ -93,6 +93,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   `/porti`); solo lui crea i porti con il loro direttore (`createMarina`); `/registrazione` vale solo alla prima installazione
   (`firstInstall`). Nei porti non compare: ogni join con `users` per mostrare un nome usa `visibleUser()` (il registro
   `withoutAccountManager()`), e Utenti, `loadMembership` e `otherAdmins` lo escludono. `createAccount` rifiuta le sue email.
+  Prove: da `/porti` entra come Direzione/Ufficio/Banchina (`sessions.preview_role`, `requireMarina` usa quel ruolo) o come
+  diportista di un cliente (`/porti/diportista`, `sessions.preview_owner_id`; `requireOwner` dà `preview: true` e
+  `accessId` vuoto: niente messaggi segnati come letti né notifiche). Per gli altri utenti questi campi non contano.
 - Accessi: email e password passano da `src/server/credentials.ts` (`verifyLogin`, `createAccount`, `setPassword`,
   `checkPassword`, `requestPasswordReset`), mai direttamente da `users.password_hash`. Con `FIREBASE_PROJECT_ID` decide
   Firebase Authentication (password ed email di «password dimenticata»; `firebase-admin` per le operazioni del porto,
