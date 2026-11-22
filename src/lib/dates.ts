@@ -39,13 +39,24 @@ export function addMonths(value: string, months: number): string {
   return toISO(d);
 }
 
-// Ultimo giorno di un periodo annuale che inizia in `start`: il giorno prima dello stesso giorno dell'anno dopo
-// (16/11/2026 → 15/11/2027; 01/01 → 31/12). Chi inizia il 29 febbraio finisce il 28 febbraio dell'anno dopo.
+// Ultimo giorno di un periodo annuale che inizia in `start`: gli annuali vanno per anno solare, quindi il 31 dicembre
+// dell'anno di inizio (01/06/2026 → 31/12/2026).
 export function annualEnd(start: string): string {
-  const [y, m, d] = start.split("-").map(Number);
-  const next = new Date(Date.UTC(y + 1, m - 1, d)); // il 29/02 di un anno non bisestile scivola al 01/03
-  next.setUTCDate(next.getUTCDate() - 1);
-  return toISO(next);
+  return `${start.slice(0, 4)}-12-31`;
+}
+
+/** Stagione estiva dei contratti stagionali: dal 1° maggio al 30 settembre. */
+export const SEASON_START = "05-01";
+export const SEASON_END = "09-30";
+
+/**
+ * Periodo proposto per un contratto stagionale o annuale nell'anno `year`. L'annuale dell'anno in corso parte da `today`
+ * (se l'anno è già cominciato), gli altri dal 1° gennaio; lo stagionale va sempre dal 1/5 al 30/9.
+ */
+export function yearPeriod(type: "annuale" | "stagionale", year: number, today: string): { startDate: string; endDate: string } {
+  if (type === "stagionale") return { startDate: `${year}-${SEASON_START}`, endDate: `${year}-${SEASON_END}` };
+  const first = `${year}-01-01`;
+  return { startDate: today > first && today.slice(0, 4) === String(year) ? today : first, endDate: `${year}-12-31` };
 }
 
 // Giorni da `from` a `to` (positivo se `to` è successivo).

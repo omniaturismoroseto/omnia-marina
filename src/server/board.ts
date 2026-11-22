@@ -182,12 +182,4 @@ export function countStates(board: BoardPier[]): Record<BerthState, number> & { 
   return counts;
 }
 
-export const STATE_LABEL: Record<BerthState, string> = {
-  libero: "Libero",
-  occupato: "Occupato",
-  fuori: "Barca fuori",
-  atteso: "In arrivo",
-  partenza: "In partenza",
-  ritardo: "Oltre scadenza",
-  fermo: "Non disponibile",
-};
+export { STATE_LABEL } from "@/lib/berth-states";

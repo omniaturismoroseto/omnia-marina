@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Field, Form, FormMessage, SelectField, Submit, TextareaField } from "@/components/form";
-import { addDays, addMonths, formatDate, isValidISODate } from "@/lib/dates";
+import { addDays, addMonths, annualEnd, formatDate, isValidISODate, SEASON_END, yearPeriod } from "@/lib/dates";
 import { formatMoney, moneyInput, parseMoney } from "@/lib/format";
 import { splitInstalments } from "@/lib/pricing";
 import { loadContractOptions, saveContract, saveDraftContract, type ContractOptions } from "@/server/contract-actions";
+import type { PlanMapData } from "@/server/plan-map";
+import { BerthMapPicker } from "./berth-map-picker";
 import { ContractExtras, feeInput } from "./contract-extras";
 
 type ContractType = "annuale" | "stagionale" | "mensile" | "transito";
@@ -18,12 +20,19 @@ const TYPE_OPTIONS: { value: ContractType; label: string }[] = [
   { value: "transito", label: "Transito" },
 ];
 
-// Data di fine proposta quando si sceglie il tipo di contratto.
+// Data di fine proposta quando si sceglie il tipo di contratto: l'annuale finisce il 31 dicembre, lo stagionale il 30 settembre.
 function suggestedEnd(type: ContractType, start: string): string {
   if (type === "transito") return addDays(start, 1);
-  const months = type === "annuale" ? 12 : type === "stagionale" ? 6 : 1;
-  return addDays(addMonths(start, months), -1);
+  if (type === "annuale") return annualEnd(start);
+  if (type === "stagionale") {
+    const seasonEnd = `${start.slice(0, 4)}-${SEASON_END}`;
+    return start <= seasonEnd ? seasonEnd : addDays(addMonths(start, 5), -1);
+  }
+  return addDays(addMonths(start, 1), -1);
 }
+
+// Anno proposto per la stagione: quello in corso finché la stagione non è finita, poi il successivo.
+const seasonYear = (today: string) => Number(today.slice(0, 4)) + (today.slice(5) > SEASON_END ? 1 : 0);
 
 export function ContractForm({
   owners,
@@ -33,7 +42,10 @@ export function ContractForm({
   fees,
   initial,
   draft,
+  map,
 }: {
+  // Schema del porto per «Scegli dalla mappa»; null se la pianta non è pronta.
+  map: PlanMapData | null;
   owners: { id: string; name: string }[];
   boats: { id: string; ownerId: string; name: string; size: string }[];
   today: string;
@@ -120,7 +132,17 @@ export function ContractForm({
       setGestione(proposed.gestione);
       setRifiuti(proposed.rifiuti);
     }
-    if (isValidISODate(startDate)) setEndDate(suggestedEnd(next, startDate));
+    // Lo stagionale si propone già sulla stagione (1/5 – 30/9), di quest'anno o del prossimo se è finita.
+    if (next === "stagionale") setPeriod(yearPeriod("stagionale", seasonYear(today), today));
+    else if (isValidISODate(startDate)) setEndDate(suggestedEnd(next, startDate));
+    markAmountEdited(false);
+  }
+
+  // Pulsanti «Anno …» / «Stagione …»: le date si compilano da sole.
+  function setPeriod(period: { startDate: string; endDate: string }) {
+    setStartDate(period.startDate);
+    setEndDate(period.endDate);
+    if (!firstDueEdited) setFirstDue(period.startDate);
     markAmountEdited(false);
   }
 
@@ -133,6 +155,8 @@ export function ContractForm({
     markAmountEdited(false);
   }
 
+  const year = Number(today.slice(0, 4));
+  const periodYears = type === "annuale" ? [year, year + 1] : type === "stagionale" ? [seasonYear(today), seasonYear(today) + 1] : [];
   const amountCents = parseMoney(amount);
   const extrasCents = spacesCents + (parseMoney(gestione) ?? 0) + (parseMoney(rifiuti) ?? 0);
   const plan = amountCents && amountCents > 0 && isValidISODate(firstDue) ? splitInstalments(amountCents, instalments, firstDue, everyMonths) : [];
@@ -194,28 +218,57 @@ export function ContractForm({
                 setEndDate(e.target.value);
                 markAmountEdited(false);
               }}
+              readOnly={type === "annuale"}
+              hint={type === "annuale" ? "Anno solare: finisce sempre il 31 dicembre." : undefined}
               required
             />
           </div>
+          {periodYears.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted">Compila le date:</span>
+              {periodYears.map((y) => {
+                const period = yearPeriod(type as "annuale" | "stagionale", y, today);
+                const active = period.startDate === startDate && period.endDate === endDate;
+                return (
+                  <button
+                    key={y}
+                    type="button"
+                    className={`btn btn-sm ${active ? "btn-primary" : "btn-secondary"}`}
+                    aria-pressed={active}
+                    onClick={() => setPeriod(period)}
+                  >
+                    {type === "annuale" ? "Anno" : "Stagione"} {y}
+                    <span className={active ? "text-white/75" : "text-muted"}>
+                      {" "}
+                      ({formatDate(period.startDate).slice(0, 5)} – {formatDate(period.endDate).slice(0, 5)})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           <div className="mt-4">
             <label htmlFor="berthId" className="label">
               Posto barca
             </label>
-            <select id="berthId" name="berthId" className="input" value={berthId} onChange={(e) => setBerthId(e.target.value)} disabled={!options}>
-              <option value="">{options ? "Da assegnare in seguito (solo bozza)" : "Scegli barca e date per vedere i posti liberi"}</option>
-              {piersInOrder.map((pier) => (
-                <optgroup key={pier} label={pier}>
-                  {availableBerths
-                    .filter((b) => b.pierName === pier)
-                    .map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.code} · {b.size}
-                      </option>
-                    ))}
-                </optgroup>
-              ))}
-            </select>
+            <div className="flex flex-wrap gap-2">
+              <select id="berthId" name="berthId" className="input min-w-0 flex-1" value={berthId} onChange={(e) => setBerthId(e.target.value)} disabled={!options}>
+                <option value="">{options ? "Da assegnare in seguito (solo bozza)" : "Scegli barca e date per vedere i posti liberi"}</option>
+                {piersInOrder.map((pier) => (
+                  <optgroup key={pier} label={pier}>
+                    {availableBerths
+                      .filter((b) => b.pierName === pier)
+                      .map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.code} · {b.size}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
+              </select>
+              {map && <BerthMapPicker map={map} options={options?.berths ?? null} selectedId={berthId} onSelect={setBerthId} />}
+            </div>
             <p className="hint">
               {loading
                 ? "Verifico la disponibilità…"

@@ -5,7 +5,14 @@ import { boatPath, cabinPath, type Drawing } from "@/lib/plan-drawing";
 import { pathOf, type PlanFeature } from "@/lib/plan-features";
 import { PIER, SHAPE, WATER } from "@/lib/plan-style";
 import { serviceTitle } from "@/lib/port-services";
-import { STATE_LABEL, type BerthState, type BoardBerth } from "@/server/board";
+import { STATE_LABEL } from "@/lib/berth-states";
+import type { BerthState, BoardBerth } from "@/server/board";
+
+/** Quello che serve per disegnare un posto: i dati della mappa ne hanno di più. */
+export type PlanViewBerth = Pick<BoardBerth, "id" | "code" | "planX" | "planY" | "planAngle" | "lengthCm" | "beamCm" | "state" | "occupant"> & {
+  // Testo del suggerimento al posto dello stato (es. «troppo piccolo»).
+  note?: string;
+};
 
 // Colori della barca per stato; «sagoma» = barca assegnata ma non in porto (tratteggiata).
 const BOAT: Record<BerthState, { fill: string; stroke: string; text: string; ghost?: boolean } | null> = {
@@ -43,6 +50,7 @@ export function PlanView({
   imageUrl,
   selectedId,
   hrefFor,
+  onSelect,
   features,
   bounds,
   baseUrl,
@@ -54,14 +62,17 @@ export function PlanView({
   bounds: { x: number; y: number; width: number; height: number };
   // Base disegnata (stessa inquadratura della foto): nello schema sostituisce il disegno automatico di terra e pontili.
   baseUrl: string | null;
-  berths: BoardBerth[];
+  berths: PlanViewBerth[];
   drawing: Drawing;
   width: number;
   height: number;
   pxPerMeter: number;
   imageUrl: string;
   selectedId: string | null;
-  hrefFor: (berthId: string) => string;
+  // Con `hrefFor` ogni posto è un collegamento (pagina Mappa); con `onSelect` un pulsante (scelta del posto in un contratto).
+  // I posti «fermo» non si possono scegliere.
+  hrefFor?: (berthId: string) => string;
+  onSelect?: (berthId: string) => void;
 }) {
   const view = mode === "schema" && !baseUrl ? bounds : { x: 0, y: 0, width, height };
   // Unità di disegno proporzionata all'area mostrata: spessori e testi non dipendono dalla risoluzione della foto.
@@ -111,7 +122,7 @@ export function PlanView({
         const o = b.occupant;
         const sternSign = drawing.stern.get(b.id) ?? 1;
         const selected = b.id === selectedId;
-        const label = `Posto ${b.code}: ${STATE_LABEL[b.state]}${o ? `, ${o.boatName}` : ""}`;
+        const label = `Posto ${b.code}: ${b.note ?? STATE_LABEL[b.state]}${o ? `, ${o.boatName}` : ""}`;
 
         // La barca vera: lunga e larga quanto dichiarato (un poco di sporgenza al massimo), con la poppa al pontile.
         let boatShape: { d: string; y: number; l: number; w: number } | null = null;
@@ -134,8 +145,8 @@ export function PlanView({
         if (textAngle >= 90) textAngle -= 180;
         else if (textAngle <= -90) textAngle += 180;
 
-        return (
-          <Link key={b.id} href={hrefFor(b.id)} aria-label={label} aria-current={selected ? "true" : undefined}>
+        const content = (
+          <>
             <title>{label}</title>
             <g transform={`translate(${b.planX} ${b.planY}) rotate(${b.planAngle ?? 0})`}>
               {selected && (
@@ -180,6 +191,38 @@ export function PlanView({
             >
               {b.code}
             </text>
+          </>
+        );
+        if (onSelect) {
+          const choosable = b.state !== "fermo";
+          return (
+            <g
+              key={b.id}
+              role="button"
+              tabIndex={choosable ? 0 : -1}
+              aria-label={label}
+              aria-pressed={selected}
+              aria-disabled={!choosable}
+              className={choosable ? "cursor-pointer focus:outline-none" : "cursor-not-allowed"}
+              onClick={choosable ? () => onSelect(b.id) : undefined}
+              onKeyDown={
+                choosable
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onSelect(b.id);
+                      }
+                    }
+                  : undefined
+              }
+            >
+              {content}
+            </g>
+          );
+        }
+        return (
+          <Link key={b.id} href={hrefFor?.(b.id) ?? "#"} aria-label={label} aria-current={selected ? "true" : undefined}>
+            {content}
           </Link>
         );
       })}

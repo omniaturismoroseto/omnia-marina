@@ -198,9 +198,11 @@ export const GUIDE: GuideSection[] = [
         title: "Creare un contratto",
         items: [
           "«Nuovo contratto»: scegli cliente, barca, tipo (annuale, stagionale, mensile, transito) e date.",
+          "Gli annuali vanno per anno solare e finiscono sempre il 31 dicembre; gli stagionali vanno dal 1° maggio al 30 settembre. I pulsanti «Anno …» e «Stagione …» compilano le date da soli, anche per l'anno successivo.",
           "L'app propone solo i posti liberi in cui la barca entra e calcola l'importo dal listino. L'importo resta modificabile.",
+          "«Scegli dalla mappa» apre lo schema del porto: i posti liberi e adatti alla barca sono verdi, tocca quello che vuoi.",
           "Salvato, il contratto è una bozza: non ha numero e in stampa porta la scritta «BOZZA». Si modifica con «Modifica».",
-          "In «Altri spazi e spese» aggiungi spazio a terra, posti auto, carrello, spese fisse e i servizi o le cauzioni del listino. Accanto alle date, la casella «Annuale» copre l'anno intero.",
+          "In «Altri spazi e spese» aggiungi spazio a terra, posti auto, carrello, spese fisse e i servizi o le cauzioni del listino. Accanto alle date, la casella «Annuale» copre fino al 31 dicembre.",
         ],
       },
       {

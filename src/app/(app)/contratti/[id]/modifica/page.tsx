@@ -9,6 +9,7 @@ import { OFFICE, requireMarina } from "@/lib/context";
 import { todayRome } from "@/lib/dates";
 import { formatDimensions } from "@/lib/format";
 import { uuidOrNull } from "@/lib/params";
+import { loadPlanMap } from "@/server/plan-map";
 import { ContractForm } from "../../contract-form";
 
 export const metadata: Metadata = { title: "Modifica bozza" };
@@ -42,6 +43,9 @@ export default page(async function EditDraftPage({ params }: { params: Promise<{
     db.select({ vat: marinas.defaultVatRate, serviceFee: marinas.serviceFeeCents, wasteFee: marinas.wasteFeeCents }).from(marinas).where(eq(marinas.id, ctx.marinaId)),
   ]);
 
+  // Schema del porto per «Scegli dalla mappa».
+  const map = await loadPlanMap(ctx.marinaId);
+
   return (
     <>
       <PageHeader
@@ -55,6 +59,7 @@ export default page(async function EditDraftPage({ params }: { params: Promise<{
         today={todayRome()}
         defaultVatRate={marina.vat}
         fees={{ gestione: marina.serviceFee, rifiuti: marina.wasteFee }}
+        map={map}
         initial={{ ownerId: c.ownerId, boatId: c.boatId, berthId: c.berthId ?? "", startDate: c.startDate, type: c.type }}
         draft={{ contractId: c.id, endDate: c.endDate, amountCents: c.amountCents, vatRate: c.vatRate, signedOn: c.signedOn, notes: c.notes }}
       />
