@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowUp } from "@/components/icons";
 import { ActionButton, CheckboxField, Field, Form, FormMessage, SelectField, Submit, TextareaField, useFormResult } from "@/components/form";
 import { pierGroupKey } from "@/lib/pricing";
 import { moneyInput } from "@/lib/format";
@@ -360,7 +360,7 @@ export function MovePierButtons({ pierId, first, last }: { pierId: string; first
       {!last && (
         <ActionButton action={movePier} fields={{ pierId, direction: "giu" }} variant="ghost" size="sm" className="px-2">
           <span className="sr-only">Sposta in giù</span>
-          <ArrowDown className="size-4" aria-hidden="true" />
+          <ArrowUp className="size-4 rotate-180" aria-hidden="true" />
         </ActionButton>
       )}
     </span>
