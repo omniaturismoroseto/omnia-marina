@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { auditLog, berthCategories, berths, marinaPlans, marinas, piers, planFeatures } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { requireMarina } from "@/lib/context";
+import { pierGroupKey } from "@/lib/pricing";
 import { estimateScale, MAX_BERTHS_PER_SIDE, planBerths, structureWidthM, toProposals, type StoredAnalysis } from "@/lib/plan-analysis";
 import { surroundingsToFeatures, type PlanFeature } from "@/lib/plan-features";
 import { isServiceKey } from "@/lib/port-services";
@@ -203,7 +204,7 @@ export async function createFromProposals(input: ProposalsInput): Promise<Result
   if (duplicate) return { ok: false, message: `La sigla ${duplicate} è usata due volte.` };
 
   const [existingPiers, categories] = await Promise.all([
-    db.select({ code: piers.code, sortOrder: piers.sortOrder }).from(piers).where(eq(piers.marinaId, ctx.marinaId)),
+    db.select({ code: piers.code, name: piers.name, sortOrder: piers.sortOrder }).from(piers).where(eq(piers.marinaId, ctx.marinaId)),
     db.select().from(berthCategories).where(eq(berthCategories.marinaId, ctx.marinaId)),
   ]);
   const taken = existingPiers.find((p) => codes.includes(p.code.toUpperCase()));
@@ -272,7 +273,13 @@ export async function createFromProposals(input: ProposalsInput): Promise<Result
   });
 
   revalidatePath("/", "layout");
-  return { ok: true, message: `Creati ${items.length} ${items.length === 1 ? "pontile" : "pontili e banchine"} con ${total} posti, già disposti sulla foto.` };
+  // Nomi già usati (da pontili di prima o tra quelli nuovi): in Pontili e posti si può decidere se unirli.
+  const keys = [...existingPiers.map((p) => p.name), ...items.map((i) => i.name)].map(pierGroupKey);
+  const repeated = [...new Set(items.map((i) => i.name.trim()).filter((name) => keys.filter((k) => k === pierGroupKey(name)).length > 1))];
+  const note = repeated.length
+    ? ` ${repeated.map((n) => `«${n}»`).join(", ")} ${repeated.length === 1 ? "ha" : "hanno"} lo stesso nome di un altro pontile: in Impostazioni → Pontili e posti puoi unirli.`
+    : "";
+  return { ok: true, message: `Creati ${items.length} ${items.length === 1 ? "pontile" : "pontili e banchine"} con ${total} posti, già disposti sulla foto.${note}` };
 }
 
 // ───────────────────────── Sfondo e servizi della mappa ─────────────────────────

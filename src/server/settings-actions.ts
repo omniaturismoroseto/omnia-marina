@@ -2,18 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { berthCategories, berths, marinas, memberships, piers, users } from "@/db/schema";
+import { berthCategories, berths, contracts, marinas, memberships, piers, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { requireMarina, requireUser } from "@/lib/context";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
 import { ROLE_LABEL } from "@/lib/labels";
+import { movedOrder, parseIdList } from "@/lib/pier-merge";
 import { berthSlots } from "@/lib/plan";
+import { pierGroupKey } from "@/lib/pricing";
 import { parseCoordinates } from "@/lib/weather";
 import { checkPassword, createAccount, setPassword } from "./credentials";
-import { toFormState } from "./errors";
+import { DomainError, toFormState } from "./errors";
+import { mergePiers, type MergeResult } from "./piers";
 
 const ACCOUNT_SERVICE_DOWN = "Il servizio di accesso non risponde: riprova tra qualche minuto.";
 
@@ -109,14 +112,78 @@ const pierSchema = z.object({
   code: f.text("Indica una sigla"),
   name: f.text("Indica il nome"),
   sortOrder: f.int(0, 999, "Numero non valido"),
+  // Risposta alla domanda sul nome già usato: «separati», «esistente» (nuovo pontile: usa quello che c'è) o «unisci:<id>».
+  sameName: f.optText(),
 });
 
-export async function savePier(_prev: FormState, formData: FormData): Promise<FormState> {
+/** Pontile che ha già il nome scritto nel modulo: il modulo chiede se unirli o tenerli separati. */
+export interface SameNamePier {
+  id: string;
+  code: string;
+  name: string;
+  berths: number;
+}
+export type PierFormState = (NonNullable<FormState> & { sameName?: SameNamePier[] }) | undefined;
+
+export async function savePier(_prev: FormState, formData: FormData): Promise<PierFormState> {
   const ctx = await requireMarina(ADMIN);
   const parsed = parseForm(pierSchema, formData);
   if (!parsed.ok) return parsed.state;
-  const { id, ...data } = parsed.data;
+  const { id, sameName, ...data } = parsed.data;
   data.code = data.code.toUpperCase();
+
+  // Stesso nome (senza badare a maiuscole e spazi) di un altro pontile: prima si chiede che cosa fare.
+  const key = pierGroupKey(data.name);
+  const others = await db
+    .select({ id: piers.id, code: piers.code, name: piers.name, berths: sql<number>`(select count(*) from "berths" where "berths"."pier_id" = "piers"."id")::int` })
+    .from(piers)
+    .where(and(eq(piers.marinaId, ctx.marinaId), id ? ne(piers.id, id) : undefined));
+  const matches = others.filter((p) => pierGroupKey(p.name) === key);
+  // Se il nome non cambia (es. si corregge solo la sigla) la domanda è già stata fatta: niente da chiedere.
+  const [current] = id ? await db.select({ name: piers.name }).from(piers).where(and(eq(piers.id, id), eq(piers.marinaId, ctx.marinaId))) : [];
+  const nameChanged = !current || pierGroupKey(current.name) !== key;
+  if (matches.length > 0 && nameChanged && !sameName) {
+    const list = matches.map((p) => `${p.name} (sigla ${p.code})`).join(", ");
+    return {
+      message: `Il nome è già usato da ${list}. Vuoi unirli in un pontile solo o tenerli separati?`,
+      errors: { name: "Nome già usato" },
+      sameName: matches,
+    };
+  }
+
+  const mergeInto = sameName?.startsWith("unisci:") ? matches.find((p) => `unisci:${p.id}` === sameName) : undefined;
+  if (sameName && sameName !== "separati" && !mergeInto && !(sameName === "esistente" && !id && matches.length > 0)) {
+    return fail("Scelta non valida: riprova.");
+  }
+
+  // Nuovo pontile con il nome di uno esistente: non se ne crea un altro, i posti si aggiungono a quello.
+  if (!id && (sameName === "esistente" || mergeInto)) {
+    const existing = mergeInto ?? matches[0];
+    return { ok: true, message: `Nessun nuovo pontile: aggiungi i posti a «${existing.name}» (sigla ${existing.code}).` };
+  }
+
+  if (id && mergeInto) {
+    let result: MergeResult;
+    try {
+      result = await db.transaction(async (tx) => {
+        const updated = await tx
+          .update(piers)
+          .set(data)
+          .where(and(eq(piers.id, id), eq(piers.marinaId, ctx.marinaId)))
+          .returning({ id: piers.id });
+        if (updated.length === 0) throw new DomainError("Pontile non trovato.");
+        const merged = await mergePiers(tx, ctx.marinaId, mergeInto.id, [id]);
+        await audit(ctx, "modifica", "pontile", mergeInto.id, `Unito ${data.code} in ${mergeInto.code} (${merged.moved} posti)`, tx);
+        return merged;
+      });
+    } catch (err) {
+      const state = toFormState(err);
+      return err instanceof DomainError ? state : { ...state, message: "Esiste già un pontile con questa sigla.", errors: { code: "Sigla già usata" } };
+    }
+    revalidatePath("/", "layout");
+    // La scheda di questo pontile sparisce: il risultato lo mostra la pagina.
+    redirect(mergedUrl(result));
+  }
   try {
     if (id) {
       const updated = await db
@@ -134,6 +201,64 @@ export async function savePier(_prev: FormState, formData: FormData): Promise<Fo
   }
   revalidatePath("/", "layout");
   return { ok: true, message: id ? "Salvato." : "Pontile aggiunto." };
+}
+
+// Esito dell'unione nell'indirizzo della pagina: lo legge `mergeNotice` in Pontili e posti.
+function mergedUrl(r: MergeResult): string {
+  const q = new URLSearchParams({ unito: r.target.id, da: r.merged.map((p) => p.code).join(","), posti: String(r.moved) });
+  if (!r.aligned) q.set("linea", "0");
+  return `/impostazioni/pontili?${q}`;
+}
+
+// Unisce in `targetId` tutti i pontili del porto con il suo stesso nome.
+export async function mergePierGroup(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const targetId = String(formData.get("targetId") ?? "");
+  if (!z.uuid().safeParse(targetId).success) return fail("Pontile non trovato.");
+  const all = await db.select({ id: piers.id, name: piers.name }).from(piers).where(eq(piers.marinaId, ctx.marinaId));
+  const target = all.find((p) => p.id === targetId);
+  if (!target) return fail("Pontile non trovato.");
+  const sources = all.filter((p) => p.id !== targetId && pierGroupKey(p.name) === pierGroupKey(target.name)).map((p) => p.id);
+  if (sources.length === 0) return fail("Non ci sono altri pontili con questo nome.");
+  let result: MergeResult;
+  try {
+    result = await db.transaction(async (tx) => {
+      const merged = await mergePiers(tx, ctx.marinaId, targetId, sources);
+      await audit(ctx, "modifica", "pontile", targetId, `Uniti ${merged.merged.map((p) => p.code).join(", ")} in ${merged.target.code} (${merged.moved} posti)`, tx);
+      return merged;
+    });
+  } catch (err) {
+    return toFormState(err);
+  }
+  revalidatePath("/", "layout");
+  redirect(mergedUrl(result));
+}
+
+// Sposta un pontile di un posto in su o in giù nell'ordine (mappa, elenchi, tariffe).
+export async function movePier(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const pierId = String(formData.get("pierId") ?? "");
+  const direction = formData.get("direction") === "su" ? "su" : "giu";
+  const rows = await db
+    .select({ id: piers.id, sortOrder: piers.sortOrder })
+    .from(piers)
+    .where(eq(piers.marinaId, ctx.marinaId))
+    .orderBy(asc(piers.sortOrder), asc(piers.code));
+  const order = movedOrder(
+    rows.map((p) => p.id),
+    pierId,
+    direction,
+  );
+  if (!order) return rows.some((p) => p.id === pierId) ? { ok: true } : fail("Pontile non trovato.");
+  // Si riscrive l'ordine 0, 1, 2…: così anche numeri doppi o con buchi tornano in fila.
+  const current = new Map(rows.map((p) => [p.id, p.sortOrder]));
+  await db.transaction(async (tx) => {
+    for (const [i, id] of order.entries()) {
+      if (current.get(id) !== i) await tx.update(piers).set({ sortOrder: i }).where(and(eq(piers.id, id), eq(piers.marinaId, ctx.marinaId)));
+    }
+  });
+  revalidatePath("/", "layout");
+  return { ok: true };
 }
 
 export async function deletePier(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -278,6 +403,116 @@ export async function deleteBerth(_prev: FormState, formData: FormData): Promise
   }
   revalidatePath("/", "layout");
   redirect("/impostazioni/pontili");
+}
+
+const keep = <T extends string>(values: readonly [T, ...T[]]) => z.preprocess((v) => (v === "" || v === undefined ? null : v), z.enum(values).nullable());
+
+const berthsBulkSchema = z.object({
+  pierId: f.id(),
+  categoryId: f.optId(),
+  categorySizes: f.checkbox(),
+  lengthCm: f.optMeters(),
+  beamCm: f.optMeters(),
+  draftCm: f.optMeters(),
+  status: keep(["attivo", "manutenzione", "fuori_servizio"]),
+  hasWater: keep(["si", "no"]),
+  hasPower: keep(["si", "no"]),
+});
+
+// Posti scelti nella scheda di un pontile: solo quelli del porto e di quel pontile.
+async function pickedBerths(marinaId: string, pierId: string, formData: FormData) {
+  const ids = parseIdList(formData.get("berthIds"));
+  if (ids.length === 0) return [];
+  return db
+    .select({ id: berths.id, code: berths.code })
+    .from(berths)
+    .where(and(eq(berths.marinaId, marinaId), eq(berths.pierId, pierId), inArray(berths.id, ids)));
+}
+
+// Cambia insieme i posti scelti: i campi lasciati su «non cambiare» (o vuoti) restano come sono.
+export async function updateBerths(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = parseForm(berthsBulkSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const d = parsed.data;
+  const list = await pickedBerths(ctx.marinaId, d.pierId, formData);
+  if (list.length === 0) return fail("Scegli almeno un posto.");
+
+  const set: Partial<typeof berths.$inferInsert> = {};
+  if (d.categoryId) {
+    const [category] = await db
+      .select()
+      .from(berthCategories)
+      .where(and(eq(berthCategories.id, d.categoryId), eq(berthCategories.marinaId, ctx.marinaId)))
+      .limit(1);
+    if (!category) return fail("Controlla i campi evidenziati.", { categoryId: "Categoria non trovata." });
+    set.categoryId = category.id;
+    if (d.categorySizes) {
+      set.lengthCm = category.maxLengthCm;
+      set.beamCm = category.maxBeamCm;
+    }
+  } else if (d.categorySizes) {
+    return fail("Controlla i campi evidenziati.", { categoryId: "Scegli la categoria da cui prendere le misure." });
+  }
+  if (d.lengthCm !== null) set.lengthCm = d.lengthCm;
+  if (d.beamCm !== null) set.beamCm = d.beamCm;
+  if (d.draftCm !== null) set.draftCm = d.draftCm;
+  if (d.status) set.status = d.status;
+  if (d.hasWater) set.hasWater = d.hasWater === "si";
+  if (d.hasPower) set.hasPower = d.hasPower === "si";
+  if (Object.keys(set).length === 0) return fail("Scegli che cosa cambiare.");
+
+  await db
+    .update(berths)
+    .set(set)
+    .where(
+      and(
+        eq(berths.marinaId, ctx.marinaId),
+        inArray(
+          berths.id,
+          list.map((b) => b.id),
+        ),
+      ),
+    );
+  await audit(ctx, "modifica", "posti barca", d.pierId, `${list.length} posti (${list.map((b) => b.code).join(", ")})`);
+  revalidatePath("/", "layout");
+  return { ok: true, message: `${list.length} ${list.length === 1 ? "posto aggiornato" : "posti aggiornati"}.` };
+}
+
+// Elimina i posti scelti; quelli con contratti (anche vecchi) restano: vanno messi fuori servizio.
+export async function deleteBerths(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const pierId = String(formData.get("pierId") ?? "");
+  if (!z.uuid().safeParse(pierId).success) return fail("Pontile non trovato.");
+  const list = await pickedBerths(ctx.marinaId, pierId, formData);
+  if (list.length === 0) return fail("Scegli almeno un posto.");
+  const ids = list.map((b) => b.id);
+  const linked = await db
+    .selectDistinct({ berthId: contracts.berthId })
+    .from(contracts)
+    .where(and(eq(contracts.marinaId, ctx.marinaId), inArray(contracts.berthId, ids)));
+  const blocked = new Set(linked.map((r) => r.berthId));
+  const free = list.filter((b) => !blocked.has(b.id));
+  if (free.length > 0) {
+    await db.delete(berths).where(
+      and(
+        eq(berths.marinaId, ctx.marinaId),
+        inArray(
+          berths.id,
+          free.map((b) => b.id),
+        ),
+      ),
+    );
+    await audit(ctx, "eliminazione", "posti barca", pierId, `${free.length} posti (${free.map((b) => b.code).join(", ")})`);
+  }
+  revalidatePath("/", "layout");
+  const kept = list.filter((b) => blocked.has(b.id)).map((b) => b.code);
+  const text = `${free.length} ${free.length === 1 ? "posto eliminato" : "posti eliminati"}.`;
+  if (kept.length === 0) return { ok: true, message: text };
+  return {
+    ok: free.length > 0,
+    message: `${free.length > 0 ? `${text} ` : ""}${kept.join(", ")} ${kept.length === 1 ? "ha contratti collegati" : "hanno contratti collegati"}: mettili fuori servizio invece di eliminarli.`,
+  };
 }
 
 // ───────────────────────── Categorie ─────────────────────────
