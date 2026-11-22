@@ -3,26 +3,37 @@ import { asc, eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { db } from "@/db";
-import { berthCategories, berths, boats, contracts, owners, piers, priceLists, rates, users } from "@/db/schema";
-import { appendPositions, mergeTraces, movedOrder, parseIdList } from "@/lib/pier-merge";
+import { berthCategories, berths, boats, contracts, owners, pierSections, piers, priceLists, rates, users } from "@/db/schema";
+import { appendPositions, movedOrder, parseIdList } from "@/lib/pier-merge";
+import { planUnits, unitPositions } from "@/lib/plan-units";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
-import { mergePiers } from "@/server/piers";
+import { mergePiers, sectionFromBerths } from "@/server/piers";
 
 describe("unione dei pontili: regole pure", () => {
-  it("le linee in fila si allungano, quelle ad angolo no", () => {
-    const a = { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, widthM: 2 };
-    const inLine = mergeTraces(a, { a: { x: 120, y: 2 }, b: { x: 200, y: 1 }, widthM: 3 });
-    expect(inLine.aligned).toBe(true);
-    expect(inLine.trace!.a).toEqual({ x: 0, y: 0 });
-    expect(inLine.trace!.b.x).toBeCloseTo(200);
-    expect(inLine.trace!.widthM).toBe(2);
-
-    const corner = mergeTraces(a, { a: { x: 100, y: 0 }, b: { x: 100, y: 80 }, widthM: 2 });
-    expect(corner.aligned).toBe(false);
-    expect(corner.trace).toBe(a);
-
-    expect(mergeTraces(null, a)).toEqual({ trace: a, aligned: true });
-    expect(mergeTraces(a, null)).toEqual({ trace: a, aligned: true });
+  it("strutture della pianta: un'unità per tratto, posizioni dalla radice del tratto", () => {
+    const line = (x: number) => ({ a: { x, y: 0 }, b: { x, y: 100 }, widthM: 2 });
+    const berthsList = [
+      { id: "g1", pierId: "G", sectionId: "cn", side: "sx" as const, position: 0 },
+      { id: "g2", pierId: "G", sectionId: "cs", side: "sx" as const, position: 1 },
+      { id: "g3", pierId: "G", sectionId: "cs", side: "sx" as const, position: 2 },
+      { id: "g4", pierId: "G", sectionId: null, side: "dx" as const, position: 5 },
+      { id: "b1", pierId: "B", sectionId: null, side: "sx" as const, position: 0 },
+    ];
+    const units = planUnits(
+      [
+        { id: "G", name: "Pontile G", trace: null, sections: [{ id: "cn", label: "CN", trace: line(0) }, { id: "cs", label: "CS", trace: line(50) }] },
+        { id: "B", name: "Pontile B", trace: line(90), sections: [] },
+      ],
+      berthsList,
+    );
+    expect(units.map((u) => [u.id, u.name, u.berths.map((b) => b.id)])).toEqual([
+      ["cn", "Pontile G · tratto CN", ["g1"]],
+      ["cs", "Pontile G · tratto CS", ["g2", "g3"]],
+      ["G", "Pontile G", ["g4"]],
+      ["B", "Pontile B", ["b1"]],
+    ]);
+    expect(units[1].trace).toEqual(line(50));
+    expect(Object.fromEntries(unitPositions(units[1].berths))).toEqual({ g2: 0, g3: 1 });
   });
 
   it("i posti che arrivano proseguono dopo quelli del pontile, lato per lato", () => {
@@ -87,7 +98,7 @@ describe.skipIf(!hasDb)("unione dei pontili (database)", () => {
     await db.$client.end();
   });
 
-  it("sposta i posti con i contratti, allunga la linea ed elimina il pontile unito", async () => {
+  it("sposta i posti con i contratti, tiene ogni pontile come tratto con la sua linea ed elimina quello unito", async () => {
     const [a, a2] = await db
       .insert(piers)
       .values([
@@ -112,7 +123,6 @@ describe.skipIf(!hasDb)("unione dei pontili (database)", () => {
 
     const result = await db.transaction((tx) => mergePiers(tx, marinaId, a.id, [a2.id]));
     expect(result.moved).toBe(2);
-    expect(result.aligned).toBe(true);
 
     const rows = await db.select().from(berths).where(eq(berths.pierId, a.id)).orderBy(asc(berths.code));
     expect(rows.map((b) => [b.code, b.side, b.position])).toEqual([
@@ -120,11 +130,46 @@ describe.skipIf(!hasDb)("unione dei pontili (database)", () => {
       ["M201", "sx", 1],
       ["M202", "dx", 0],
     ]);
+    // Sulla pianta: un tratto per pontile di prima, con la sua linea e i suoi posti; il pontile non ha più una linea sua.
     const [target] = await db.select().from(piers).where(eq(piers.id, a.id));
-    expect(target.planBx).toBeCloseTo(180);
+    expect(target.planAx).toBeNull();
+    const sections = await db.select().from(pierSections).where(eq(pierSections.pierId, a.id)).orderBy(asc(pierSections.sortOrder));
+    expect(sections.map((x) => [x.label, x.planAx, x.planBx])).toEqual([
+      ["M", 0, 100],
+      ["M2", 110, 180],
+    ]);
+    const bySection = Object.fromEntries(rows.map((b) => [b.code, sections.find((x) => x.id === b.sectionId)?.label]));
+    expect(bySection).toEqual({ M01: "M", M201: "M2", M202: "M2" });
+
+    // Una seconda unione aggiunge un tratto e porta con sé quelli già esistenti.
+    const [m3] = await db.insert(piers).values({ marinaId, code: "M3", name: "Molo", sortOrder: 2, planAx: 0, planAy: 50, planBx: 60, planBy: 50 }).returning({ id: piers.id });
+    await db.insert(berths).values({ marinaId, pierId: m3.id, categoryId, code: "M301", side: "sx", position: 0, lengthCm: 800, beamCm: 300 });
+    await db.transaction((tx) => mergePiers(tx, marinaId, a.id, [m3.id]));
+    const after = await db.select().from(pierSections).where(eq(pierSections.pierId, a.id)).orderBy(asc(pierSections.sortOrder));
+    expect(after.map((x) => x.label)).toEqual(["M", "M2", "M3"]);
     expect(await db.select().from(piers).where(eq(piers.id, a2.id))).toHaveLength(0);
     const [still] = await db.select({ berthId: contracts.berthId }).from(contracts).where(eq(contracts.id, contract.id));
     expect(still.berthId).toBe(moved.id);
+  });
+
+  it("i posti scelti diventano un tratto; i tratti rimasti vuoti spariscono", async () => {
+    const [pier] = await db.insert(piers).values({ marinaId, code: "L", name: "Molo a L" }).returning({ id: piers.id });
+    const made = await db
+      .insert(berths)
+      .values(["L01", "L02", "L03"].map((code, i) => ({ marinaId, pierId: pier.id, categoryId, code, position: i, lengthCm: 800, beamCm: 300 })))
+      .returning({ id: berths.id, code: berths.code });
+    const id = (code: string) => made.find((b) => b.code === code)!.id;
+    await db.transaction((tx) => sectionFromBerths(tx, marinaId, pier.id, [id("L02"), id("L03")], "braccio"));
+    let sections = await db.select().from(pierSections).where(eq(pierSections.pierId, pier.id));
+    expect(sections.map((x) => x.label)).toEqual(["braccio"]);
+    // Rifacendo il tratto con gli stessi posti, quello di prima resta vuoto e si elimina.
+    await db.transaction((tx) => sectionFromBerths(tx, marinaId, pier.id, [id("L02"), id("L03")], "testata"));
+    sections = await db.select().from(pierSections).where(eq(pierSections.pierId, pier.id));
+    expect(sections.map((x) => x.label)).toEqual(["testata"]);
+    const rows = await db.select({ code: berths.code, sectionId: berths.sectionId }).from(berths).where(eq(berths.pierId, pier.id)).orderBy(asc(berths.code));
+    expect(rows.map((b) => b.sectionId === sections[0].id)).toEqual([false, true, true]);
+    // Posti di un altro porto non contano.
+    await expect(db.transaction((tx) => sectionFromBerths(tx, otherMarinaId, pier.id, [id("L01")], "x"))).rejects.toThrow(/non trovato/);
   });
 
   it("non unisce pontili di un altro porto", async () => {

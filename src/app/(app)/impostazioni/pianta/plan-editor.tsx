@@ -84,6 +84,7 @@ export function PlanEditor({
     trace: { a: Point; b: Point; widthM: number } | null;
   } | null>(null);
   // Cosa si sposta e si ruota con «Seleziona»: il singolo posto o tutto il pontile (o banchina) a cui appartiene.
+  // Qui un «pontile» è una struttura della pianta (planUnits): nei pontili uniti ogni tratto si sposta da solo.
   const [moveMode, setMoveMode] = useState<"pontile" | "posto">("pontile");
   const lastAngle = useRef(0);
   // Ultimo pontile tracciato: serve a rifarlo con i lati invertiti senza ricliccare sulla foto.
@@ -478,7 +479,7 @@ export function PlanEditor({
                 onClick={() => setMoveMode(m)}
                 className={`rounded px-2 py-1 font-medium ${moveMode === m ? "bg-ink text-white" : "text-ink hover:bg-line-soft"}`}
               >
-                {m === "pontile" ? "pontile intero" : "posto singolo"}
+                {m === "pontile" ? "pontile o tratto" : "posto singolo"}
               </button>
             ))}
           </span>
@@ -651,7 +652,7 @@ export function PlanEditor({
           <div className="mt-3 space-y-3">
             <div>
               <label htmlFor="plan-pier" className="label">
-                Pontile (posti già disposti)
+                Pontile o tratto (posti già disposti)
               </label>
               <select
                 id="plan-pier"

@@ -1,9 +1,10 @@
 import "server-only";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { berths, marinaPlanBases, marinas, piers, planFeatures } from "@/db/schema";
+import { berths, marinaPlanBases, marinas, pierSections, piers, planFeatures } from "@/db/schema";
 import type { DrawingPier } from "@/lib/plan-drawing";
 import { drawingOrder, type PlanFeature } from "@/lib/plan-features";
+import { planUnits, traceFromColumns } from "@/lib/plan-units";
 
 /** Posto barca disposto sulla pianta, come serve a disegnarlo. */
 export interface PlanMapBerth {
@@ -31,14 +32,16 @@ export interface PlanMapData {
 }
 
 export async function loadPlanMap(marinaId: string): Promise<PlanMapData | null> {
-  const [[plan], pierRows, berthRows, featureRows, [base]] = await Promise.all([
+  const [[plan], pierRows, sectionRows, berthRows, featureRows, [base]] = await Promise.all([
     db.select({ width: marinas.planWidth, height: marinas.planHeight, pxPerMeter: marinas.planPxPerMeter }).from(marinas).where(eq(marinas.id, marinaId)),
     db.select().from(piers).where(eq(piers.marinaId, marinaId)).orderBy(asc(piers.sortOrder), asc(piers.code)),
+    db.select().from(pierSections).where(eq(pierSections.marinaId, marinaId)).orderBy(asc(pierSections.sortOrder)),
     db
       .select({
         id: berths.id,
         code: berths.code,
         pierId: berths.pierId,
+        sectionId: berths.sectionId,
         side: berths.side,
         planX: berths.planX,
         planY: berths.planY,
@@ -65,16 +68,20 @@ export async function loadPlanMap(marinaId: string): Promise<PlanMapData | null>
     pxPerMeter: plan.pxPerMeter,
     baseUrl: base ? `/pianta/base?v=${base.updatedAt.getTime()}` : null,
     features: drawingOrder(featureRows),
-    piers: pierRows.map((p) => ({
-      id: p.id,
-      name: p.name,
-      trace:
-        p.planAx !== null && p.planAy !== null && p.planBx !== null && p.planBy !== null
-          ? { a: { x: p.planAx, y: p.planAy }, b: { x: p.planBx, y: p.planBy }, widthM: p.planWidthM ?? 2 }
-          : null,
-      berths: placed
-        .filter((b) => b.pierId === p.id)
-        .map((b) => ({ id: b.id, side: b.side, x: b.planX, y: b.planY, angle: b.planAngle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm })),
+    // Una striscia per pontile, o per tratto nei pontili uniti.
+    piers: planUnits(
+      pierRows.map((p) => ({
+        id: p.id,
+        name: p.name,
+        trace: traceFromColumns(p),
+        sections: sectionRows.filter((sec) => sec.pierId === p.id).map((sec) => ({ id: sec.id, label: sec.label, trace: traceFromColumns(sec) })),
+      })),
+      placed,
+    ).map((unit) => ({
+      id: unit.id,
+      name: unit.pierName,
+      trace: unit.trace,
+      berths: unit.berths.map((b) => ({ id: b.id, side: b.side, x: b.planX, y: b.planY, angle: b.planAngle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm })),
     })),
     berths: placed.map(({ id, code, planX, planY, planAngle, lengthCm, beamCm }) => ({ id, code, planX, planY, planAngle, lengthCm, beamCm })),
   };

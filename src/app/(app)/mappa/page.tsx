@@ -16,6 +16,7 @@ import { contractNumberLabel } from "@/lib/contract-numbers";
 import { countStates, getBoard, STATE_LABEL, type BerthState, type BoardBerth, type BoardPier } from "@/server/board";
 import { ServiceIcon } from "@/components/service-icon";
 import { buildDrawing } from "@/lib/plan-drawing";
+import { planUnits } from "@/lib/plan-units";
 import { drawingOrder, extendBounds } from "@/lib/plan-features";
 import { serviceTitle } from "@/lib/port-services";
 import { PlanView } from "./plan-view";
@@ -299,9 +300,10 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
   // Con la pianta disposta lo schema è il disegno del porto ricavato dalla foto; senza, la griglia dei pontili.
   const drawing = hasPlan
     ? buildDrawing(
-        board.map((p) => ({
+        // Una striscia per pontile, o per tratto nei pontili uniti.
+        planUnits(board, allBerths).map((p) => ({
           id: p.id,
-          name: p.name,
+          name: p.pierName,
           trace: p.trace,
           berths: p.berths.flatMap((b) =>
             b.planX === null || b.planY === null

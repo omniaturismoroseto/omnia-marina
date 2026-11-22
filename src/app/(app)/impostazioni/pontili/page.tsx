@@ -98,16 +98,12 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
               </>
             )}
             .
-            {one(params.linea) === "0" && (
-              <>
-                {" "}
-                Sulla pianta i tratti non erano in linea: resta la linea di {mergedPier.code}, ritracciala se serve in{" "}
-                <Link href="/impostazioni/pianta" className="link">
-                  Pianta dal vero
-                </Link>
-                .
-              </>
-            )}
+            {" "}
+            Sulla pianta ogni pontile di prima resta un tratto a sé: in{" "}
+            <Link href="/impostazioni/pianta" className="link">
+              Pianta dal vero
+            </Link>{" "}
+            lo sposti, ruoti e tracci da solo.
           </Notice>
         </div>
       )}
@@ -117,8 +113,8 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
           <Notice tone="warn">
             <p className="font-medium">Ci sono pontili con lo stesso nome.</p>
             <p className="mt-0.5">
-              Unendoli, i posti passano al pontile scelto con codici, misure e contratti, e gli altri spariscono. Tienili separati se
-              sulla pianta sono tratti ad angolo: nello schema un pontile è una striscia sola.
+              Unendoli, i posti passano al pontile scelto con codici, misure e contratti, e gli altri spariscono dagli elenchi. Sulla
+              pianta ogni pontile di prima resta un tratto che si sposta e si traccia da solo.
             </p>
             <ul className="mt-2 space-y-2">
               {duplicates.map((g) => (

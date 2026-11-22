@@ -17,7 +17,7 @@ import { pierGroupKey } from "@/lib/pricing";
 import { parseCoordinates } from "@/lib/weather";
 import { checkPassword, createAccount, setPassword } from "./credentials";
 import { DomainError, toFormState } from "./errors";
-import { mergePiers, type MergeResult } from "./piers";
+import { mergePiers, sectionFromBerths, type MergeResult } from "./piers";
 
 const ACCOUNT_SERVICE_DOWN = "Il servizio di accesso non risponde: riprova tra qualche minuto.";
 
@@ -207,7 +207,6 @@ export async function savePier(_prev: FormState, formData: FormData): Promise<Pi
 // Esito dell'unione nell'indirizzo della pagina: lo legge `mergeNotice` in Pontili e posti.
 function mergedUrl(r: MergeResult): string {
   const q = new URLSearchParams({ unito: r.target.id, da: r.merged.map((p) => p.code).join(","), posti: String(r.moved) });
-  if (!r.aligned) q.set("linea", "0");
   return `/impostazioni/pontili?${q}`;
 }
 
@@ -533,6 +532,30 @@ export async function renameBerths(_prev: FormState, formData: FormData): Promis
   revalidatePath("/", "layout");
   const codes = result.codes.map((c) => c.code);
   return { ok: true, message: `${changes.length} ${changes.length === 1 ? "codice cambiato" : "codici cambiati"}: ora da ${codes[0]} a ${codes[codes.length - 1]}.` };
+}
+
+const sectionSchema = z.object({
+  pierId: f.id(),
+  label: z.preprocess((v) => (typeof v === "string" ? v.trim() : ""), z.string().min(1, "Dai un nome al tratto").max(20, "Al massimo 20 caratteri")),
+});
+
+// I posti scelti diventano un tratto della pianta, che nell'editor si sposta e si traccia da solo.
+export async function makeBerthSection(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = parseForm(sectionSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const ids = parseIdList(formData.get("berthIds"));
+  try {
+    const count = await db.transaction(async (tx) => {
+      const n = await sectionFromBerths(tx, ctx.marinaId, parsed.data.pierId, ids, parsed.data.label);
+      await audit(ctx, "modifica", "pontile", parsed.data.pierId, `Tratto «${parsed.data.label}» della pianta (${n} posti)`, tx);
+      return n;
+    });
+    revalidatePath("/", "layout");
+    return { ok: true, message: `Tratto «${parsed.data.label}» creato con ${count} ${count === 1 ? "posto" : "posti"}: in Pianta dal vero ora si sposta da solo.` };
+  } catch (err) {
+    return toFormState(err);
+  }
 }
 
 // Elimina i posti scelti; quelli con contratti (anche vecchi) restano: vanno messi fuori servizio.

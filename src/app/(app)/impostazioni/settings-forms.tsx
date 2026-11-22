@@ -318,7 +318,7 @@ function SameNameChoice({ editing, onReset }: { editing: boolean; onReset: () =>
         {editing
           ? "Unendoli, i posti di questo pontile passano a quello scelto con i loro codici, misure e contratti, e questo pontile sparisce."
           : "Un pontile solo è più semplice da gestire: i posti nuovi li aggiungi a quello che c'è già."}{" "}
-        Tienili separati se sulla pianta sono due tratti ad angolo o se ti serve distinguerli.
+        Sulla pianta ogni pontile di prima resta un tratto a sé, che si sposta e si traccia da solo. Tienili separati se ti serve distinguerli negli elenchi.
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         {editing ? (
