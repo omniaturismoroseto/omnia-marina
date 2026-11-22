@@ -7,11 +7,8 @@ import { berthCategories, piers, priceListExtras, priceLists, rates, type Contra
 // Il prezzo dipende dalla lunghezza fuori tutto (pulpiti, spiaggette e delfiniere compresi) e dalla darsena:
 // le darsene A, B e D usano la tariffa base, la darsena C ha prezzi propri (quelli del pontile con codice C).
 // Il foglio non indica le larghezze: quelle qui sotto sono indicative e si correggono in Impostazioni → Categorie.
-// Importi in euro, IVA inclusa.
-
-// Il foglio ufficiale riporta importi IVA inclusa.
+// Importi in euro, IVA inclusa (come nel foglio ufficiale).
 export const OFFICIAL_LIST = { name: "Listino 2026", validFrom: "2026-01-01", validTo: "2026-12-31", vatRate: 22, vatIncluded: true };
-export const OFFICIAL_ZONE = "Darsena C";
 
 /** Il pontile della darsena C: codice «C» oppure nome che finisce con «C» (es. «Darsena C»). */
 export function isDarsenaC(pier: { code: string; name: string }): boolean {

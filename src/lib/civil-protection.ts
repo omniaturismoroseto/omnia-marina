@@ -16,14 +16,6 @@ export const CIVIL_LEVEL_LABEL: Record<CivilLevel, string> = {
   rossa: "Allerta rossa",
 };
 
-/** Criticità corrispondente al colore, come la scrive il bollettino. */
-export const CIVIL_CRITICALITY: Record<CivilLevel, string> = {
-  verde: "assenza di fenomeni significativi",
-  gialla: "criticità ordinaria",
-  arancione: "criticità moderata",
-  rossa: "criticità elevata",
-};
-
 export interface CivilZone {
   name: string;
   comuni: string[];

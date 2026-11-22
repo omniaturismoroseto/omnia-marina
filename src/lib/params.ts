@@ -7,6 +7,10 @@ export function one(value: string | string[] | undefined): string {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export function isUuid(value: string): boolean {
+  return UUID.test(value);
+}
+
 // Gli identificativi arrivano dall'indirizzo: se non sono UUID validi si trattano come assenti.
 export function uuidOrNull(value: string | string[] | undefined): string | null {
   const v = one(value);

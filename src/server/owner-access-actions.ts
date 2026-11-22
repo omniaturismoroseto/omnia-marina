@@ -7,6 +7,7 @@ import { z } from "zod";
 import { createSession } from "@/lib/auth/session";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { clientIp, createRateLimiter } from "@/lib/rate-limit";
 import { toFormState } from "./errors";
 import { activateInvite, cancelInvite, createInvite, renewInvite, revokeAccess, touchAccess } from "./owner-access";
 
@@ -72,14 +73,12 @@ export async function revokeAccessAction(_prev: FormState, formData: FormData): 
 
 // ───────────────────────── Diportista: attivazione ─────────────────────────
 
-// Freno ai tentativi da uno stesso indirizzo: in memoria, vale per singola istanza del server.
-const tries = new Map<string, { count: number; resetAt: number }>();
-const MAX_TRIES = 10;
-const WINDOW_MS = 15 * 60 * 1000;
+// Freno ai tentativi da uno stesso indirizzo: al massimo 10 ogni 15 minuti.
+const tries = createRateLimiter(10, 15 * 60 * 1000);
 
 async function clientKey(): Promise<string> {
   const h = await headers();
-  return (h.get("x-forwarded-for")?.split(",")[0] ?? h.get("x-real-ip") ?? "sconosciuto").trim();
+  return clientIp(h.get("x-forwarded-for"), h.get("x-real-ip"));
 }
 
 const activateSchema = z.object({
@@ -94,11 +93,8 @@ export async function activateAction(_prev: FormState, formData: FormData): Prom
   if (!parsed.ok) return parsed.state;
 
   const key = await clientKey();
-  const now = Date.now();
-  const entry = tries.get(key);
-  if (entry && entry.resetAt > now && entry.count >= MAX_TRIES) return fail("Troppi tentativi. Riprova tra qualche minuto.");
-  if (!entry || entry.resetAt <= now) tries.set(key, { count: 1, resetAt: now + WINDOW_MS });
-  else entry.count++;
+  if (tries.blocked(key)) return fail("Troppi tentativi. Riprova tra qualche minuto.");
+  tries.hit(key);
 
   let result: Awaited<ReturnType<typeof activateInvite>>;
   try {
@@ -109,7 +105,7 @@ export async function activateAction(_prev: FormState, formData: FormData): Prom
   }
   if (!result.ok) return fail(result.message, result.field ? { [result.field]: result.message } : undefined);
 
-  tries.delete(key);
+  tries.clear(key);
   if (result.emailVerified) {
     await createSession(result.userId, result.marinaId, result.accessId);
     await touchAccess(result.accessId);

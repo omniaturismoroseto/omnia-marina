@@ -96,6 +96,16 @@ type Result = { ok: boolean; message: string };
 // Ogni analisi ha un costo su Google: un tetto giornaliero per porto evita sorprese.
 const DAILY_ANALYSES = 20;
 const ANALYSIS_ACTION = "analisi automatica";
+const LIMIT_MESSAGE = `Raggiunto il limite di ${DAILY_ANALYSES} analisi nelle ultime 24 ore. Riprova domani.`;
+
+// Le analisi (pontili e sfondo) contano insieme: ognuna lascia una riga nel registro attività.
+async function dailyLimitReached(marinaId: string): Promise<boolean> {
+  const [{ recent }] = await db
+    .select({ recent: sql<number>`count(*)::int` })
+    .from(auditLog)
+    .where(and(eq(auditLog.marinaId, marinaId), eq(auditLog.action, ANALYSIS_ACTION), gt(auditLog.at, sql`now() - interval '24 hours'`)));
+  return recent >= DAILY_ANALYSES;
+}
 
 /** Chiede a Claude di riconoscere pontili e banchine nella foto e salva le proposte, in attesa di conferma. */
 export async function analyzePlan(): Promise<Result> {
@@ -104,11 +114,7 @@ export async function analyzePlan(): Promise<Result> {
     return { ok: false, message: "Il riconoscimento automatico non è ancora attivo: va abilitato una volta su Google Cloud (istruzioni in COME-LAVORIAMO.md)." };
   }
 
-  const [{ recent }] = await db
-    .select({ recent: sql<number>`count(*)::int` })
-    .from(auditLog)
-    .where(and(eq(auditLog.marinaId, ctx.marinaId), eq(auditLog.action, ANALYSIS_ACTION), gt(auditLog.at, sql`now() - interval '24 hours'`)));
-  if (recent >= DAILY_ANALYSES) return { ok: false, message: `Raggiunto il limite di ${DAILY_ANALYSES} analisi nelle ultime 24 ore. Riprova domani.` };
+  if (await dailyLimitReached(ctx.marinaId)) return { ok: false, message: LIMIT_MESSAGE };
 
   const [row] = await db
     .select({
@@ -351,11 +357,7 @@ export async function analyzeSurroundings(): Promise<Result & { features?: Omit<
   if (!planAnalysisAvailable()) {
     return { ok: false, message: "Il riconoscimento automatico non è ancora attivo (istruzioni in COME-LAVORIAMO.md). Puoi disegnare edifici e servizi a mano." };
   }
-  const [{ recent }] = await db
-    .select({ recent: sql<number>`count(*)::int` })
-    .from(auditLog)
-    .where(and(eq(auditLog.marinaId, ctx.marinaId), eq(auditLog.action, ANALYSIS_ACTION), gt(auditLog.at, sql`now() - interval '24 hours'`)));
-  if (recent >= DAILY_ANALYSES) return { ok: false, message: `Raggiunto il limite di ${DAILY_ANALYSES} analisi nelle ultime 24 ore. Riprova domani.` };
+  if (await dailyLimitReached(ctx.marinaId)) return { ok: false, message: LIMIT_MESSAGE };
 
   const [row] = await db
     .select({ data: marinaPlans.data, mime: marinaPlans.mime, width: marinas.planWidth, height: marinas.planHeight })

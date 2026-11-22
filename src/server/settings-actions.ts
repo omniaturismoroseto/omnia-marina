@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, asc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { berthCategories, berths, contracts, marinas, memberships, piers, users } from "@/db/schema";
+import { berthCategories, berths, contracts, marinas, memberships, ownerAccess, piers, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
+import { destroyUserSessions } from "@/lib/auth/session";
 import { requireMarina, requireUser } from "@/lib/context";
-import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { f, fail, formId, parseForm, type FormState } from "@/lib/forms";
 import { ROLE_LABEL } from "@/lib/labels";
 import { renameCodes } from "@/lib/berth-codes";
 import { movedOrder, parseIdList } from "@/lib/pier-merge";
@@ -213,8 +214,8 @@ function mergedUrl(r: MergeResult): string {
 // Unisce in `targetId` tutti i pontili del porto con il suo stesso nome.
 export async function mergePierGroup(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
-  const targetId = String(formData.get("targetId") ?? "");
-  if (!z.uuid().safeParse(targetId).success) return fail("Pontile non trovato.");
+  const targetId = formId(formData, "targetId");
+  if (!targetId) return fail("Pontile non trovato.");
   const all = await db.select({ id: piers.id, name: piers.name }).from(piers).where(eq(piers.marinaId, ctx.marinaId));
   const target = all.find((p) => p.id === targetId);
   if (!target) return fail("Pontile non trovato.");
@@ -263,7 +264,8 @@ export async function movePier(_prev: FormState, formData: FormData): Promise<Fo
 
 export async function deletePier(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
-  const pierId = String(formData.get("pierId") ?? "");
+  const pierId = formId(formData, "pierId");
+  if (!pierId) return fail("Pontile non trovato.");
   try {
     const deleted = await db
       .delete(piers)
@@ -390,7 +392,8 @@ export async function saveBerth(_prev: FormState, formData: FormData): Promise<F
 
 export async function deleteBerth(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
-  const berthId = String(formData.get("berthId") ?? "");
+  const berthId = formId(formData, "berthId");
+  if (!berthId) return fail("Posto non trovato.");
   try {
     const deleted = await db
       .delete(berths)
@@ -561,8 +564,8 @@ export async function makeBerthSection(_prev: FormState, formData: FormData): Pr
 // Elimina i posti scelti; quelli con contratti (anche vecchi) restano: vanno messi fuori servizio.
 export async function deleteBerths(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
-  const pierId = String(formData.get("pierId") ?? "");
-  if (!z.uuid().safeParse(pierId).success) return fail("Pontile non trovato.");
+  const pierId = formId(formData, "pierId");
+  if (!pierId) return fail("Pontile non trovato.");
   const list = await pickedBerths(ctx.marinaId, pierId, formData);
   if (list.length === 0) return fail("Scegli almeno un posto.");
   const ids = list.map((b) => b.id);
@@ -625,7 +628,8 @@ export async function saveCategory(_prev: FormState, formData: FormData): Promis
 
 export async function deleteCategory(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
-  const categoryId = String(formData.get("categoryId") ?? "");
+  const categoryId = formId(formData, "categoryId");
+  if (!categoryId) return fail("Categoria non trovata.");
   const deleted = await db
     .delete(berthCategories)
     .where(and(eq(berthCategories.id, categoryId), eq(berthCategories.marinaId, ctx.marinaId)))
@@ -719,7 +723,8 @@ export async function changeMemberRole(_prev: FormState, formData: FormData): Pr
 
 export async function removeMember(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
-  const m = await loadMembership(ctx.marinaId, String(formData.get("membershipId") ?? ""));
+  const membershipId = formId(formData, "membershipId");
+  const m = membershipId ? await loadMembership(ctx.marinaId, membershipId) : null;
   if (!m) return fail("Utente non trovato.");
   if (m.userId === ctx.user.id) return fail("Non puoi rimuovere te stesso.");
   if (m.role === "admin" && (await otherAdmins(ctx.marinaId, m.id)) === 0) return fail("Deve restare almeno una persona con ruolo Direzione.");
@@ -731,19 +736,27 @@ export async function removeMember(_prev: FormState, formData: FormData): Promis
 
 const resetSchema = z.object({ membershipId: f.id(), password: password() });
 
-// La direzione può reimpostare la password solo a chi appartiene esclusivamente a questo porto:
-// altrimenti otterrebbe di fatto l'accesso anche agli altri porti di quella persona.
+// La direzione può reimpostare la password solo a chi appartiene esclusivamente a questo porto: altrimenti
+// otterrebbe di fatto l'accesso anche agli altri porti di quella persona, o alla sua area diportista in un altro
+// porto (un account esistente si collega a un porto con la sola email, vedi addMember).
 export async function resetMemberPassword(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
   const parsed = parseForm(resetSchema, formData);
   if (!parsed.ok) return parsed.state;
   const m = await loadMembership(ctx.marinaId, parsed.data.membershipId);
   if (!m) return fail("Utente non trovato.");
-  const [{ elsewhere }] = await db
-    .select({ elsewhere: sql<number>`count(*)::int` })
-    .from(memberships)
-    .where(and(eq(memberships.userId, m.userId), ne(memberships.marinaId, ctx.marinaId)));
-  if (elsewhere > 0) return fail("Questa persona lavora anche per altri porti: deve cambiare la password dal proprio account.");
+  const [[{ otherPorts }], [{ otherAreas }]] = await Promise.all([
+    db
+      .select({ otherPorts: sql<number>`count(*)::int` })
+      .from(memberships)
+      .where(and(eq(memberships.userId, m.userId), ne(memberships.marinaId, ctx.marinaId))),
+    db
+      .select({ otherAreas: sql<number>`count(*)::int` })
+      .from(ownerAccess)
+      .where(and(eq(ownerAccess.userId, m.userId), ne(ownerAccess.marinaId, ctx.marinaId), isNull(ownerAccess.revokedAt))),
+  ]);
+  if (otherPorts > 0) return fail("Questa persona lavora anche per altri porti: deve cambiare la password dal proprio account.");
+  if (otherAreas > 0) return fail("Questa persona usa l'app anche come diportista di un altro porto: deve cambiare la password dal proprio account.");
 
   try {
     await setPassword(m.userId, parsed.data.password);
@@ -752,7 +765,7 @@ export async function resetMemberPassword(_prev: FormState, formData: FormData):
     return fail(ACCOUNT_SERVICE_DOWN);
   }
   // Chiude le sessioni aperte dell'utente (tranne quella di chi sta operando, se è lui stesso).
-  await db.execute(sql`delete from sessions where user_id = ${m.userId} and id <> ${ctx.sessionId}`);
+  await destroyUserSessions(m.userId, ctx.sessionId);
   await audit(ctx, "reimpostazione password", "utente", m.userId);
   revalidatePath("/", "layout");
   return { ok: true, message: "Password reimpostata." };
@@ -775,6 +788,6 @@ export async function changeOwnPassword(_prev: FormState, formData: FormData): P
     console.error("Cambio della password non riuscito", error);
     return fail(ACCOUNT_SERVICE_DOWN);
   }
-  await db.execute(sql`delete from sessions where user_id = ${ctx.user.id} and id <> ${ctx.sessionId}`);
+  await destroyUserSessions(ctx.user.id, ctx.sessionId);
   return { ok: true, message: "Password aggiornata. Le altre sessioni aperte sono state chiuse." };
 }

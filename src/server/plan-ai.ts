@@ -157,10 +157,10 @@ type Photo = { data: Buffer; mime: string; width: number; height: number };
 
 /**
  * Chiede a Claude di riconoscere pontili e banchine nella foto.
- * `client` si può sostituire nei test; in produzione è il client Vertex AI del progetto.
+ * `client` si può sostituire nei test; in produzione è quello dell'API Anthropic o di Vertex AI (vedi defaultClient).
  */
 export async function analyzePlanPhoto(photo: Photo, pxPerMeter: number | null, client: Anthropic | AnthropicVertex | null = null): Promise<AiAnalysis> {
-  // Solo per i collaudi: una risposta preparata, senza chiamare Google.
+  // Solo per i collaudi: una risposta preparata, senza chiamare Claude.
   const fixture = process.env.PLAN_ANALYSIS_FIXTURE;
   if (fixture && !client) return AnalysisSchema.parse(JSON.parse(await readFile(fixture, "utf8")));
   return askAboutPhoto(photo, buildPrompt(photo.width, photo.height, pxPerMeter), AnalysisSchema, client);

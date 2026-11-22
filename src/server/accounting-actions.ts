@@ -9,7 +9,7 @@ import { charges, contracts, ledgerEntries, payments } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatMoney } from "@/lib/format";
-import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { f, fail, formId, parseForm, type FormState } from "@/lib/forms";
 import { LEDGER_CATEGORIES } from "@/lib/labels";
 import { createCharge, deletePayment, registerPayment } from "./accounting";
 import { toFormState } from "./errors";
@@ -59,7 +59,8 @@ export async function saveCharge(_prev: FormState, formData: FormData): Promise<
 
 export async function cancelCharge(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(OFFICE);
-  const chargeId = String(formData.get("chargeId") ?? "");
+  const chargeId = formId(formData, "chargeId");
+  if (!chargeId) return fail("Addebito non trovato o già annullato.");
   const result = await db.transaction(async (tx) => {
     const [{ count }] = await tx
       .select({ count: sql<number>`count(*)::int` })
@@ -108,7 +109,8 @@ export async function addPayment(_prev: FormState, formData: FormData): Promise<
 
 export async function removePayment(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(OFFICE);
-  const paymentId = String(formData.get("paymentId") ?? "");
+  const paymentId = formId(formData, "paymentId");
+  if (!paymentId) return fail("Incasso non trovato.");
   try {
     await db.transaction(async (tx) => {
       await deletePayment(tx, { marinaId: ctx.marinaId, userId: ctx.user.id }, paymentId);
@@ -156,7 +158,8 @@ export async function saveLedgerEntry(_prev: FormState, formData: FormData): Pro
 
 export async function deleteLedgerEntry(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(OFFICE);
-  const entryId = String(formData.get("entryId") ?? "");
+  const entryId = formId(formData, "entryId");
+  if (!entryId) return fail("Movimento non trovato.");
   const deleted = await db
     .delete(ledgerEntries)
     .where(and(eq(ledgerEntries.id, entryId), eq(ledgerEntries.marinaId, ctx.marinaId), isNull(ledgerEntries.paymentId)))

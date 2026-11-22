@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { boats, charges, contracts, marinas, ownerAccess, ownerInvites, owners, privacyConsents } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
-import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { f, fail, formId, parseForm, type FormState } from "@/lib/forms";
 import { toFormState } from "./errors";
 import { setOwnerFormer } from "./owners";
 
@@ -161,7 +161,8 @@ export async function recordConsent(_prev: FormState, formData: FormData): Promi
  */
 export async function eraseOwner(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(["admin"]);
-  const ownerId = String(formData.get("ownerId") ?? "");
+  const ownerId = formId(formData, "ownerId");
+  if (!ownerId) return fail("Cliente non trovato.");
   const [owner] = await db
     .select()
     .from(owners)
@@ -242,8 +243,8 @@ export async function eraseOwner(_prev: FormState, formData: FormData): Promise<
 // Spunta o toglie la categoria «Ex cliente» (nome scelto dalla direzione in Impostazioni → Porto).
 export async function setOwnerFormerAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(OFFICE);
-  const ownerId = String(formData.get("ownerId") ?? "");
-  if (!z.uuid().safeParse(ownerId).success) return fail("Cliente non trovato.");
+  const ownerId = formId(formData, "ownerId");
+  if (!ownerId) return fail("Cliente non trovato.");
   const former = formData.get("former") === "1";
   try {
     await db.transaction(async (tx) => {

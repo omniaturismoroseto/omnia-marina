@@ -10,7 +10,7 @@ import { EVERYONE, requireMarina, requireOwner } from "@/lib/context";
 import { f, parseForm, type FormState } from "@/lib/forms";
 import { toFormState } from "./errors";
 import { markRead, sendMessage, type Audience } from "./messages";
-import { removeSubscription, saveSubscription } from "./push";
+import { isPushEndpoint, removeSubscription, saveSubscription } from "./push";
 
 const messageSchema = z.object({
   kind: f.choice(["urgente", "lavori", "info"] as const),
@@ -77,7 +77,7 @@ const subscriptionSchema = z.object({
 export async function savePushSubscription(input: unknown): Promise<boolean> {
   const ctx = await requireOwner();
   const parsed = subscriptionSchema.safeParse(input);
-  if (!parsed.success || !parsed.data.endpoint.startsWith("https://")) return false;
+  if (!parsed.success || !isPushEndpoint(parsed.data.endpoint)) return false;
   await saveSubscription(ctx.user.id, parsed.data);
   return true;
 }

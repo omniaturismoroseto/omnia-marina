@@ -74,7 +74,6 @@ export function monthKey(value: string): string {
 
 const dateFmt = new Intl.DateTimeFormat("it-IT", { timeZone: "UTC", day: "2-digit", month: "2-digit", year: "numeric" });
 const dateLongFmt = new Intl.DateTimeFormat("it-IT", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" });
-const dateShortFmt = new Intl.DateTimeFormat("it-IT", { timeZone: "UTC", day: "numeric", month: "short" });
 const monthFmt = new Intl.DateTimeFormat("it-IT", { timeZone: "UTC", month: "long", year: "numeric" });
 const dateTimeFmt = new Intl.DateTimeFormat("it-IT", { timeZone: TZ, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const timeFmt = new Intl.DateTimeFormat("it-IT", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
@@ -85,10 +84,6 @@ export function formatDate(value: string | null | undefined): string {
 
 export function formatDateLong(value: string): string {
   return dateLongFmt.format(parseISO(value));
-}
-
-export function formatDateShort(value: string): string {
-  return dateShortFmt.format(parseISO(value));
 }
 
 export function formatMonth(key: string): string {

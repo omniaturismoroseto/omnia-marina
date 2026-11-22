@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
-import { fail, type FormState } from "@/lib/forms";
+import { fail, formId, type FormState } from "@/lib/forms";
 import { MAX_OWNER_IMPORT_ROWS } from "@/lib/owner-import";
 import { toFormState } from "./errors";
 import { findExistingOwners, importOwners, undoOwnerImport, type ExistingOwner } from "./owner-import";
@@ -123,8 +123,8 @@ export async function importOwnersFile(_prev: FormState, formData: FormData): Pr
 
 export async function removeOwnerImport(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(OFFICE);
-  const importId = String(formData.get("importId") ?? "");
-  if (!z.uuid().safeParse(importId).success) return fail("Importazione non trovata.");
+  const importId = formId(formData, "importId");
+  if (!importId) return fail("Importazione non trovata.");
   let message = "";
   try {
     await db.transaction(async (tx) => {

@@ -11,13 +11,15 @@ import { OFFICE, requireMarina } from "@/lib/context";
 import { itemKindFromName } from "@/lib/contract-items";
 import { addMonths, isValidISODate } from "@/lib/dates";
 import { parseMoney } from "@/lib/format";
-import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { f, fail, formId, parseForm, type FormState } from "@/lib/forms";
+import { isUuid } from "@/lib/params";
 import { RATE_FIELDS, grossQuote, pierGroupKey, pierRate, quoteStay, ratePierId, type Quote } from "@/lib/pricing";
 import { loadOfficialPriceList, OFFICIAL_LIST } from "./official-price-list";
 
 const ADMIN = ["admin" as const];
 
 async function ownList(marinaId: string, listId: string) {
+  if (!isUuid(listId)) return null;
   const [list] = await db
     .select()
     .from(priceLists)
@@ -131,7 +133,8 @@ export async function duplicatePriceList(_prev: FormState, formData: FormData): 
 
 export async function deletePriceList(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
-  const listId = String(formData.get("listId") ?? "");
+  const listId = formId(formData, "listId");
+  if (!listId) return fail("Listino non trovato.");
   const deleted = await db
     .delete(priceLists)
     .where(and(eq(priceLists.id, listId), eq(priceLists.marinaId, ctx.marinaId)))
@@ -207,7 +210,8 @@ export async function addSeasonPeriod(_prev: FormState, formData: FormData): Pro
 
 export async function deleteSeasonPeriod(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
-  const periodId = String(formData.get("periodId") ?? "");
+  const periodId = formId(formData, "periodId");
+  if (!periodId) return fail("Periodo non trovato.");
   const deleted = await db
     .delete(seasonPeriods)
     .where(and(eq(seasonPeriods.id, periodId), eq(seasonPeriods.marinaId, ctx.marinaId)))
@@ -276,8 +280,8 @@ export async function updatePriceListExtra(_prev: FormState, formData: FormData)
 
 export async function deletePriceListExtra(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
-  const extraId = String(formData.get("extraId") ?? "");
-  if (!z.uuid().safeParse(extraId).success) return fail("Voce non trovata.");
+  const extraId = formId(formData, "extraId");
+  if (!extraId) return fail("Voce non trovata.");
   const deleted = await db
     .delete(priceListExtras)
     .where(and(eq(priceListExtras.id, extraId), eq(priceListExtras.marinaId, ctx.marinaId)))

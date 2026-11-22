@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { boats, owners } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
-import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { f, fail, formId, parseForm, type FormState } from "@/lib/forms";
 import { toFormState } from "./errors";
 
 const boatSchema = z.object({
@@ -78,7 +78,8 @@ export async function saveBoat(_prev: FormState, formData: FormData): Promise<Fo
 
 export async function deleteBoat(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(OFFICE);
-  const boatId = String(formData.get("boatId") ?? "");
+  const boatId = formId(formData, "boatId");
+  if (!boatId) return fail("Barca non trovata.");
   try {
     const deleted = await db
       .delete(boats)
