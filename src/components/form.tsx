@@ -49,6 +49,11 @@ export function Form({
   );
 }
 
+/** Stato del modulo che contiene il componente: l'ultima risposta dell'azione e se è in corso. */
+export function useFormResult(): { state: FormState; pending: boolean } {
+  return use(FormContext);
+}
+
 function useFieldError(name: string): string | undefined {
   return use(FormContext).state?.errors?.[name];
 }

@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ActionButton, CheckboxField, Field, Form, FormMessage, SelectField, Submit, TextareaField } from "@/components/form";
+import { useEffect, useState } from "react";
+import { ArrowDown, ArrowUp } from "lucide-react";
+import { ActionButton, CheckboxField, Field, Form, FormMessage, SelectField, Submit, TextareaField, useFormResult } from "@/components/form";
+import { pierGroupKey } from "@/lib/pricing";
 import { moneyInput } from "@/lib/format";
 import { CONTRACT_APPROVAL_TEMPLATE, CONTRACT_TERMS_TEMPLATE } from "@/lib/contract-texts";
 import {
@@ -12,6 +15,8 @@ import {
   deleteCategory,
   deletePier,
   generateBerths,
+  mergePierGroup,
+  movePier,
   removeMember,
   resetMemberPassword,
   saveBerth,
@@ -20,6 +25,7 @@ import {
   saveLegalTexts,
   saveMarina,
   savePier,
+  type PierFormState,
 } from "@/server/settings-actions";
 
 const VAT_OPTIONS = [22, 10, 5, 4, 0].map((r) => ({ value: String(r), label: `${r}%` }));
@@ -261,18 +267,103 @@ export function LegalTextsForm({
   );
 }
 
-export function PierForm({ pier, nextOrder }: { pier?: { id: string; code: string; name: string; sortOrder: number }; nextOrder: number }) {
+type PierRef = { id: string; code: string; name: string };
+
+export function PierForm({ pier, nextOrder, others }: { pier?: PierRef & { sortOrder: number }; nextOrder: number; others: PierRef[] }) {
+  // Avviso immediato mentre si scrive; al salvataggio il server chiede se unire o tenere separati.
+  const [name, setName] = useState(pier?.name ?? "");
+  const key = pierGroupKey(name);
+  const same = key && (!pier || pierGroupKey(pier.name) !== key) ? others.filter((p) => p.id !== pier?.id && pierGroupKey(p.name) === key) : [];
   return (
     <Form action={savePier} resetOnSuccess={!pier} className="grid grid-cols-1 gap-3 sm:grid-cols-[6rem_1fr_7rem_auto] sm:items-end">
       {pier && <input type="hidden" name="id" value={pier.id} />}
       <Field name="code" label="Sigla" defaultValue={pier?.code ?? ""} maxLength={4} placeholder="A" required />
-      <Field name="name" label="Nome" defaultValue={pier?.name ?? ""} placeholder="Pontile A" required />
+      <Field name="name" label="Nome" defaultValue={pier?.name ?? ""} placeholder="Pontile A" required onChange={(e) => setName(e.target.value)} />
       <Field name="sortOrder" label="Ordine" defaultValue={pier?.sortOrder ?? nextOrder} inputMode="numeric" />
       <Submit variant={pier ? "secondary" : "primary"}>{pier ? "Salva" : "Aggiungi pontile"}</Submit>
-      <div className="sm:col-span-4">
+      <div className="space-y-2 sm:col-span-4">
+        <SameNameHint same={same} />
         <FormMessage />
+        <SameNameChoice editing={Boolean(pier)} onReset={() => setName("")} />
       </div>
     </Form>
+  );
+}
+
+// Mentre si scrive il nome; sparisce quando la domanda del server è già a schermo.
+function SameNameHint({ same }: { same: PierRef[] }) {
+  const { state } = useFormResult();
+  if (same.length === 0 || (state as PierFormState)?.sameName?.length) return null;
+  return (
+    <p className="text-sm text-warn">
+      Il nome è già usato da {same.map((p) => `${p.name} (sigla ${p.code})`).join(", ")}: al salvataggio potrai scegliere se unirli.
+    </p>
+  );
+}
+
+// Dopo la risposta «nome già usato»: unire al pontile esistente o tenerli separati.
+function SameNameChoice({ editing, onReset }: { editing: boolean; onReset: () => void }) {
+  const { state } = useFormResult();
+  const matches = (state as PierFormState)?.sameName;
+  // Un nuovo pontile salvato svuota il modulo: anche l'avviso sul nome riparte da zero.
+  useEffect(() => {
+    if (state?.ok && !editing) onReset();
+    // Solo a ogni nuova risposta del server, non a ogni lettera scritta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+  if (!matches?.length) return null;
+  return (
+    <div className="rounded-md border border-warn/30 bg-warn-soft p-3 text-sm">
+      <p className="text-ink">
+        {editing
+          ? "Unendoli, i posti di questo pontile passano a quello scelto con i loro codici, misure e contratti, e questo pontile sparisce."
+          : "Un pontile solo è più semplice da gestire: i posti nuovi li aggiungi a quello che c'è già."}{" "}
+        Tienili separati se sulla pianta sono due tratti ad angolo o se ti serve distinguerli.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {editing ? (
+          matches.map((p) => (
+            <Submit key={p.id} name="sameName" value={`unisci:${p.id}`} size="sm">
+              Unisci a {p.name} ({p.code}, {p.berths} posti)
+            </Submit>
+          ))
+        ) : (
+          <Submit name="sameName" value="esistente" size="sm">
+            Usa {matches[0].name} ({matches[0].code})
+          </Submit>
+        )}
+        <Submit name="sameName" value="separati" variant="secondary" size="sm">
+          {editing ? "Tienili separati" : "Crea comunque un pontile nuovo"}
+        </Submit>
+      </div>
+    </div>
+  );
+}
+
+export function MergePiersButton({ targetId, label, confirm }: { targetId: string; label: string; confirm: string }) {
+  return (
+    <ActionButton action={mergePierGroup} fields={{ targetId }} size="sm" confirm={confirm}>
+      {label}
+    </ActionButton>
+  );
+}
+
+export function MovePierButtons({ pierId, first, last }: { pierId: string; first: boolean; last: boolean }) {
+  return (
+    <span className="inline-flex gap-1">
+      {!first && (
+        <ActionButton action={movePier} fields={{ pierId, direction: "su" }} variant="ghost" size="sm" className="px-2">
+          <span className="sr-only">Sposta in su</span>
+          <ArrowUp className="size-4" aria-hidden="true" />
+        </ActionButton>
+      )}
+      {!last && (
+        <ActionButton action={movePier} fields={{ pierId, direction: "giu" }} variant="ghost" size="sm" className="px-2">
+          <span className="sr-only">Sposta in giù</span>
+          <ArrowDown className="size-4" aria-hidden="true" />
+        </ActionButton>
+      )}
+    </span>
   );
 }
 
