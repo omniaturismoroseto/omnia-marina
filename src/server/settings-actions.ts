@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { berthCategories, berths, contracts, marinas, memberships, piers, users } from "@/db/schema";
@@ -10,6 +10,7 @@ import { audit } from "@/lib/audit";
 import { requireMarina, requireUser } from "@/lib/context";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
 import { ROLE_LABEL } from "@/lib/labels";
+import { renameCodes } from "@/lib/berth-codes";
 import { movedOrder, parseIdList } from "@/lib/pier-merge";
 import { berthSlots } from "@/lib/plan";
 import { pierGroupKey } from "@/lib/pricing";
@@ -477,6 +478,61 @@ export async function updateBerths(_prev: FormState, formData: FormData): Promis
   await audit(ctx, "modifica", "posti barca", d.pierId, `${list.length} posti (${list.map((b) => b.code).join(", ")})`);
   revalidatePath("/", "layout");
   return { ok: true, message: `${list.length} ${list.length === 1 ? "posto aggiornato" : "posti aggiornati"}.` };
+}
+
+const renameSchema = z.object({
+  pierId: f.id(),
+  prefix: z.preprocess((v) => (typeof v === "string" ? v.trim() : ""), z.string().min(1, "Indica la sigla").max(6, "Al massimo 6 caratteri")),
+  numbering: f.choice(["mantieni", "rinumera"]),
+  from: f.int(0, 999, "Numero non valido"),
+});
+
+// Cambia sigla (e, se serve, numeri) ai posti scelti: CN01…CS35 → G01…G65. I contratti restano collegati ai posti.
+export async function renameBerths(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = parseForm(renameSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const d = parsed.data;
+  const list = await pickedBerths(ctx.marinaId, d.pierId, formData);
+  if (list.length === 0) return fail("Scegli almeno un posto.");
+  const result = renameCodes(list, d.prefix, d.numbering === "rinumera" ? { mode: "rinumera", from: d.from } : { mode: "mantieni" });
+  if (!result.ok) return fail(result.message);
+  const changes = result.codes.filter((c) => list.find((b) => b.id === c.id)!.code !== c.code);
+  if (changes.length === 0) return { ok: true, message: "I codici sono già questi." };
+
+  // Un codice nuovo non può essere di un posto rimasto fuori dalla scelta (anche su un altro pontile).
+  const picked = list.map((b) => b.id);
+  const [clash] = await db
+    .select({ code: berths.code })
+    .from(berths)
+    .where(
+      and(
+        eq(berths.marinaId, ctx.marinaId),
+        inArray(
+          berths.code,
+          changes.map((c) => c.code),
+        ),
+        notInArray(berths.id, picked),
+      ),
+    )
+    .limit(1);
+  if (clash) return fail(`Il codice ${clash.code} è già di un altro posto: scegli un'altra sigla o un altro numero di partenza.`);
+
+  await db.transaction(async (tx) => {
+    // Prima codici provvisori, poi quelli nuovi: così due posti scelti possono anche scambiarsi il codice.
+    for (const c of changes) {
+      await tx.update(berths).set({ code: `~${c.id}` }).where(and(eq(berths.id, c.id), eq(berths.marinaId, ctx.marinaId)));
+    }
+    for (const c of changes) {
+      await tx.update(berths).set({ code: c.code }).where(and(eq(berths.id, c.id), eq(berths.marinaId, ctx.marinaId)));
+    }
+    const first = changes[0];
+    const last = changes[changes.length - 1];
+    await audit(ctx, "modifica", "posti barca", d.pierId, `Codici di ${changes.length} posti (${list.find((b) => b.id === first.id)!.code} → ${first.code} … ${last.code})`, tx);
+  });
+  revalidatePath("/", "layout");
+  const codes = result.codes.map((c) => c.code);
+  return { ok: true, message: `${changes.length} ${changes.length === 1 ? "codice cambiato" : "codici cambiati"}: ora da ${codes[0]} a ${codes[codes.length - 1]}.` };
 }
 
 // Elimina i posti scelti; quelli con contratti (anche vecchi) restano: vanno messi fuori servizio.

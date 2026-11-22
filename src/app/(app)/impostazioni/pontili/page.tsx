@@ -235,6 +235,7 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
                 )}
                 <BerthList
                   pierId={pier.id}
+                  pierCode={pier.code}
                   categories={categoryOptions}
                   berths={list.map((b) => ({
                     id: b.id,
