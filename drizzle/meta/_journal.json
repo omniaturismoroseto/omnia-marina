@@ -176,6 +176,13 @@
       "when": 1795276930572,
       "tag": "0024_base_disegnata",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1795365543099,
+      "tag": "0025_tratti_dei_pontili",
+      "breakpoints": true
     }
   ]
 }

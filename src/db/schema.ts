@@ -466,6 +466,31 @@ export const piers = pgTable(
   (t) => [uniqueIndex("piers_marina_code_uq").on(t.marinaId, t.code)],
 );
 
+// Tratti di un pontile unito ad altri (Impostazioni → Pontili e posti → «Unisci»): per la gestione il pontile è uno solo,
+// sulla pianta ogni tratto ha la sua linea e i suoi posti (berths.section_id) e si sposta, ruota e traccia da solo.
+export const pierSections = pgTable(
+  "pier_sections",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    pierId: uuid("pier_id")
+      .notNull()
+      .references(() => piers.id, { onDelete: "cascade" }),
+    // Sigla del pontile da cui viene il tratto (es. CN): serve a riconoscerlo nell'editor della pianta.
+    label: text("label").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    // Come in piers: linea dalla radice (a) alla testata (b) sulla foto e larghezza della passerella (0 = banchina).
+    planAx: real("plan_ax"),
+    planAy: real("plan_ay"),
+    planBx: real("plan_bx"),
+    planBy: real("plan_by"),
+    planWidthM: real("plan_width_m"),
+  },
+  (t) => [index("pier_sections_pier_idx").on(t.pierId)],
+);
+
 export const berthCategories = pgTable(
   "berth_categories",
   {
@@ -492,6 +517,8 @@ export const berths = pgTable(
       .notNull()
       .references(() => piers.id, { onDelete: "cascade" }),
     categoryId: uuid("category_id").references(() => berthCategories.id, { onDelete: "set null" }),
+    // Tratto del pontile sulla pianta (solo per i pontili uniti); vuoto = il posto segue la linea del pontile.
+    sectionId: uuid("section_id").references(() => pierSections.id, { onDelete: "set null" }),
     code: text("code").notNull(),
     side: berthSideEnum("side").notNull().default("sx"),
     position: integer("position").notNull().default(0),

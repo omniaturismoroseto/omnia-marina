@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ActionButton, CheckboxField, Field, Form, FormMessage, SelectField, Submit } from "@/components/form";
-import { deleteBerths, renameBerths, updateBerths } from "@/server/settings-actions";
+import { deleteBerths, makeBerthSection, renameBerths, updateBerths } from "@/server/settings-actions";
 
 export interface BerthChip {
   id: string;
@@ -179,6 +179,20 @@ export function BerthList({
               <FormMessage />
             </div>
           </Form>
+          <Form action={makeBerthSection} className="mt-3 space-y-3 border-t border-line-soft pt-3">
+            <input type="hidden" name="pierId" value={pierId} />
+            <input type="hidden" name="berthIds" value={ids} />
+            <h3 className="text-sm font-semibold text-ink">Fai un tratto della pianta</h3>
+            <p className="text-sm text-muted">
+              I posti scelti diventano un tratto che in Pianta dal vero si sposta, ruota e traccia da solo (per esempio un braccio del
+              pontile o un pontile unito a questo). Per la gestione il pontile resta uno solo.
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <Field name="label" label="Nome del tratto" defaultValue={commonPrefix(selected.map((b) => b.code))} maxLength={20} required />
+              <Submit variant="secondary">Crea il tratto</Submit>
+              <FormMessage />
+            </div>
+          </Form>
           <div className="mt-3 border-t border-line-soft pt-3">
             <ActionButton
               action={deleteBerths}
@@ -194,4 +208,10 @@ export function BerthList({
       )}
     </div>
   );
+}
+
+// Lettere iniziali comuni ai codici scelti (CN01, CN02 → CN): nome proposto per il tratto.
+function commonPrefix(codes: string[]): string {
+  const letters = codes.map((c) => c.replace(/\d+$/, ""));
+  return letters.every((l) => l === letters[0]) ? (letters[0] ?? "") : "";
 }

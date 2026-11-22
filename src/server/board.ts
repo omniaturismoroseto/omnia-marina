@@ -1,7 +1,8 @@
 import "server-only";
 import { and, asc, eq, lte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { berthCategories, berths, boats, contracts, owners, piers, type BerthStatus, type ContractType, type Presence } from "@/db/schema";
+import { berthCategories, berths, boats, contracts, owners, pierSections, piers, type BerthStatus, type ContractType, type Presence } from "@/db/schema";
+import { traceFromColumns, type UnitSection } from "@/lib/plan-units";
 
 /*
  * Stato di un posto barca in una data:
@@ -35,6 +36,7 @@ export interface BoardBerth {
   id: string;
   code: string;
   pierId: string;
+  sectionId: string | null;
   side: "sx" | "dx";
   position: number;
   lengthCm: number;
@@ -61,14 +63,17 @@ export interface BoardPier {
   name: string;
   // Linea tracciata sulla foto (radice → testata) e larghezza in metri; null se mai tracciata.
   trace: { a: { x: number; y: number }; b: { x: number; y: number }; widthM: number } | null;
+  // Tratti di un pontile unito: sulla pianta ognuno ha la sua linea (vedi planUnits).
+  sections: UnitSection[];
   berths: BoardBerth[];
 }
 
 export async function getBoard(marinaId: string, date: string, today: string): Promise<BoardPier[]> {
   const isToday = date === today;
 
-  const [pierRows, berthRows, contractRows] = await Promise.all([
+  const [pierRows, sectionRows, berthRows, contractRows] = await Promise.all([
     db.select().from(piers).where(eq(piers.marinaId, marinaId)).orderBy(asc(piers.sortOrder), asc(piers.code)),
+    db.select().from(pierSections).where(eq(pierSections.marinaId, marinaId)).orderBy(asc(pierSections.sortOrder)),
     db
       .select({ berth: berths, categoryName: berthCategories.name })
       .from(berths)
@@ -122,10 +127,8 @@ export async function getBoard(marinaId: string, date: string, today: string): P
     id: p.id,
     code: p.code,
     name: p.name,
-    trace:
-      p.planAx !== null && p.planAy !== null && p.planBx !== null && p.planBy !== null
-        ? { a: { x: p.planAx, y: p.planAy }, b: { x: p.planBx, y: p.planBy }, widthM: p.planWidthM ?? 2 }
-        : null,
+    trace: traceFromColumns(p),
+    sections: sectionRows.filter((sec) => sec.pierId === p.id).map((sec) => ({ id: sec.id, label: sec.label, trace: traceFromColumns(sec) })),
     berths: [],
   }));
   const pierIndex = new Map(result.map((p) => [p.id, p]));
@@ -150,6 +153,7 @@ export async function getBoard(marinaId: string, date: string, today: string): P
       id: berth.id,
       code: berth.code,
       pierId: berth.pierId,
+      sectionId: berth.sectionId,
       side: berth.side,
       position: berth.position,
       lengthCm: berth.lengthCm,

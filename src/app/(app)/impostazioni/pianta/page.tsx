@@ -10,11 +10,13 @@ import {
   marinaPlanBases,
   marinaPlans,
   marinas,
+  pierSections,
   piers,
   planFeatures,
 } from "@/db/schema";
 import { berthSizePx } from "@/lib/plan";
 import { buildDrawing } from "@/lib/plan-drawing";
+import { planUnits, traceFromColumns, unitPositions } from "@/lib/plan-units";
 import { requireMarina } from "@/lib/context";
 import { SettingsTabs } from "../tabs";
 import type { StoredAnalysis } from "@/lib/plan-analysis";
@@ -29,7 +31,7 @@ export const metadata: Metadata = { title: "Pianta dal vero" };
 
 export default page(async function PlanSettingsPage() {
   const ctx = await requireMarina(["admin"]);
-  const [[marina], pierRows, berthRows] = await Promise.all([
+  const [[marina], pierRows, berthRows, sectionRows] = await Promise.all([
     db
       .select({
         width: marinas.planWidth,
@@ -58,6 +60,7 @@ export default page(async function PlanSettingsPage() {
         id: berths.id,
         code: berths.code,
         pierId: berths.pierId,
+        sectionId: berths.sectionId,
         side: berths.side,
         position: berths.position,
         lengthCm: berths.lengthCm,
@@ -69,7 +72,38 @@ export default page(async function PlanSettingsPage() {
       .from(berths)
       .where(eq(berths.marinaId, ctx.marinaId))
       .orderBy(asc(berths.code)),
+    db
+      .select()
+      .from(pierSections)
+      .where(eq(pierSections.marinaId, ctx.marinaId))
+      .orderBy(asc(pierSections.sortOrder)),
   ]);
+  // Strutture della pianta: i pontili, e per quelli uniti un tratto per ogni pontile di prima.
+  const units = planUnits(
+    pierRows.map((p) => ({
+      id: p.id,
+      name: p.name,
+      trace: traceFromColumns({ planAx: p.ax, planAy: p.ay, planBx: p.bx, planBy: p.by, planWidthM: p.widthM }),
+      sections: sectionRows
+        .filter((sec) => sec.pierId === p.id)
+        .map((sec) => ({ id: sec.id, label: sec.label, trace: traceFromColumns(sec) })),
+    })),
+    berthRows,
+  );
+  // Per l'editor ogni struttura è un «pontile»: posti con l'id della struttura e posizioni contate dalla sua radice.
+  const editorPiers = units.map((unit) => ({
+    id: unit.id,
+    name: unit.name,
+    ax: unit.trace?.a.x ?? null,
+    ay: unit.trace?.a.y ?? null,
+    bx: unit.trace?.b.x ?? null,
+    by: unit.trace?.b.y ?? null,
+    widthM: unit.trace?.widthM ?? null,
+  }));
+  const editorBerths = units.flatMap((unit) => {
+    const positions = unitPositions(unit.berths);
+    return unit.berths.map(({ sectionId: _section, ...b }) => ({ ...b, pierId: unit.id, position: positions.get(b.id) ?? b.position }));
+  });
   const [[plan], categories, featureRows, [base]] = await Promise.all([
     db
       .select({ analysis: marinaPlans.analysis })
@@ -141,19 +175,12 @@ export default page(async function PlanSettingsPage() {
     : [];
   const drawing = scale
     ? buildDrawing(
-        pierRows.map((p) => ({
-          id: p.id,
-          name: p.name,
-          trace:
-            p.ax !== null && p.ay !== null && p.bx !== null && p.by !== null
-              ? {
-                  a: { x: p.ax, y: p.ay },
-                  b: { x: p.bx, y: p.by },
-                  widthM: p.widthM ?? 2,
-                }
-              : null,
-          berths: berthRows.flatMap((b) =>
-            b.pierId === p.id && b.x !== null && b.y !== null
+        units.map((unit) => ({
+          id: unit.id,
+          name: unit.pierName,
+          trace: unit.trace,
+          berths: unit.berths.flatMap((b) =>
+            b.x !== null && b.y !== null
               ? [
                   {
                     id: b.id,
@@ -342,8 +369,8 @@ export default page(async function PlanSettingsPage() {
               width={marina.width!}
               height={marina.height!}
               initialPxPerMeter={marina.pxPerMeter}
-              piers={pierRows}
-              initialBerths={berthRows}
+              piers={editorPiers}
+              initialBerths={editorBerths}
             />
           </Card>
         )}

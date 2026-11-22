@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { auditLog, berthCategories, berths, marinaPlans, marinas, piers, planFeatures } from "@/db/schema";
+import { auditLog, berthCategories, berths, marinaPlans, marinas, pierSections, piers, planFeatures } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { requireMarina } from "@/lib/context";
 import { pierGroupKey } from "@/lib/pricing";
@@ -24,7 +24,7 @@ const layoutSchema = z.object({
       }),
     )
     .max(5000),
-  // Linee dei pontili tracciate in questa sessione dell'editor (servono a disegnarli nello schema).
+  // Linee dei pontili (o dei tratti dei pontili uniti: pierId è allora l'id del tratto) tracciate in questa sessione dell'editor.
   traces: z
     .array(
       z.object({
@@ -72,11 +72,14 @@ export async function savePlanLayout(input: z.input<typeof layoutSchema>): Promi
       `);
     }
     for (const t of traces) {
-      // Il filtro sul porto impedisce di toccare pontili di altri porti.
-      await tx
-        .update(piers)
-        .set({ planAx: t.a.x, planAy: t.a.y, planBx: t.b.x, planBy: t.b.y, planWidthM: t.widthM })
-        .where(and(eq(piers.id, t.pierId), eq(piers.marinaId, ctx.marinaId)));
+      // L'id è di un tratto di un pontile unito o di un pontile; il filtro sul porto impedisce di toccare quelli di altri porti.
+      const line = { planAx: t.a.x, planAy: t.a.y, planBx: t.b.x, planBy: t.b.y, planWidthM: t.widthM };
+      const section = await tx
+        .update(pierSections)
+        .set(line)
+        .where(and(eq(pierSections.id, t.pierId), eq(pierSections.marinaId, ctx.marinaId)))
+        .returning({ id: pierSections.id });
+      if (section.length === 0) await tx.update(piers).set(line).where(and(eq(piers.id, t.pierId), eq(piers.marinaId, ctx.marinaId)));
     }
     const placed = placements.filter((p) => p.position).length;
     await audit(ctx, "modifica", "pianta del porto", ctx.marinaId, `${placed} posti disposti sulla foto`, tx);
