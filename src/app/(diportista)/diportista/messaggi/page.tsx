@@ -19,7 +19,8 @@ export default page(async function OwnerMessagesPage() {
       <h1 className="font-display text-3xl font-semibold text-ink">Messaggi</h1>
       <p className="mt-1 text-[15px] text-muted">Avvisi e comunicazioni di {ctx.marinaName}.</p>
       <div className="mt-6 space-y-5">
-        <PushToggle publicKey={pushPublicKey()} />
+        {/* L'account manager che prova l'area non attiva le notifiche del cliente. */}
+        {!ctx.preview && <PushToggle publicKey={pushPublicKey()} />}
         <Card flush>
           {rows.length === 0 ? (
             <p className="p-4 text-sm text-muted">Nessun messaggio, per ora.</p>

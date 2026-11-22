@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gte, inArray, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { berths, boats, charges, contracts, movements, owners, payments, tasks, users } from "@/db/schema";
+import { visibleUser } from "@/lib/account-manager";
 
 // Incassato per addebito, da unire alle query sugli addebiti.
 export const paidByCharge = db
@@ -97,7 +98,7 @@ export async function getOpenTasks(marinaId: string) {
     .from(tasks)
     .leftJoin(berths, eq(berths.id, tasks.berthId))
     .leftJoin(boats, eq(boats.id, tasks.boatId))
-    .leftJoin(users, eq(users.id, tasks.createdBy))
+    .leftJoin(users, and(eq(users.id, tasks.createdBy), visibleUser()))
     .where(and(eq(tasks.marinaId, marinaId), ne(tasks.status, "chiusa")))
     .orderBy(sql`case ${tasks.priority} when 'alta' then 0 when 'normale' then 1 else 2 end`, desc(tasks.createdAt));
 }
@@ -117,7 +118,7 @@ export async function getRecentMovements(marinaId: string, since: Date, limit = 
     .from(movements)
     .innerJoin(boats, eq(boats.id, movements.boatId))
     .leftJoin(berths, eq(berths.id, movements.berthId))
-    .leftJoin(users, eq(users.id, movements.userId))
+    .leftJoin(users, and(eq(users.id, movements.userId), visibleUser()))
     .where(and(eq(movements.marinaId, marinaId), gte(movements.at, since)))
     .orderBy(desc(movements.at))
     .limit(limit);

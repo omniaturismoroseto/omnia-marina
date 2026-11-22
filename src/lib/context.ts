@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { marinas, memberships, ownerAccess, owners, type Role } from "@/db/schema";
+import { isAccountManagerEmail } from "./account-manager";
 import { getSession } from "./auth/session";
 
 export interface MembershipInfo {
@@ -24,12 +25,18 @@ export interface OwnerAreaInfo {
 export interface UserContext {
   sessionId: string;
   user: { id: string; name: string; email: string };
+  /** Account manager di Omnia Marina (vedi lib/account-manager.ts): `memberships` sono allora tutti i porti, come direzione. */
+  accountManager: boolean;
   memberships: MembershipInfo[];
   ownerAreas: OwnerAreaInfo[];
   // Porto scelto in questa sessione (null finché l'utente non ne sceglie uno).
   activeMarinaId: string | null;
   // Area diportista aperta in questa sessione (null nel gestionale).
   activeOwnerAccessId: string | null;
+  /** Solo account manager: ruolo con cui prova il porto (null = Direzione). */
+  previewRole: Role | null;
+  /** Solo account manager: cliente di cui vede l'area diportista. */
+  previewOwnerId: string | null;
 }
 
 export interface OwnerContext {
@@ -42,6 +49,11 @@ export interface OwnerContext {
   ownerName: string;
   /** Vero se l'utente ha anche altre aree (altri clienti o il gestionale): mostra «Cambia». */
   canSwitch: boolean;
+  /**
+   * Vero quando è l'account manager a guardare l'area di un cliente: niente accesso del cliente (`accessId` vuoto) e
+   * niente tracce (messaggi segnati come letti, notifiche).
+   */
+  preview: boolean;
 }
 
 export interface MarinaContext extends UserContext {
@@ -60,20 +72,26 @@ export function homeFor(role: Role): string {
 const loadContext = cache(async (): Promise<UserContext | null> => {
   const session = await getSession();
   if (!session) return null;
-  const rows = await db
-    .select({ marinaId: memberships.marinaId, marinaName: marinas.name, role: memberships.role })
-    .from(memberships)
-    .innerJoin(marinas, eq(marinas.id, memberships.marinaId))
-    .where(eq(memberships.userId, session.user.id))
-    .orderBy(marinas.name);
+  const accountManager = isAccountManagerEmail(session.user.email);
+  const rows = accountManager
+    ? (await db.select({ marinaId: marinas.id, marinaName: marinas.name }).from(marinas).orderBy(marinas.name)).map((m) => ({ ...m, role: "admin" as const }))
+    : await db
+        .select({ marinaId: memberships.marinaId, marinaName: marinas.name, role: memberships.role })
+        .from(memberships)
+        .innerJoin(marinas, eq(marinas.id, memberships.marinaId))
+        .where(eq(memberships.userId, session.user.id))
+        .orderBy(marinas.name);
   const areas = await ownerAreasFor(session.user.id);
   return {
     sessionId: session.sessionId,
     user: session.user,
+    accountManager,
     memberships: rows,
     ownerAreas: areas,
     activeMarinaId: session.marinaId,
     activeOwnerAccessId: session.ownerAccessId,
+    previewRole: accountManager ? session.previewRole : null,
+    previewOwnerId: accountManager ? session.previewOwnerId : null,
   };
 });
 
@@ -109,13 +127,16 @@ export async function requireUser(): Promise<UserContext> {
 export async function requireMarina(allowed: Role[] = EVERYONE): Promise<MarinaContext> {
   const ctx = await requireUser();
   // Una sessione dell'area diportista non apre mai il gestionale, anche se la persona lavora nel porto.
-  if (ctx.activeOwnerAccessId) redirect("/diportista");
+  if (ctx.activeOwnerAccessId || ctx.previewOwnerId) redirect("/diportista");
   const active =
     ctx.memberships.find((m) => m.marinaId === ctx.activeMarinaId) ??
-    (ctx.memberships.length === 1 ? ctx.memberships[0] : undefined);
+    // L'account manager sceglie sempre il porto: i porti possono essere molti, e uno solo oggi non lo è per sempre.
+    (ctx.memberships.length === 1 && !ctx.accountManager ? ctx.memberships[0] : undefined);
   if (!active) redirect("/porti");
-  if (!allowed.includes(active.role)) redirect(homeFor(active.role));
-  return { ...ctx, marinaId: active.marinaId, marinaName: active.marinaName, role: active.role };
+  // L'account manager prova il porto con il ruolo che ha scelto entrando.
+  const role = ctx.accountManager ? (ctx.previewRole ?? "admin") : active.role;
+  if (!allowed.includes(role)) redirect(homeFor(role));
+  return { ...ctx, marinaId: active.marinaId, marinaName: active.marinaName, role };
 }
 
 /**
@@ -124,11 +145,21 @@ export async function requireMarina(allowed: Role[] = EVERYONE): Promise<MarinaC
  */
 export async function requireOwner(): Promise<OwnerContext> {
   const ctx = await requireUser();
+  if (ctx.accountManager && ctx.previewOwnerId && ctx.activeMarinaId) {
+    const [owner] = await db
+      .select({ ownerId: owners.id, ownerName: owners.displayName, marinaName: marinas.name })
+      .from(owners)
+      .innerJoin(marinas, eq(marinas.id, owners.marinaId))
+      .where(and(eq(owners.id, ctx.previewOwnerId), eq(owners.marinaId, ctx.activeMarinaId), isNull(owners.anonymizedAt)))
+      .limit(1);
+    if (!owner) redirect("/porti");
+    return { sessionId: ctx.sessionId, user: ctx.user, accessId: "", marinaId: ctx.activeMarinaId, ...owner, canSwitch: true, preview: true };
+  }
   const area = ctx.ownerAreas.find((a) => a.accessId === ctx.activeOwnerAccessId);
   // Nessuna area aperta, oppure l'accesso è stato revocato: si torna alla scelta.
   if (!area) redirect("/porti");
   const canSwitch = ctx.ownerAreas.length + ctx.memberships.length > 1;
-  return { sessionId: ctx.sessionId, user: ctx.user, ...area, canSwitch };
+  return { sessionId: ctx.sessionId, user: ctx.user, ...area, canSwitch, preview: false };
 }
 
 // Come requireMarina, ma senza reindirizzare: utile nelle pagine pubbliche (login).

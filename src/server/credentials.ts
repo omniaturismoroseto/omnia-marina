@@ -5,7 +5,9 @@ import { getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { db, type Tx } from "@/db";
 import { users } from "@/db/schema";
+import { isAccountManagerEmail } from "@/lib/account-manager";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { DomainError } from "./errors";
 
 // Email e password: dove si controllano e dove si cambiano.
 //
@@ -132,8 +134,15 @@ export async function verifyLogin(email: string, password: string): Promise<Logi
   return linked ? { ok: true, userId: linked.id } : { ok: false, reason: "credentials" };
 }
 
-/** Crea un utente dell'app con la sua password (registrazione di un porto, nuovo collega). Restituisce l'id. */
-export async function createAccount(tx: Executor, input: { email: string; name: string; password: string }): Promise<string> {
+/** Crea un utente dell'app con la sua password (nuovo porto, nuovo collega, diportista). Restituisce l'id. */
+export async function createAccount(
+  tx: Executor,
+  input: { email: string; name: string; password: string },
+  options: { allowAccountManager?: boolean } = {},
+): Promise<string> {
+  // L'account manager si riconosce dall'email: un account nuovo con quell'email ne avrebbe i poteri. Solo la prima
+  // installazione (nessun porto nel database) può crearlo.
+  if (!options.allowAccountManager && isAccountManagerEmail(input.email)) throw new DomainError("Questa email non si può usare per un nuovo account.", "email");
   const id = randomUUID();
   if (!firebaseEnabled()) {
     await tx.insert(users).values({ id, email: input.email, name: input.name, passwordHash: await hashPassword(input.password) });

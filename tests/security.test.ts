@@ -1,11 +1,12 @@
 // Controlli di sicurezza: freni ai tentativi, indirizzi delle notifiche, reimpostazione della password da parte della
 // direzione e tentativi di attivazione dell'area diportista. Le parti con il database vengono saltate se manca.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { db } from "@/db";
-import { memberships, ownerAccess, ownerInvites, owners, users } from "@/db/schema";
+import { auditLog, marinas, memberships, ownerAccess, ownerInvites, owners, users } from "@/db/schema";
+import { visibleUser, withoutAccountManager } from "@/lib/account-manager";
 import { verifyPassword } from "@/lib/auth/password";
 import type { MarinaContext } from "@/lib/context";
 import { clientIp, createRateLimiter } from "@/lib/rate-limit";
@@ -23,10 +24,15 @@ vi.mock("@/lib/context", async (original) => ({
     if (!session) throw new Error("Nessuna sessione di prova");
     return session;
   },
+  requireUser: async () => {
+    if (!session) throw new Error("Nessuna sessione di prova");
+    return session;
+  },
 }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
-const { resetMemberPassword } = await import("@/server/settings-actions");
+const { addMember, changeMemberRole, resetMemberPassword } = await import("@/server/settings-actions");
+const { createMarina } = await import("@/server/auth-actions");
 
 describe("freno ai tentativi", () => {
   it("blocca dopo il massimo e riparte quando la finestra scade", () => {
@@ -109,10 +115,13 @@ describe.skipIf(!hasDb)("account di altri porti (database, password locali)", ()
     session = {
       sessionId: "sessione-di-prova",
       user: { id: attackerId, name: "Altro porto", email: "altro@test.example" },
+      accountManager: false,
       memberships: [],
       ownerAreas: [],
       activeMarinaId: attackerMarinaId,
       activeOwnerAccessId: null,
+      previewRole: null,
+      previewOwnerId: null,
       marinaId: attackerMarinaId,
       marinaName: "Altro",
       role: "admin",
@@ -171,5 +180,117 @@ describe.skipIf(!hasDb)("account di altri porti (database, password locali)", ()
     const blocked = await activateInvite({ code, taxId: FISCAL, email, password: "password-segreta" });
     expect(blocked.ok).toBe(false);
     if (!blocked.ok) expect(blocked.message).toContain("bloccato");
+  });
+});
+
+describe.skipIf(!hasDb)("account manager (database, password locali)", () => {
+  const managerEmail = `manager-${unique()}@test.example`;
+  let managerId: string;
+  let directorId: string;
+  let marinaId: string;
+  const managerSession = (): MarinaContext => ({
+    sessionId: "sessione-manager",
+    user: { id: managerId, name: "Account manager", email: managerEmail },
+    accountManager: true,
+    memberships: [],
+    ownerAreas: [],
+    activeMarinaId: marinaId,
+    activeOwnerAccessId: null,
+    previewRole: null,
+    previewOwnerId: null,
+    marinaId,
+    marinaName: "Porto",
+    role: "admin",
+  });
+
+  beforeAll(async () => {
+    await migrate(db, { migrationsFolder: "drizzle" });
+    // L'account esiste prima che l'email diventi quella dell'account manager (come in produzione).
+    managerId = await createAccount(db, { email: managerEmail, name: "Account manager", password: "password-manager" });
+    process.env.ACCOUNT_MANAGER_EMAILS = ` altro@test.example , ${managerEmail.toUpperCase()} `;
+  });
+
+  afterAll(() => {
+    delete process.env.ACCOUNT_MANAGER_EMAILS;
+    session = null;
+  });
+
+  it("nessuno può creare un nuovo account con l'email dell'account manager", async () => {
+    await expect(createAccount(db, { email: "altro@test.example", name: "Intruso", password: "password-intruso" })).rejects.toThrow();
+  });
+
+  it("solo l'account manager crea un porto, con il suo direttore", async () => {
+    const directorEmail = `direttore-${unique()}@test.example`;
+    const form = new FormData();
+    form.set("marinaName", `Porto ${unique()}`);
+    form.set("directorName", "Direttore");
+    form.set("directorEmail", directorEmail);
+    form.set("password", "password-direttore");
+
+    session = { ...managerSession(), accountManager: false };
+    expect((await createMarina(undefined, form))?.ok).not.toBe(true);
+
+    session = managerSession();
+    const state = await createMarina(undefined, form);
+    expect(state?.ok).toBe(true);
+    const [director] = await db.select({ id: users.id }).from(users).where(eq(users.email, directorEmail));
+    directorId = director.id;
+    const [m] = await db.select({ marinaId: memberships.marinaId, role: memberships.role }).from(memberships).where(eq(memberships.userId, directorId));
+    expect(m.role).toBe("admin");
+    marinaId = m.marinaId;
+    // L'account manager non diventa membro del porto: ci entra comunque.
+    const own = await db.select().from(memberships).where(and(eq(memberships.userId, managerId), eq(memberships.marinaId, marinaId)));
+    expect(own).toHaveLength(0);
+    const [port] = await db.select({ id: marinas.id }).from(marinas).where(eq(marinas.id, marinaId));
+    expect(port).toBeDefined();
+  });
+
+  it("la direzione non vede l'account manager tra gli utenti e non può aggiungerlo né cambiarlo", async () => {
+    // Anche se l'account manager fosse rimasto membro di un porto (come prima di questa funzione).
+    const [m] = await db.insert(memberships).values({ userId: managerId, marinaId, role: "admin" }).returning({ id: memberships.id });
+    session = { ...managerSession(), user: { id: directorId, name: "Direttore", email: "direttore@test.example" }, accountManager: false };
+
+    const role = new FormData();
+    role.set("membershipId", m.id);
+    role.set("role", "banchina");
+    expect((await changeMemberRole(undefined, role))?.message).toBe("Utente non trovato.");
+
+    const add = new FormData();
+    add.set("name", "Chiunque");
+    add.set("email", managerEmail);
+    add.set("role", "ufficio");
+    add.set("password", "password-qualsiasi");
+    expect((await addMember(undefined, add))?.errors?.email).toBeDefined();
+
+    // Il direttore resta l'unica direzione del porto: non può togliersi il ruolo contando sull'account manager.
+    const [mine] = await db.select({ id: memberships.id }).from(memberships).where(and(eq(memberships.userId, directorId), eq(memberships.marinaId, marinaId)));
+    const demote = new FormData();
+    demote.set("membershipId", mine.id);
+    demote.set("role", "ufficio");
+    expect((await changeMemberRole(undefined, demote))?.message).toContain("almeno una persona");
+  });
+
+  it("nel registro e accanto alle modifiche il nome dell'account manager non compare", async () => {
+    await db.insert(auditLog).values([
+      { marinaId, userId: managerId, action: "modifica", entity: "porto", summary: "dal manager" },
+      { marinaId, userId: directorId, action: "modifica", entity: "porto", summary: "dal direttore" },
+      { marinaId, userId: null, action: "invio automatico", entity: "messaggio", summary: "dal sistema" },
+    ]);
+    const shown = await db
+      .select({ summary: auditLog.summary })
+      .from(auditLog)
+      .leftJoin(users, eq(users.id, auditLog.userId))
+      .where(and(eq(auditLog.marinaId, marinaId), withoutAccountManager()));
+    const summaries = shown.map((r) => r.summary);
+    expect(summaries).toContain("dal direttore");
+    expect(summaries).toContain("dal sistema");
+    expect(summaries).not.toContain("dal manager");
+
+    const names = await db
+      .select({ name: users.name })
+      .from(auditLog)
+      .leftJoin(users, and(eq(users.id, auditLog.userId), visibleUser()))
+      .where(and(eq(auditLog.marinaId, marinaId), eq(auditLog.summary, "dal manager")));
+    expect(names[0].name).toBeNull();
   });
 });

@@ -18,6 +18,7 @@ import { BOAT_TYPE_LABEL, CONTRACT_TYPE_LABEL, MOVEMENT_LABEL } from "@/lib/labe
 import { uuidOrNull } from "@/lib/params";
 import { contractNumberLabel } from "@/lib/contract-numbers";
 import { deleteBoat } from "@/server/boat-actions";
+import { visibleUser } from "@/lib/account-manager";
 
 export const metadata: Metadata = { title: "Scheda barca" };
 
@@ -59,7 +60,7 @@ export default page(async function BoatPage({ params }: { params: Promise<{ id: 
       .select({ id: movements.id, kind: movements.kind, at: movements.at, note: movements.note, berthCode: berths.code, userName: users.name })
       .from(movements)
       .leftJoin(berths, eq(berths.id, movements.berthId))
-      .leftJoin(users, eq(users.id, movements.userId))
+      .leftJoin(users, and(eq(users.id, movements.userId), visibleUser()))
       .where(eq(movements.boatId, id))
       .orderBy(desc(movements.at))
       .limit(20),

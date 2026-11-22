@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { page } from "@/components/page";
 import { Badge, Card, PageHeader } from "@/components/ui";
 import { db } from "@/db";
 import { memberships, users } from "@/db/schema";
+import { visibleUser } from "@/lib/account-manager";
 import { requireMarina } from "@/lib/context";
 import { ROLE_HINT, ROLE_LABEL } from "@/lib/labels";
 import { AddMemberForm, MemberActions, MemberRoleForm } from "../settings-forms";
@@ -16,7 +17,8 @@ export default page(async function UsersPage() {
   const rows = await db
     .select({ membershipId: memberships.id, role: memberships.role, userId: users.id, name: users.name, email: users.email })
     .from(memberships)
-    .innerJoin(users, eq(users.id, memberships.userId))
+    // L'account manager non compare: entra in ogni porto senza essere tra le persone del porto.
+    .innerJoin(users, and(eq(users.id, memberships.userId), visibleUser()))
     .where(eq(memberships.marinaId, ctx.marinaId))
     .orderBy(asc(users.name));
 

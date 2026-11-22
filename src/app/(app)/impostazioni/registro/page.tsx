@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { page } from "@/components/page";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { db } from "@/db";
 import { auditLog, users } from "@/db/schema";
+import { withoutAccountManager } from "@/lib/account-manager";
 import { requireMarina } from "@/lib/context";
 import { formatDateTime } from "@/lib/dates";
 import { SettingsTabs } from "../tabs";
@@ -16,7 +17,8 @@ export default page(async function AuditPage() {
     .select({ id: auditLog.id, at: auditLog.at, action: auditLog.action, entity: auditLog.entity, summary: auditLog.summary, userName: users.name })
     .from(auditLog)
     .leftJoin(users, eq(users.id, auditLog.userId))
-    .where(eq(auditLog.marinaId, ctx.marinaId))
+    // Le operazioni dell'account manager non si mostrano ai porti.
+    .where(and(eq(auditLog.marinaId, ctx.marinaId), withoutAccountManager()))
     .orderBy(desc(auditLog.at))
     .limit(300);
 

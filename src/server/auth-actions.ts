@@ -1,22 +1,22 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { memberships, users } from "@/db/schema";
-import { createSession, destroySession, setSessionMarina, setSessionOwnerArea } from "@/lib/auth/session";
+import { memberships, owners, users } from "@/db/schema";
+import { isAccountManagerEmail } from "@/lib/account-manager";
+import { audit } from "@/lib/audit";
+import { createSession, destroySession, setSessionMarina, setSessionOwnerArea, setSessionOwnerPreview } from "@/lib/auth/session";
 import { homeFor, ownerAreasFor, requireUser } from "@/lib/context";
 import { todayRome, yearOf } from "@/lib/dates";
-import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { f, fail, formId, parseForm, type FormState } from "@/lib/forms";
 import { createRateLimiter } from "@/lib/rate-limit";
 import { createAccount, isEmailVerified, requestPasswordReset as sendPasswordReset, sendVerificationEmail, verifyLogin } from "./credentials";
-import { createMarinaWithDefaults } from "./marina-setup";
+import { DomainError, toFormState } from "./errors";
+import { createMarinaWithDefaults, firstInstall } from "./marina-setup";
 import { touchAccess } from "./owner-access";
 
-function signupAllowed(): boolean {
-  return process.env.ALLOW_SIGNUP !== "false";
-}
 
 const WINDOW_MS = 15 * 60 * 1000;
 // Freno ai tentativi di accesso ripetuti: al massimo 8 password sbagliate per email ogni 15 minuti.
@@ -46,6 +46,11 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
   loginFailures.clear(email);
 
   const userId = result.userId;
+  // L'account manager sceglie sempre dove entrare, tra tutti i porti.
+  if (isAccountManagerEmail(email)) {
+    await createSession(userId, null);
+    redirect("/porti");
+  }
   const [mems, areas] = await Promise.all([
     db.select({ marinaId: memberships.marinaId, role: memberships.role }).from(memberships).where(eq(memberships.userId, userId)),
     ownerAreasFor(userId),
@@ -104,7 +109,7 @@ const registerSchema = z.object({
 });
 
 export async function register(_prev: FormState, formData: FormData): Promise<FormState> {
-  if (!signupAllowed()) return fail("La registrazione di nuovi porti non è attiva.");
+  if (!(await firstInstall())) return fail("I nuovi porti li crea Omnia Marina: chiedi il tuo accesso a chi ti ha proposto l'app.");
   const parsed = parseForm(registerSchema, formData);
   if (!parsed.ok) return parsed.state;
   const { marinaName, name, email, password } = parsed.data;
@@ -115,7 +120,8 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
   let created: { userId: string; marinaId: string };
   try {
     created = await db.transaction(async (tx) => {
-      const userId = await createAccount(tx, { email, name, password });
+      // Prima installazione: anche l'account manager può nascere da qui.
+      const userId = await createAccount(tx, { email, name, password }, { allowAccountManager: true });
       const marinaId = await createMarinaWithDefaults(tx, { name: marinaName, userId, year: yearOf(todayRome()) });
       return { userId, marinaId };
     });
@@ -129,13 +135,38 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
   redirect("/impostazioni/pontili?benvenuto=1");
 }
 
+const PREVIEW_ROLES = ["admin", "ufficio", "banchina"] as const;
+
 export async function selectMarina(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireUser();
   const marinaId = String(formData.get("marinaId") ?? "");
   const membership = ctx.memberships.find((m) => m.marinaId === marinaId);
   if (!membership) return fail("Non hai accesso a questo porto.");
+  // L'account manager sceglie con quale ruolo entrare, per provare il porto come lo vede chi ci lavora.
+  const asRole = PREVIEW_ROLES.find((r) => r === formData.get("role"));
+  if (ctx.accountManager && asRole) {
+    await setSessionMarina(ctx.sessionId, marinaId, asRole === "admin" ? null : asRole);
+    redirect(homeFor(asRole));
+  }
   await setSessionMarina(ctx.sessionId, marinaId);
   redirect(homeFor(membership.role));
+}
+
+/** Solo l'account manager: entra nell'area diportista di un cliente del porto, per vederla come la vede lui. */
+export async function previewOwnerArea(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireUser();
+  if (!ctx.accountManager) return fail("Non hai accesso a quest'area.");
+  const marinaId = formId(formData, "marinaId");
+  const ownerId = formId(formData, "ownerId");
+  if (!marinaId || !ownerId) return fail("Cliente non trovato.");
+  const [owner] = await db
+    .select({ id: owners.id })
+    .from(owners)
+    .where(and(eq(owners.id, ownerId), eq(owners.marinaId, marinaId), isNull(owners.anonymizedAt)))
+    .limit(1);
+  if (!owner) return fail("Cliente non trovato.");
+  await setSessionOwnerPreview(ctx.sessionId, marinaId, ownerId);
+  redirect("/diportista");
 }
 
 export async function selectOwnerArea(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -151,17 +182,44 @@ export async function selectOwnerArea(_prev: FormState, formData: FormData): Pro
   redirect("/diportista");
 }
 
-const newMarinaSchema = z.object({ marinaName: f.text("Inserisci il nome del porto") });
+const newMarinaSchema = z.object({
+  marinaName: f.text("Inserisci il nome del porto"),
+  directorName: f.text("Inserisci nome e cognome del direttore"),
+  directorEmail: f.email(),
+  // Serve solo se l'email non ha ancora un account: chi ce l'ha entra con la password che già usa.
+  password: z.preprocess((v) => (typeof v === "string" ? v : ""), z.string().max(200)),
+});
 
+/** Solo l'account manager: crea un porto con i dati di partenza e il suo direttore (ruolo Direzione). */
 export async function createMarina(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireUser();
-  if (!signupAllowed()) return fail("La creazione di nuovi porti non è attiva.");
+  if (!ctx.accountManager) return fail("I nuovi porti li crea solo Omnia Marina.");
   const parsed = parseForm(newMarinaSchema, formData);
   if (!parsed.ok) return parsed.state;
+  const { marinaName, directorName, directorEmail, password } = parsed.data;
+  if (isAccountManagerEmail(directorEmail)) {
+    return fail("Controlla i campi evidenziati.", { directorEmail: "Questa è un'email di Omnia Marina: indica quella del direttore del porto." });
+  }
 
-  const marinaId = await db.transaction((tx) =>
-    createMarinaWithDefaults(tx, { name: parsed.data.marinaName, userId: ctx.user.id, year: yearOf(todayRome()) }),
-  );
-  await setSessionMarina(ctx.sessionId, marinaId);
-  redirect("/impostazioni/pontili?benvenuto=1");
+  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, directorEmail)).limit(1);
+  if (!existing && password.length < 10) {
+    return fail("Controlla i campi evidenziati.", { password: "Password provvisoria di almeno 10 caratteri" });
+  }
+  try {
+    await db.transaction(async (tx) => {
+      const directorId = existing?.id ?? (await createAccount(tx, { email: directorEmail, name: directorName, password }));
+      const marinaId = await createMarinaWithDefaults(tx, { name: marinaName, userId: directorId, year: yearOf(todayRome()) });
+      await audit({ marinaId, user: { id: ctx.user.id } }, "creazione", "porto", marinaId, `${marinaName} · direzione ${directorEmail}`, tx);
+    });
+  } catch (error) {
+    if (error instanceof DomainError) return toFormState(error);
+    console.error("Creazione del porto non riuscita", error);
+    return fail("Il servizio di accesso non risponde: riprova tra qualche minuto.");
+  }
+  return {
+    ok: true,
+    message: existing
+      ? `Porto «${marinaName}» creato. ${directorEmail} aveva già un account: entra con la password che già usa e lo trova tra i suoi porti.`
+      : `Porto «${marinaName}» creato. Comunica al direttore l'indirizzo dell'app, l'email ${directorEmail} e la password provvisoria: potrà cambiarla dal proprio account.`,
+  };
 }

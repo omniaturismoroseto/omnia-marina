@@ -31,7 +31,9 @@ async function TopBar() {
         {logo && <PortLogoTile logo={logo} alt="" className="h-11 w-auto shrink-0" imageClassName="h-full w-auto max-w-[7rem]" />}
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{ctx.marinaName}</p>
-          <p className="truncate text-xs text-white/60">Area diportista · {ctx.ownerName}</p>
+          <p className="truncate text-xs text-white/60">
+            {ctx.preview ? "Prova come diportista" : "Area diportista"} · {ctx.ownerName}
+          </p>
         </div>
         {ctx.canSwitch && (
           <Link href="/porti" className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-white/80 hover:bg-white/10" title="Cambia area">

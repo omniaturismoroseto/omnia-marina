@@ -6,8 +6,7 @@
 #   bash scripts/pubblica-google.sh                       pubblica, oppure aggiorna a una nuova versione
 #   bash scripts/pubblica-google.sh stato                 mostra indirizzo e stato
 #   bash scripts/pubblica-google.sh registro              ultime righe del registro dell'app (utile se qualcosa non va)
-#   bash scripts/pubblica-google.sh chiudi-registrazione  nessuno può più registrare nuovi porti
-#   bash scripts/pubblica-google.sh apri-registrazione    riapre la registrazione di nuovi porti
+#   bash scripts/pubblica-google.sh account-manager EMAIL l'account con questa email diventa account manager
 #   bash scripts/pubblica-google.sh elimina               cancella tutto (app, database e dati) e ferma i costi
 #
 # Lo script si può rilanciare quante volte si vuole: crea solo ciò che manca.
@@ -61,12 +60,12 @@ retry() {
   return 1
 }
 
-# Stampa "true" o "false" secondo l'impostazione attuale della registrazione di nuovi porti.
-signup_setting() {
+# Stampa le email degli account manager impostate sul servizio (vuoto se nessuna).
+manager_setting() {
   gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format=json 2>/dev/null |
     python3 -c 'import json, sys
 env = json.load(sys.stdin)["spec"]["template"]["spec"]["containers"][0].get("env", [])
-print(next((e.get("value", "") for e in env if e.get("name") == "ALLOW_SIGNUP"), ""))' 2>/dev/null || true
+print(next((e.get("value", "") for e in env if e.get("name") == "ACCOUNT_MANAGER_EMAILS"), ""))' 2>/dev/null || true
 }
 
 choose_project() {
@@ -177,13 +176,12 @@ publish() {
   ok "Permessi impostati"
 
   step "Compilo e pubblico l'app (5-10 minuti)"
-  local env_flags=()
-  # Solo alla prima pubblicazione: registrazione aperta, per creare il porto. Agli aggiornamenti resta com'è.
-  exists gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" || env_flags=(--set-env-vars "ALLOW_SIGNUP=true")
+  local first=false
+  exists gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" || first=true
   if ! gcloud run deploy "$SERVICE" --project "$PROJECT" --region "$REGION" --source . \
     --allow-unauthenticated --service-account "$RUN_ACCOUNT_EMAIL" \
     --add-cloudsql-instances "$CONNECTION_NAME" --set-secrets "DATABASE_URL=$SECRET:latest" \
-    --port 8080 --memory 512Mi --min-instances 0 --max-instances 2 --quiet ${env_flags[@]+"${env_flags[@]}"}; then
+    --port 8080 --memory 512Mi --min-instances 0 --max-instances 2 --quiet; then
     die "Pubblicazione non riuscita. Se l'errore parla di permessi (PERMISSION_DENIED), aspetta due minuti e rilancia lo script: i permessi appena assegnati impiegano un po' ad attivarsi."
   fi
 
@@ -204,21 +202,22 @@ publish() {
 
   step "Fatto"
   ok "Omnia Marina è in linea: $url"
-  if [ ${#env_flags[@]} -gt 0 ]; then
+  if [ "$first" = true ]; then
     info ""
     info "Prossimi passi:"
-    info "1. Apri $url/registrazione e crea il tuo porto e il tuo accesso."
-    info "2. Subito dopo chiudi la registrazione, così nessun altro può creare porti:"
-    info "     bash scripts/pubblica-google.sh chiudi-registrazione"
+    info "1. Apri $url/registrazione e crea il primo porto e il tuo accesso (vale solo finché non c'è nessun porto)."
+    info "2. Rendi il tuo account account manager, così potrai creare gli altri porti ed entrare in tutti:"
+    info "     bash scripts/pubblica-google.sh account-manager la-tua-email"
   fi
 }
 
 # ───────────────────────── Altri comandi ─────────────────────────
 
-set_signup() {
+set_manager() {
+  [ -n "${1:-}" ] || die "Indica l'email: bash scripts/pubblica-google.sh account-manager la-tua-email"
   choose_project
-  gcloud run services update "$SERVICE" --project "$PROJECT" --region "$REGION" --update-env-vars "ALLOW_SIGNUP=$1" --quiet
-  if [ "$1" = "true" ]; then ok "Registrazione di nuovi porti aperta"; else ok "Registrazione di nuovi porti chiusa"; fi
+  gcloud run services update "$SERVICE" --project "$PROJECT" --region "$REGION" --update-env-vars "ACCOUNT_MANAGER_EMAILS=$1" --quiet
+  ok "Account manager: $1"
 }
 
 status() {
@@ -228,11 +227,9 @@ status() {
   url="$(service_url)"
   if [ -n "$url" ]; then ok "App in linea: $url"; else info "App non pubblicata in $REGION"; fi
   if [ -n "$url" ]; then
-    if [ "$(signup_setting)" = "true" ]; then
-      info "Registrazione di nuovi porti: APERTA (chiudila con: bash scripts/pubblica-google.sh chiudi-registrazione)"
-    else
-      info "Registrazione di nuovi porti: chiusa"
-    fi
+    local managers
+    managers="$(manager_setting)"
+    if [ -n "$managers" ]; then info "Account manager: $managers"; else info "Account manager: nessuno (impostalo con: bash scripts/pubblica-google.sh account-manager la-tua-email)"; fi
   fi
   local state
   state="$(gcloud sql instances describe "$SQL_INSTANCE" --project "$PROJECT" --format='value(state)' 2>/dev/null || true)"
@@ -272,8 +269,7 @@ case "${1:-pubblica}" in
   pubblica) publish ;;
   stato) status ;;
   registro) logs ;;
-  chiudi-registrazione) set_signup false ;;
-  apri-registrazione) set_signup true ;;
+  account-manager) set_manager "${2:-}" ;;
   elimina) destroy ;;
-  *) die "Comando sconosciuto «$1». Usa: pubblica, stato, registro, chiudi-registrazione, apri-registrazione, elimina" ;;
+  *) die "Comando sconosciuto «$1». Usa: pubblica, stato, registro, account-manager, elimina" ;;
 esac

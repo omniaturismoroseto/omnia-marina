@@ -22,7 +22,7 @@ export default page(async function OwnerMessagePage({ params }: { params: Promis
   const m = row.message;
   return (
     <>
-      {!row.readAt && <MarkRead messageId={m.id} />}
+      {!row.readAt && !ctx.preview && <MarkRead messageId={m.id} />}
       <Link href="/diportista/messaggi" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
         <ChevronLeft size={16} aria-hidden="true" />
         Messaggi

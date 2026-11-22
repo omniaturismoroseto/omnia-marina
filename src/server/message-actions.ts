@@ -63,7 +63,8 @@ export async function sendMessageAction(_prev: FormState, formData: FormData): P
 /** Il diportista ha aperto il messaggio. */
 export async function markMessageRead(messageId: string): Promise<void> {
   const ctx = await requireOwner();
-  if (!z.uuid().safeParse(messageId).success) return;
+  // L'account manager che guarda l'area di un cliente non segna nulla come letto.
+  if (ctx.preview || !z.uuid().safeParse(messageId).success) return;
   await markRead({ marinaId: ctx.marinaId, ownerId: ctx.ownerId, userId: ctx.user.id }, messageId);
   revalidatePath("/diportista", "layout");
 }
@@ -76,6 +77,8 @@ const subscriptionSchema = z.object({
 /** Notifiche attivate su questo dispositivo. */
 export async function savePushSubscription(input: unknown): Promise<boolean> {
   const ctx = await requireOwner();
+  // Niente notifiche dei messaggi di un cliente sul telefono dell'account manager.
+  if (ctx.preview) return false;
   const parsed = subscriptionSchema.safeParse(input);
   if (!parsed.success || !isPushEndpoint(parsed.data.endpoint)) return false;
   await saveSubscription(ctx.user.id, parsed.data);
