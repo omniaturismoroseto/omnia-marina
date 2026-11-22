@@ -59,7 +59,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   giornaliero delle analisi; collaudi con `PLAN_SURROUNDINGS_FIXTURE`), poi ritocchi a mano e `savePlanFeatures` (sostituisce tutto).
   Base disegnata (`marina_plan_bases`, `/pianta/base`, `base-uploader.tsx`): PNG/JPEG fatto fuori dall'app ricalcando la foto, stesse
   proporzioni (`baseMatchesPhoto` in `src/lib/plan-base.ts`, qualunque risoluzione); se c'è, lo schema mostra la base al posto del disegno
-  automatico (terra, forme, pontili) e sopra barche, nomi dei pontili (da Impostazioni → Pontili) e servizi (spostabili dalla direzione).
+  automatico (terra, forme, pontili) e sopra barche, codici dei posti (scritti lungo il posto) e servizi (spostabili dalla direzione).
+  Sulla mappa niente nomi dei pontili (troppe scritte): il nome compare nel riquadro del posto; i servizi hanno icona sulla mappa e legenda sotto.
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
 - Numerazione dei contratti: le bozze non hanno numero (`seq`/`number` vuoti, in stampa «BOZZA»); il numero nasce all'attivazione
   ed è il più basso libero dell'anno (`src/lib/contract-numbers.ts`, `assignContractNumber`). «Torna in bozza» (`revertToDraft`) libera
