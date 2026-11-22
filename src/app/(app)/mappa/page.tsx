@@ -98,7 +98,21 @@ function Pier({ pier, hrefFor, selectedId }: { pier: BoardPier; hrefFor: (berthI
   );
 }
 
-async function BerthPanel({ berth, date, today, marinaId, office }: { berth: BoardBerth; date: string; today: string; marinaId: string; office: boolean }) {
+async function BerthPanel({
+  berth,
+  pierName,
+  date,
+  today,
+  marinaId,
+  office,
+}: {
+  berth: BoardBerth;
+  pierName: string | null;
+  date: string;
+  today: string;
+  marinaId: string;
+  office: boolean;
+}) {
   const o = berth.occupant;
   const upcoming = await db
     .select({ id: contracts.id, number: contracts.number, type: contracts.type, status: contracts.status, startDate: contracts.startDate, endDate: contracts.endDate, boatName: boats.name })
@@ -112,7 +126,7 @@ async function BerthPanel({ berth, date, today, marinaId, office }: { berth: Boa
     <div className="card p-4">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-xs font-medium text-muted">Posto barca</p>
+          <p className="text-xs font-medium text-muted">Posto barca{pierName ? ` · ${pierName}` : ""}</p>
           <h2 className="font-display text-3xl leading-none font-semibold">{berth.code}</h2>
         </div>
         <Badge tone={STATE_TONE[berth.state]}>{STATE_LABEL[berth.state]}</Badge>
@@ -406,7 +420,7 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
 
             <div id="dettaglio" className="scroll-mt-20 lg:sticky lg:top-6">
               {selected ? (
-                <BerthPanel berth={selected} date={date} today={today} marinaId={ctx.marinaId} office={office} />
+                <BerthPanel berth={selected} pierName={board.find((p) => p.id === selected.pierId)?.name ?? null} date={date} today={today} marinaId={ctx.marinaId} office={office} />
               ) : (
                 <div className="card p-4 text-sm text-muted">Tocca un posto sulla mappa per vedere chi lo occupa e registrare arrivi e partenze.</div>
               )}

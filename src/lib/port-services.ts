@@ -6,6 +6,7 @@ export const PORT_SERVICES = [
   { key: "ristorante", label: "Ristorante" },
   { key: "parcheggio", label: "Parcheggio" },
   { key: "cantiere", label: "Cantiere nautico" },
+  { key: "porto_secco", label: "Porto a secco" },
   { key: "gru", label: "Gru / travel lift" },
   { key: "scivolo", label: "Scivolo di alaggio" },
   { key: "servizi", label: "Servizi igienici" },

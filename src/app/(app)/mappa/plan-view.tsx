@@ -67,7 +67,6 @@ export function PlanView({
   // Unità di disegno proporzionata all'area mostrata: spessori e testi non dipendono dalla risoluzione della foto.
   const u = Math.max(view.width, view.height) / 1000;
   const m = pxPerMeter;
-  const labelSize = clamp(14 * u, 1.6 * m, 6 * m);
   const markerSize = clamp(11 * u, 1.5 * m, 8 * m);
 
   return (
@@ -128,7 +127,12 @@ export function PlanView({
         const shift = boatShape?.y ?? 0;
         const tx = b.planX - Math.sin(angle) * shift;
         const ty = b.planY + Math.cos(angle) * shift;
-        const fontSize = clamp(w * 0.4, 0.5 * m, 1.6 * m);
+        // Il codice si scrive lungo il posto (nel verso della barca), girato in modo da leggersi da sinistra a destra.
+        const fontSize = clamp(Math.min(w * 0.62, (l * 0.7) / (0.62 * Math.max(2, b.code.length))), 0.5 * m, 2.2 * m);
+        let textAngle = (b.planAngle ?? 0) + 90;
+        textAngle = ((((textAngle + 180) % 360) + 360) % 360) - 180;
+        if (textAngle >= 90) textAngle -= 180;
+        else if (textAngle <= -90) textAngle += 180;
 
         return (
           <Link key={b.id} href={hrefFor(b.id)} aria-label={label} aria-current={selected ? "true" : undefined}>
@@ -166,6 +170,7 @@ export function PlanView({
             <text
               x={tx}
               y={ty}
+              transform={`rotate(${textAngle} ${tx} ${ty})`}
               textAnchor="middle"
               dominantBaseline="central"
               fontSize={fontSize}
@@ -188,26 +193,6 @@ export function PlanView({
         ) : null,
       )}
 
-      {mode === "schema" &&
-        drawing.piers.map((p) => (
-          <text
-            key={p.id}
-            x={p.label.x}
-            y={p.label.y}
-            textAnchor={p.label.anchor}
-            dominantBaseline="central"
-            fontSize={labelSize}
-            fontWeight={600}
-            letterSpacing={labelSize * 0.06}
-            fill="#2a4a63"
-            stroke={WATER}
-            strokeWidth={labelSize * 0.25}
-            paintOrder="stroke"
-            pointerEvents="none"
-          >
-            {p.name.toUpperCase()}
-          </text>
-        ))}
 
       <defs>
         <pattern id="plan-fermo" width={0.8 * m} height={0.8 * m} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
