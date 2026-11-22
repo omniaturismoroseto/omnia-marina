@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { DomainError } from "./errors";
 import { pushToOwners } from "./push";
+import { visibleUser } from "@/lib/account-manager";
 
 // Messaggi dal porto ai diportisti: destinatari, permessi per ruolo, invio, lettura.
 
@@ -123,7 +124,7 @@ export async function sentMessages(marinaId: string, limit = 100) {
       read: sql<number>`count(${messageRecipients.readAt})::int`,
     })
     .from(messages)
-    .leftJoin(users, eq(users.id, messages.senderId))
+    .leftJoin(users, and(eq(users.id, messages.senderId), visibleUser()))
     .leftJoin(messageRecipients, eq(messageRecipients.messageId, messages.id))
     .where(eq(messages.marinaId, marinaId))
     .groupBy(messages.id, users.name)
@@ -135,7 +136,7 @@ export async function messageWithRecipients(marinaId: string, messageId: string)
   const [message] = await db
     .select({ message: messages, senderName: users.name })
     .from(messages)
-    .leftJoin(users, eq(users.id, messages.senderId))
+    .leftJoin(users, and(eq(users.id, messages.senderId), visibleUser()))
     .where(and(eq(messages.id, messageId), eq(messages.marinaId, marinaId)))
     .limit(1);
   if (!message) return null;

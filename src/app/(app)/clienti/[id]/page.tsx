@@ -20,6 +20,7 @@ import { ActionButton } from "@/components/form";
 import { setOwnerFormerAction } from "@/server/owner-actions";
 import { AppAccessCard } from "./app-access";
 import { ConsentForm, EraseOwnerButton } from "./privacy-forms";
+import { visibleUser } from "@/lib/account-manager";
 
 export const metadata: Metadata = { title: "Scheda cliente" };
 
@@ -70,7 +71,7 @@ export default page(async function OwnerPage({ params }: { params: Promise<{ id:
         userName: users.name,
       })
       .from(privacyConsents)
-      .leftJoin(users, eq(users.id, privacyConsents.recordedBy))
+      .leftJoin(users, and(eq(users.id, privacyConsents.recordedBy), visibleUser()))
       .where(eq(privacyConsents.ownerId, id))
       .orderBy(desc(privacyConsents.recordedAt)),
     db.select({ formerLabel: marinas.formerOwnerLabel }).from(marinas).where(eq(marinas.id, ctx.marinaId)),

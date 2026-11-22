@@ -15,6 +15,7 @@ import { uuidOrNull } from "@/lib/params";
 import { contractNumberLabel } from "@/lib/contract-numbers";
 import { chargeStatus } from "@/server/accounting";
 import { CancelChargeButton, PaymentForm, RemovePaymentButton } from "../../accounting-forms";
+import { visibleUser } from "@/lib/account-manager";
 
 export const metadata: Metadata = { title: "Addebito" };
 
@@ -36,7 +37,7 @@ export default page(async function ChargePage({ params }: { params: Promise<{ id
   const paymentRows = await db
     .select({ id: payments.id, paidOn: payments.paidOn, amountCents: payments.amountCents, method: payments.method, reference: payments.reference, userName: users.name })
     .from(payments)
-    .leftJoin(users, eq(users.id, payments.createdBy))
+    .leftJoin(users, and(eq(users.id, payments.createdBy), visibleUser()))
     .where(eq(payments.chargeId, id))
     .orderBy(asc(payments.paidOn), asc(payments.createdAt));
 

@@ -88,6 +88,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   `ANTHROPIC_VERTEX_PROJECT_ID` (+ `CLOUD_ML_REGION`, predefinito `global`), Vertex AI con `AnthropicVertex` (Google ha negato la quota). La conversione della risposta
   in proposte è in `src/lib/plan-analysis.ts`. Per i collaudi locali `PLAN_ANALYSIS_FIXTURE` (percorso di un JSON) sostituisce
   la chiamata: non metterlo nel `.env` dell'anteprima, e ricompilare dopo averlo tolto (la build copia `.env` in `.next/standalone`).
+- Account manager (`src/lib/account-manager.ts`): email in `ACCOUNT_MANAGER_EMAILS` (variabile di Cloud Run, mai nel codice).
+  `loadContext` gli dà tutti i porti come direzione (`ctx.accountManager`, `memberships` = tutti i porti, scelta sempre da
+  `/porti`); solo lui crea i porti con il loro direttore (`createMarina`); `/registrazione` vale solo alla prima installazione
+  (`firstInstall`). Nei porti non compare: ogni join con `users` per mostrare un nome usa `visibleUser()` (il registro
+  `withoutAccountManager()`), e Utenti, `loadMembership` e `otherAdmins` lo escludono. `createAccount` rifiuta le sue email.
 - Accessi: email e password passano da `src/server/credentials.ts` (`verifyLogin`, `createAccount`, `setPassword`,
   `checkPassword`, `requestPasswordReset`), mai direttamente da `users.password_hash`. Con `FIREBASE_PROJECT_ID` decide
   Firebase Authentication (password ed email di «password dimenticata»; `firebase-admin` per le operazioni del porto,

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { berthCategories, berths, contracts, marinas, memberships, ownerAccess, piers, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
+import { isAccountManagerEmail, visibleUser } from "@/lib/account-manager";
 import { destroyUserSessions } from "@/lib/auth/session";
 import { requireMarina, requireUser } from "@/lib/context";
 import { f, fail, formId, parseForm, type FormState } from "@/lib/forms";
@@ -658,6 +659,7 @@ export async function addMember(_prev: FormState, formData: FormData): Promise<F
   const parsed = parseForm(memberSchema, formData);
   if (!parsed.ok) return parsed.state;
   const d = parsed.data;
+  if (isAccountManagerEmail(d.email)) return fail("Controlla i campi evidenziati.", { email: "Questa email non si può aggiungere al porto." });
 
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, d.email)).limit(1);
   if (existing) {
@@ -687,19 +689,23 @@ export async function addMember(_prev: FormState, formData: FormData): Promise<F
   return { ok: true, message: "Utente creato. Comunicagli la password provvisoria: potrà cambiarla dal proprio account." };
 }
 
+// L'account manager non compare tra gli utenti del porto: la direzione non può né vederlo né cambiarlo.
 async function loadMembership(marinaId: string, membershipId: string) {
-  const [m] = await db
-    .select()
+  const [row] = await db
+    .select({ m: memberships })
     .from(memberships)
+    .innerJoin(users, and(eq(users.id, memberships.userId), visibleUser()))
     .where(and(eq(memberships.id, membershipId), eq(memberships.marinaId, marinaId)))
     .limit(1);
-  return m ?? null;
+  return row?.m ?? null;
 }
 
+// Le altre persone con ruolo Direzione (l'account manager non conta: il porto deve avere una direzione sua).
 async function otherAdmins(marinaId: string, membershipId: string): Promise<number> {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(memberships)
+    .innerJoin(users, and(eq(users.id, memberships.userId), visibleUser()))
     .where(and(eq(memberships.marinaId, marinaId), eq(memberships.role, "admin"), ne(memberships.id, membershipId)));
   return count;
 }

@@ -90,7 +90,7 @@ Ci vogliono 5-10 minuti. Alla fine compare `Service URL: …`: la nuova versione
 - Google compila l'app sui suoi server: sul PC non serve installare altro.
 - Il database non si tocca. Se la nuova versione porta modifiche al database, si applicano da sole all'avvio;
   se qualcosa va storto la nuova versione non parte e **resta online quella di prima**.
-- Le impostazioni dell'app (collegamento al database, password, registrazione chiusa) restano quelle di prima.
+- Le impostazioni dell'app (collegamento al database, password, account manager) restano quelle di prima.
 
 ---
 
@@ -322,17 +322,20 @@ L'accesso di `gcloud` è scaduto: rifai `gcloud auth login`.
 |---|---|
 | Dati (clienti, contratti, incassi, foto della pianta) | vivono nel database su Google, non nel repository |
 | Utenti e ruoli | dall'app, in Impostazioni → Utenti |
-| Registrazione di nuovi porti | resta chiusa; per riaprirla, sotto |
+| Nuovi porti e loro direttori | li crea solo l'account manager, da «Dove vuoi entrare?» |
+| Account manager | variabile `ACCOUNT_MANAGER_EMAILS` del servizio, sotto |
 
-Riaprire o chiudere la registrazione di nuovi porti:
+L'**account manager** entra in tutti i porti con i permessi della direzione, è l'unico che crea i porti (con il loro
+direttore e una password provvisoria) e nei porti non compare: né tra gli utenti, né nel registro delle operazioni,
+né accanto a incassi, movimenti, consensi, segnalazioni e messaggi. Si riconosce dall'email, che sta in una
+variabile del servizio (non nel codice). L'account con quell'email deve già esistere: nessuno può crearne uno nuovo
+con la stessa email. Per impostarla (una volta sola; più email separate da virgole), sostituendo `LA-TUA-EMAIL`:
 
 ```powershell
-gcloud run services update omnia-marina --update-env-vars ALLOW_SIGNUP=true --region europe-west1 --project omnia-marina
+gcloud run services update omnia-marina --update-env-vars ACCOUNT_MANAGER_EMAILS=LA-TUA-EMAIL --region europe-west1 --project omnia-marina
 ```
 
-```powershell
-gcloud run services update omnia-marina --update-env-vars ALLOW_SIGNUP=false --region europe-west1 --project omnia-marina
-```
+La registrazione da `/registrazione` funziona solo alla prima installazione, quando non c'è ancora nessun porto.
 
 Per creare tutto da zero su un altro progetto, o cancellare tutto e fermare i costi, c'è
 `scripts/pubblica-google.sh`, da usare in Google Cloud Shell (vedi il README).

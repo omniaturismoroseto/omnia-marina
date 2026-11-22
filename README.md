@@ -63,7 +63,8 @@ Accessi del porto demo (password `omnia-marina-demo` per tutti):
 | `banchina@omniamarina.example` | Operatore di banchina |
 
 Per partire da zero con un porto vero: apri `/registrazione`, crea il porto, poi configura pontili,
-posti e tariffe. Con `ALLOW_SIGNUP=false` la registrazione di nuovi porti è disattivata.
+posti e tariffe. La registrazione vale solo finché non c'è nessun porto: gli altri li crea l'account manager
+(`ACCOUNT_MANAGER_EMAILS`, vedi `.env.example`) da «Dove vuoi entrare?», insieme al loro direttore.
 
 ### Pianta dal vero
 
@@ -125,10 +126,11 @@ Serve un progetto Google con la fatturazione attiva (piano Blaze) di cui si è p
 4. Scegli il progetto, conferma con `si` e attendi una ventina di minuti. Lo script crea il database (con
    backup giornalieri), genera una password che resta solo in Secret Manager, compila l'app e la pubblica;
    alla fine stampa l'indirizzo.
-5. Apri l'indirizzo, vai su `/registrazione` e crea il porto. Subito dopo chiudi la registrazione:
+5. Apri l'indirizzo, vai su `/registrazione` e crea il primo porto (la registrazione si chiude da sola appena
+   esiste un porto). Poi rendi il tuo account account manager, per creare gli altri porti ed entrare in tutti:
 
    ```bash
-   bash scripts/pubblica-google.sh chiudi-registrazione
+   bash scripts/pubblica-google.sh account-manager la-tua-email
    ```
 
 Per **aggiornare** l'app a una nuova versione: carica il nuovo zip e rilancia lo stesso comando del punto 3.
@@ -137,7 +139,8 @@ Il database non viene toccato, se non per applicare le eventuali migrazioni all'
 | Comando | Cosa fa |
 |---|---|
 | `bash scripts/pubblica-google.sh` | Pubblica, oppure aggiorna alla versione della cartella |
-| `bash scripts/pubblica-google.sh stato` | Indirizzo dell'app, stato del database e della registrazione |
+| `bash scripts/pubblica-google.sh stato` | Indirizzo dell'app, stato del database e account manager |
+| `bash scripts/pubblica-google.sh account-manager EMAIL` | L'account con quell'email diventa account manager |
 | `bash scripts/pubblica-google.sh registro` | Ultime righe del registro dell'app, utili se qualcosa non va |
 | `bash scripts/pubblica-google.sh elimina` | Cancella app, database e dati, e ferma ogni costo |
 
@@ -164,7 +167,7 @@ Gli stessi passi si possono fare dalla console di Google Cloud:
    ```
 
    L'account di servizio dell'app deve avere il ruolo «Client Cloud SQL» e l'accesso al segreto.
-4. **Primo accesso** – `ALLOW_SIGNUP=true` per registrare il porto da `/registrazione`, poi `ALLOW_SIGNUP=false`.
+4. **Primo accesso** – crea il primo porto da `/registrazione`, poi imposta `ACCOUNT_MANAGER_EMAILS` con la tua email.
 
 Con il deploy continuo ogni modifica caricata sul ramo `main` viene pubblicata da sola.
 

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { marinas, memberships, ownerAccess, owners, type Role } from "@/db/schema";
+import { isAccountManagerEmail } from "./account-manager";
 import { getSession } from "./auth/session";
 
 export interface MembershipInfo {
@@ -24,6 +25,8 @@ export interface OwnerAreaInfo {
 export interface UserContext {
   sessionId: string;
   user: { id: string; name: string; email: string };
+  /** Account manager di Omnia Marina (vedi lib/account-manager.ts): `memberships` sono allora tutti i porti, come direzione. */
+  accountManager: boolean;
   memberships: MembershipInfo[];
   ownerAreas: OwnerAreaInfo[];
   // Porto scelto in questa sessione (null finché l'utente non ne sceglie uno).
@@ -60,16 +63,20 @@ export function homeFor(role: Role): string {
 const loadContext = cache(async (): Promise<UserContext | null> => {
   const session = await getSession();
   if (!session) return null;
-  const rows = await db
-    .select({ marinaId: memberships.marinaId, marinaName: marinas.name, role: memberships.role })
-    .from(memberships)
-    .innerJoin(marinas, eq(marinas.id, memberships.marinaId))
-    .where(eq(memberships.userId, session.user.id))
-    .orderBy(marinas.name);
+  const accountManager = isAccountManagerEmail(session.user.email);
+  const rows = accountManager
+    ? (await db.select({ marinaId: marinas.id, marinaName: marinas.name }).from(marinas).orderBy(marinas.name)).map((m) => ({ ...m, role: "admin" as const }))
+    : await db
+        .select({ marinaId: memberships.marinaId, marinaName: marinas.name, role: memberships.role })
+        .from(memberships)
+        .innerJoin(marinas, eq(marinas.id, memberships.marinaId))
+        .where(eq(memberships.userId, session.user.id))
+        .orderBy(marinas.name);
   const areas = await ownerAreasFor(session.user.id);
   return {
     sessionId: session.sessionId,
     user: session.user,
+    accountManager,
     memberships: rows,
     ownerAreas: areas,
     activeMarinaId: session.marinaId,
@@ -112,7 +119,8 @@ export async function requireMarina(allowed: Role[] = EVERYONE): Promise<MarinaC
   if (ctx.activeOwnerAccessId) redirect("/diportista");
   const active =
     ctx.memberships.find((m) => m.marinaId === ctx.activeMarinaId) ??
-    (ctx.memberships.length === 1 ? ctx.memberships[0] : undefined);
+    // L'account manager sceglie sempre il porto: i porti possono essere molti, e uno solo oggi non lo è per sempre.
+    (ctx.memberships.length === 1 && !ctx.accountManager ? ctx.memberships[0] : undefined);
   if (!active) redirect("/porti");
   if (!allowed.includes(active.role)) redirect(homeFor(active.role));
   return { ...ctx, marinaId: active.marinaId, marinaName: active.marinaName, role: active.role };

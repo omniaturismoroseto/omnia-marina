@@ -1,5 +1,5 @@
 import "server-only";
-import type { Tx } from "@/db";
+import { db, type Tx } from "@/db";
 import { berthCategories, marinas, memberships, priceLists, seasonPeriods } from "@/db/schema";
 import { CONTRACT_APPROVAL_TEMPLATE, CONTRACT_TERMS_TEMPLATE } from "@/lib/contract-texts";
 
@@ -42,6 +42,13 @@ const DEFAULT_CATEGORIES: [name: string, lengthCm: number, beamCm: number][] = [
   ["V · fino a 15,00 m", 1500, 480],
   ["VI · fino a 18,00 m", 1800, 550],
 ];
+
+// I porti li crea solo l'account manager (createMarina). La registrazione pubblica serve unicamente alla prima
+// installazione, quando nel database non c'è ancora nessun porto.
+export async function firstInstall(): Promise<boolean> {
+  const [any] = await db.select({ id: marinas.id }).from(marinas).limit(1);
+  return !any;
+}
 
 // Crea un nuovo porto con l'utente indicato come direzione e i dati di partenza:
 // categorie dimensionali, un listino dell'anno da compilare e i testi modello.

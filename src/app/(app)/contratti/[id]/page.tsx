@@ -19,6 +19,7 @@ import { listCharges } from "@/server/charges";
 import { extrasForDate } from "@/server/list-extras";
 import { latestConsents } from "@/server/owners";
 import { ActivateForm, AddContractItemForm, CancelContractButton, ContractMetaForm, RemoveContractItemButton, RevertToDraftButton } from "./contract-forms";
+import { visibleUser } from "@/lib/account-manager";
 
 export const metadata: Metadata = { title: "Contratto" };
 
@@ -50,7 +51,7 @@ export default page(async function ContractPage({ params, searchParams }: { para
     db
       .select({ id: movements.id, kind: movements.kind, at: movements.at, note: movements.note, userName: users.name })
       .from(movements)
-      .leftJoin(users, eq(users.id, movements.userId))
+      .leftJoin(users, and(eq(users.id, movements.userId), visibleUser()))
       .where(eq(movements.contractId, id))
       .orderBy(desc(movements.at)),
     latestConsents(ctx.marinaId, c.ownerId),

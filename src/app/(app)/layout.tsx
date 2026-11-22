@@ -43,7 +43,8 @@ function LogoutButton({ className }: { className: string }) {
 async function Navigation() {
   const ctx = await requireMarina();
   const items = NAV.filter((i) => i.roles.includes(ctx.role)).map(({ key, href, label }) => ({ key, href, label }));
-  const canSwitch = ctx.memberships.length > 1;
+  // L'account manager torna sempre alla scelta: da lì entra negli altri porti e ne crea di nuovi.
+  const canSwitch = ctx.memberships.length > 1 || ctx.accountManager;
   const [marina] = await db
     .select({ logoVersion: marinas.logoVersion, logoWidth: marinas.logoWidth, logoHeight: marinas.logoHeight })
     .from(marinas)
