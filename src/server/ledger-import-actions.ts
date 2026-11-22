@@ -6,7 +6,7 @@ import { db } from "@/db";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { todayRome } from "@/lib/dates";
-import { fail, type FormState } from "@/lib/forms";
+import { fail, formId, type FormState } from "@/lib/forms";
 import { checkRows, hasBlockingIssues, MAX_IMPORT_ROWS, toLedgerEntries } from "@/lib/ledger-import";
 import { importLedger, undoLedgerImport } from "./accounting";
 import { toFormState } from "./errors";
@@ -70,8 +70,8 @@ export async function importLedgerFile(_prev: FormState, formData: FormData): Pr
 
 export async function removeLedgerImport(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(OFFICE);
-  const importId = String(formData.get("importId") ?? "");
-  if (!z.uuid().safeParse(importId).success) return fail("Importazione non trovata.");
+  const importId = formId(formData, "importId");
+  if (!importId) return fail("Importazione non trovata.");
   try {
     await db.transaction(async (tx) => {
       const done = await undoLedgerImport(tx, { marinaId: ctx.marinaId, userId: ctx.user.id }, importId);

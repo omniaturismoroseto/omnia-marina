@@ -10,7 +10,8 @@ import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { annualEnd, isValidISODate } from "@/lib/dates";
 import { formatDimensions } from "@/lib/format";
-import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { f, fail, formId, parseForm, type FormState } from "@/lib/forms";
+import { isUuid } from "@/lib/params";
 import {
   FEE_ITEM_KINDS,
   ITEM_KINDS,
@@ -57,7 +58,6 @@ export interface ContractOptions {
 }
 
 const TYPES = ["annuale", "stagionale", "mensile", "transito"] as const;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Posti adatti e liberi per una barca in un periodo, e preventivo da listino. Usata dal modulo "nuovo contratto".
 export async function loadContractOptions(input: {
@@ -69,10 +69,10 @@ export async function loadContractOptions(input: {
 }): Promise<ContractOptions> {
   const ctx = await requireMarina(OFFICE);
   const empty: ContractOptions = { berths: [], quote: null, quoteNote: null, itemPrices: {}, listExtras: [] };
-  if (!UUID.test(input.boatId) || !TYPES.includes(input.type as ContractType)) return empty;
+  if (!isUuid(input.boatId) || !TYPES.includes(input.type as ContractType)) return empty;
   if (!isValidISODate(input.startDate) || !isValidISODate(input.endDate) || input.endDate < input.startDate) return empty;
   const type = input.type as ContractType;
-  const berthId = input.berthId && UUID.test(input.berthId) ? input.berthId : null;
+  const berthId = input.berthId && isUuid(input.berthId) ? input.berthId : null;
 
   const [boat] = await db
     .select()
@@ -325,8 +325,8 @@ export async function activateContractAction(_prev: FormState, formData: FormDat
 // Riporta in bozza un contratto attivo: perde numero e addebiti. La scheda segnala il numero lasciato libero.
 export async function revertToDraftAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(OFFICE);
-  const contractId = String(formData.get("contractId") ?? "");
-  if (!UUID.test(contractId)) return fail("Contratto non trovato.");
+  const contractId = formId(formData, "contractId");
+  if (!contractId) return fail("Contratto non trovato.");
   let reverted: { freedNumber: string; leavesGap: boolean };
   try {
     reverted = await db.transaction(async (tx) => {
@@ -385,8 +385,8 @@ export async function saveDraftContract(_prev: FormState, formData: FormData): P
 
 export async function cancelContractAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(OFFICE);
-  const contractId = String(formData.get("contractId") ?? "");
-  if (!UUID.test(contractId)) return fail("Contratto non trovato.");
+  const contractId = formId(formData, "contractId");
+  if (!contractId) return fail("Contratto non trovato.");
   try {
     await db.transaction(async (tx) => {
       await cancelContract(tx, { marinaId: ctx.marinaId, userId: ctx.user.id }, contractId);
@@ -465,8 +465,8 @@ export async function addContractItemAction(_prev: FormState, formData: FormData
 
 export async function removeContractItemAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(OFFICE);
-  const itemId = String(formData.get("itemId") ?? "");
-  if (!UUID.test(itemId)) return fail("Voce non trovata.");
+  const itemId = formId(formData, "itemId");
+  if (!itemId) return fail("Voce non trovata.");
   try {
     await db.transaction(async (tx) => {
       const removed = await removeContractItem(tx, { marinaId: ctx.marinaId, userId: ctx.user.id }, itemId);

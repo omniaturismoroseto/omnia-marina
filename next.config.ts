@@ -22,6 +22,11 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  experimental: {
+    // Il limite predefinito (1 MB) non basta per le importazioni da Excel (fino a 3000 clienti con barca ≈ 2,6 MB)
+    // né per lo sfondo dettagliato della mappa (fino a 200.000 punti).
+    serverActions: { bodySizeLimit: "8mb" },
+  },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

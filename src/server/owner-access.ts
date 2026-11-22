@@ -121,11 +121,15 @@ export async function activateInvite(input: { code: string; taxId: string; email
   if (invite.failedAttempts >= INVITE_MAX_FAILED) {
     return { ok: false, field: "code", message: "Questo codice è bloccato dopo troppi tentativi: chiedi al porto un codice nuovo." };
   }
-  if (!taxIdMatches(input.taxId, owner)) {
-    await db
+  // Ogni prova sbagliata (codice fiscale, o password di un account esistente) consuma un tentativo dell'invito:
+  // così l'attivazione non diventa un modo per provare password altrui senza il freno della pagina di accesso.
+  const countFailure = () =>
+    db
       .update(ownerInvites)
       .set({ failedAttempts: sql`${ownerInvites.failedAttempts} + 1` })
       .where(eq(ownerInvites.id, invite.id));
+  if (!taxIdMatches(input.taxId, owner)) {
+    await countFailure();
     return { ok: false, field: "taxId", message: WRONG };
   }
 
@@ -135,6 +139,7 @@ export async function activateInvite(input: { code: string; taxId: string; email
   if (existing) {
     const login = await verifyLogin(input.email, input.password);
     if (!login.ok) {
+      if (login.reason === "credentials") await countFailure();
       return {
         ok: false,
         field: "password",

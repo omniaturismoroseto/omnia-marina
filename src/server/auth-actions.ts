@@ -9,6 +9,7 @@ import { createSession, destroySession, setSessionMarina, setSessionOwnerArea } 
 import { homeFor, ownerAreasFor, requireUser } from "@/lib/context";
 import { todayRome, yearOf } from "@/lib/dates";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
+import { createRateLimiter } from "@/lib/rate-limit";
 import { createAccount, isEmailVerified, requestPasswordReset as sendPasswordReset, sendVerificationEmail, verifyLogin } from "./credentials";
 import { createMarinaWithDefaults } from "./marina-setup";
 import { touchAccess } from "./owner-access";
@@ -17,22 +18,11 @@ function signupAllowed(): boolean {
   return process.env.ALLOW_SIGNUP !== "false";
 }
 
-// Freno ai tentativi di accesso ripetuti. È in memoria: vale per singola istanza del server.
-const attempts = new Map<string, { count: number; resetAt: number }>();
-const MAX_ATTEMPTS = 8;
 const WINDOW_MS = 15 * 60 * 1000;
-
-function tooManyAttempts(key: string): boolean {
-  const entry = attempts.get(key);
-  return !!entry && entry.resetAt > Date.now() && entry.count >= MAX_ATTEMPTS;
-}
-
-function recordFailure(key: string): void {
-  const now = Date.now();
-  const entry = attempts.get(key);
-  if (!entry || entry.resetAt <= now) attempts.set(key, { count: 1, resetAt: now + WINDOW_MS });
-  else entry.count++;
-}
+// Freno ai tentativi di accesso ripetuti: al massimo 8 password sbagliate per email ogni 15 minuti.
+const loginFailures = createRateLimiter(8, WINDOW_MS);
+// Freno alle richieste di «password dimenticata»: al massimo 3 email per indirizzo ogni 15 minuti.
+const resetRequests = createRateLimiter(3, WINDOW_MS);
 
 const loginSchema = z.object({ email: f.email(), password: f.text("Inserisci la password") });
 
@@ -41,19 +31,19 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
   if (!parsed.ok) return parsed.state;
   const { email, password } = parsed.data;
 
-  if (tooManyAttempts(email)) return fail("Troppi tentativi. Riprova tra qualche minuto.");
+  if (loginFailures.blocked(email)) return fail("Troppi tentativi. Riprova tra qualche minuto.");
 
   const result = await verifyLogin(email, password);
   if (!result.ok) {
     if (result.reason === "credentials") {
-      recordFailure(email);
+      loginFailures.hit(email);
       return fail("Email o password non corretti.");
     }
     if (result.reason === "disabled") return fail("Questo account è stato disattivato. Rivolgiti alla direzione del porto.");
     if (result.reason === "throttled") return fail("Troppi tentativi. Riprova tra qualche minuto, oppure scegli una nuova password con «Password dimenticata?».");
     return fail("Il servizio di accesso non risponde. Riprova tra qualche minuto.");
   }
-  attempts.delete(email);
+  loginFailures.clear(email);
 
   const userId = result.userId;
   const [mems, areas] = await Promise.all([
@@ -84,20 +74,16 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
   redirect("/porti");
 }
 
-// Freno alle richieste di «password dimenticata»: al massimo 3 email per indirizzo ogni 15 minuti.
-const resetRequests = new Map<string, { count: number; resetAt: number }>();
-
 const resetSchema = z.object({ email: f.email() });
 
 export async function requestPasswordReset(_prev: FormState, formData: FormData): Promise<FormState> {
   const parsed = parseForm(resetSchema, formData);
   if (!parsed.ok) return parsed.state;
   const { email } = parsed.data;
-  const now = Date.now();
-  const entry = resetRequests.get(email);
-  if (!entry || entry.resetAt <= now) resetRequests.set(email, { count: 1, resetAt: now + WINDOW_MS });
-  else entry.count++;
-  if ((resetRequests.get(email)?.count ?? 0) <= 3) await sendPasswordReset(email);
+  if (!resetRequests.blocked(email)) {
+    resetRequests.hit(email);
+    await sendPasswordReset(email);
+  }
   // Stessa risposta in ogni caso: non si rivela se l'email ha un account.
   return {
     ok: true,

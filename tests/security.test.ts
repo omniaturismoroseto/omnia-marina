@@ -1,0 +1,175 @@
+// Controlli di sicurezza: freni ai tentativi, indirizzi delle notifiche, reimpostazione della password da parte della
+// direzione e tentativi di attivazione dell'area diportista. Le parti con il database vengono saltate se manca.
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { Pool } from "pg";
+import { db } from "@/db";
+import { memberships, ownerAccess, ownerInvites, owners, users } from "@/db/schema";
+import { verifyPassword } from "@/lib/auth/password";
+import type { MarinaContext } from "@/lib/context";
+import { clientIp, createRateLimiter } from "@/lib/rate-limit";
+import { INVITE_MAX_FAILED } from "@/lib/owner-access";
+import { createAccount } from "@/server/credentials";
+import { createMarinaWithDefaults } from "@/server/marina-setup";
+import { activateInvite, createInvite } from "@/server/owner-access";
+import { isPushEndpoint } from "@/server/push";
+
+// Le azioni chiedono la sessione a requireMarina: qui la sessione è quella preparata dal test.
+let session: MarinaContext | null = null;
+vi.mock("@/lib/context", async (original) => ({
+  ...(await original<typeof import("@/lib/context")>()),
+  requireMarina: async () => {
+    if (!session) throw new Error("Nessuna sessione di prova");
+    return session;
+  },
+}));
+vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
+
+const { resetMemberPassword } = await import("@/server/settings-actions");
+
+describe("freno ai tentativi", () => {
+  it("blocca dopo il massimo e riparte quando la finestra scade", () => {
+    let now = 1_000;
+    const limiter = createRateLimiter(3, 100, () => now);
+    expect(limiter.blocked("a")).toBe(false);
+    limiter.hit("a");
+    limiter.hit("a");
+    expect(limiter.blocked("a")).toBe(false);
+    expect(limiter.hit("a")).toBe(3);
+    expect(limiter.blocked("a")).toBe(true);
+    expect(limiter.blocked("b")).toBe(false);
+    now += 101;
+    expect(limiter.blocked("a")).toBe(false);
+    expect(limiter.hit("a")).toBe(1);
+    limiter.hit("a");
+    limiter.hit("a");
+    limiter.clear("a");
+    expect(limiter.blocked("a")).toBe(false);
+  });
+
+  it("usa l'ultimo indirizzo di X-Forwarded-For, quello aggiunto dal servizio di Google", () => {
+    expect(clientIp("1.2.3.4, 5.6.7.8", null)).toBe("5.6.7.8");
+    expect(clientIp(" 9.9.9.9 ", null)).toBe("9.9.9.9");
+    expect(clientIp(null, "10.0.0.1")).toBe("10.0.0.1");
+    expect(clientIp("", null)).toBe("sconosciuto");
+  });
+});
+
+describe("indirizzi delle notifiche", () => {
+  it("accetta solo i servizi push dei browser", () => {
+    expect(isPushEndpoint("https://fcm.googleapis.com/fcm/send/abc")).toBe(true);
+    expect(isPushEndpoint("https://updates.push.services.mozilla.com/wpush/v2/abc")).toBe(true);
+    expect(isPushEndpoint("https://web.push.apple.com/QH8abc")).toBe(true);
+    expect(isPushEndpoint("https://wns2-db5p.notify.windows.com/w/?token=abc")).toBe(true);
+    expect(isPushEndpoint("http://fcm.googleapis.com/fcm/send/abc")).toBe(false);
+    expect(isPushEndpoint("https://fcm.googleapis.com:8443/fcm/send/abc")).toBe(false);
+    expect(isPushEndpoint("https://fcm.googleapis.com.evil.example/x")).toBe(false);
+    expect(isPushEndpoint("https://10.0.0.1/push")).toBe(false);
+    expect(isPushEndpoint("https://metadata.google.internal/computeMetadata/v1/")).toBe(false);
+    expect(isPushEndpoint("non un indirizzo")).toBe(false);
+  });
+});
+
+// ───────────────────────── Con database ─────────────────────────
+
+async function databaseAvailable(): Promise<boolean> {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 2000 });
+  try {
+    await pool.query("select 1");
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await pool.end().catch(() => {});
+  }
+}
+
+const hasDb = !process.env.FIREBASE_PROJECT_ID && (await databaseAvailable());
+const unique = () => `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+const FISCAL = "BNCLRA85M41F205Z";
+
+describe.skipIf(!hasDb)("account di altri porti (database, password locali)", () => {
+  let homeMarinaId: string;
+  let attackerMarinaId: string;
+  let attackerId: string;
+  let ownerId: string;
+
+  beforeAll(async () => {
+    await migrate(db, { migrationsFolder: "drizzle" });
+    const staffId = await createAccount(db, { email: `ufficio-${unique()}@test.example`, name: "Ufficio", password: "password-ufficio" });
+    homeMarinaId = await db.transaction((tx) => createMarinaWithDefaults(tx, { name: `Porto ${unique()}`, userId: staffId, year: 2026 }));
+    attackerId = await createAccount(db, { email: `altro-${unique()}@test.example`, name: "Altro porto", password: "password-altro" });
+    attackerMarinaId = await db.transaction((tx) => createMarinaWithDefaults(tx, { name: `Altro ${unique()}`, userId: attackerId, year: 2026 }));
+    const [owner] = await db
+      .insert(owners)
+      .values({ marinaId: homeMarinaId, type: "persona", firstName: "Laura", lastName: "Bianchi", displayName: "Bianchi Laura", fiscalCode: FISCAL })
+      .returning({ id: owners.id });
+    ownerId = owner.id;
+    session = {
+      sessionId: "sessione-di-prova",
+      user: { id: attackerId, name: "Altro porto", email: "altro@test.example" },
+      memberships: [],
+      ownerAreas: [],
+      activeMarinaId: attackerMarinaId,
+      activeOwnerAccessId: null,
+      marinaId: attackerMarinaId,
+      marinaName: "Altro",
+      role: "admin",
+    };
+  });
+
+  afterAll(() => {
+    session = null;
+  });
+
+  it("la direzione di un altro porto non può cambiare la password di un diportista collegato con la sola email", async () => {
+    const email = `diportista-${unique()}@test.example`;
+    const boaterId = await createAccount(db, { email, name: "Laura", password: "password-giusta" });
+    await db.insert(ownerAccess).values({ marinaId: homeMarinaId, ownerId, userId: boaterId });
+    // L'altro porto collega l'account (basta conoscere l'email) e prova a reimpostarne la password.
+    const [m] = await db.insert(memberships).values({ userId: boaterId, marinaId: attackerMarinaId, role: "banchina" }).returning({ id: memberships.id });
+    const form = new FormData();
+    form.set("membershipId", m.id);
+    form.set("password", "password-dell-intruso");
+    const state = await resetMemberPassword(undefined, form);
+    expect(state?.ok).not.toBe(true);
+    expect(state?.message).toContain("diportista");
+    const [user] = await db.select({ hash: users.passwordHash }).from(users).where(eq(users.id, boaterId));
+    expect(await verifyPassword("password-giusta", user.hash!)).toBe(true);
+  });
+
+  it("la password di chi lavora solo in questo porto si reimposta", async () => {
+    const email = `banchina-${unique()}@test.example`;
+    const workerId = await createAccount(db, { email, name: "Banchina", password: "password-vecchia" });
+    const [m] = await db.insert(memberships).values({ userId: workerId, marinaId: attackerMarinaId, role: "banchina" }).returning({ id: memberships.id });
+    const form = new FormData();
+    form.set("membershipId", m.id);
+    form.set("password", "password-nuova-1");
+    expect((await resetMemberPassword(undefined, form))?.ok).toBe(true);
+    const [user] = await db.select({ hash: users.passwordHash }).from(users).where(eq(users.id, workerId));
+    expect(await verifyPassword("password-nuova-1", user.hash!)).toBe(true);
+  });
+
+  it("un identificativo manomesso non fa fallire l'azione", async () => {
+    const form = new FormData();
+    form.set("membershipId", "non-un-id");
+    form.set("password", "password-nuova-1");
+    expect((await resetMemberPassword(undefined, form))?.message).toBe("Controlla i campi evidenziati.");
+  });
+
+  it("all'attivazione le password sbagliate di un account esistente consumano i tentativi dell'invito", async () => {
+    const email = `esistente-${unique()}@test.example`;
+    await createAccount(db, { email, name: "Esistente", password: "password-segreta" });
+    const inviteId = await createInvite({ marinaId: homeMarinaId, user: { id: attackerId } }, ownerId, "Laura");
+    const [{ code }] = await db.select({ code: ownerInvites.code }).from(ownerInvites).where(eq(ownerInvites.id, inviteId));
+    for (let i = 0; i < INVITE_MAX_FAILED; i++) {
+      const r = await activateInvite({ code, taxId: FISCAL, email, password: `tentativo-${i}-xxxx` });
+      expect(r.ok).toBe(false);
+    }
+    // Ora anche la password giusta non passa più: il codice è bloccato.
+    const blocked = await activateInvite({ code, taxId: FISCAL, email, password: "password-segreta" });
+    expect(blocked.ok).toBe(false);
+    if (!blocked.ok) expect(blocked.message).toContain("bloccato");
+  });
+});

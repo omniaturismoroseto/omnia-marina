@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isValidISODate } from "./dates";
+import { isUuid } from "./params";
 import { parseMeters, parseMoney } from "./format";
 
 // Stato restituito da ogni azione di modulo.
@@ -67,4 +68,13 @@ export function parseForm<S extends z.ZodType>(schema: S, formData: FormData): P
 
 export function fail(message: string, errors?: Record<string, string>): NonNullable<FormState> {
   return { message, errors };
+}
+
+/**
+ * Identificativo (UUID) di un campo nascosto del modulo; vuoto se manca o non è valido. Va controllato prima di usarlo
+ * nel database: un valore manomesso farebbe altrimenti fallire la query con un errore del server.
+ */
+export function formId(formData: FormData, name: string): string {
+  const value = formData.get(name);
+  return typeof value === "string" && isUuid(value) ? value : "";
 }

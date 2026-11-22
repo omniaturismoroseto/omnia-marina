@@ -82,7 +82,6 @@ export const TASK_KIND_LABEL = {
 } as const;
 
 export const TASK_PRIORITY_LABEL = { bassa: "Bassa", normale: "Normale", alta: "Urgente" } as const;
-export const TASK_STATUS_LABEL = { aperta: "Aperta", in_corso: "In corso", chiusa: "Chiusa" } as const;
 
 export const MOVEMENT_LABEL = { arrivo: "Arrivo", partenza: "Partenza", uscita: "Uscita in mare", rientro: "Rientro" } as const;
 

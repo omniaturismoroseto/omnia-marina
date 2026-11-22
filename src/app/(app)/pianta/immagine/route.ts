@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, type Tx } from "@/db";
 import { berths, marinaPlanBases, marinaPlans, marinas, pierSections, piers, planFeatures } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { requireMarina } from "@/lib/context";
@@ -14,6 +14,16 @@ const MIN_SIDE = 300;
 const MAX_SIDE = 6000;
 
 const fail = (status: number, message: string) => Response.json({ ok: false, message }, { status });
+
+// Posti, linee dei pontili, sfondo e base disegnata sono legati all'inquadratura della foto: senza foto, o con
+// un'inquadratura diversa, non valgono più.
+async function clearPlanLayout(tx: Tx, marinaId: string) {
+  await tx.update(berths).set({ planX: null, planY: null, planAngle: null }).where(eq(berths.marinaId, marinaId));
+  await tx.update(piers).set({ planAx: null, planAy: null, planBx: null, planBy: null }).where(eq(piers.marinaId, marinaId));
+  await tx.update(pierSections).set({ planAx: null, planAy: null, planBx: null, planBy: null }).where(eq(pierSections.marinaId, marinaId));
+  await tx.delete(planFeatures).where(eq(planFeatures.marinaId, marinaId));
+  await tx.delete(marinaPlanBases).where(eq(marinaPlanBases.marinaId, marinaId));
+}
 
 export async function GET() {
   const ctx = await requireMarina();
@@ -67,14 +77,7 @@ export async function POST(request: Request) {
         ...(sameFrame ? {} : { planPxPerMeter: null }),
       })
       .where(eq(marinas.id, ctx.marinaId));
-    if (!sameFrame) {
-      // Inquadratura diversa: posti, linee dei pontili e sfondo della mappa non corrispondono più alla foto.
-      await tx.update(berths).set({ planX: null, planY: null, planAngle: null }).where(eq(berths.marinaId, ctx.marinaId));
-      await tx.update(piers).set({ planAx: null, planAy: null, planBx: null, planBy: null }).where(eq(piers.marinaId, ctx.marinaId));
-      await tx.update(pierSections).set({ planAx: null, planAy: null, planBx: null, planBy: null }).where(eq(pierSections.marinaId, ctx.marinaId));
-      await tx.delete(planFeatures).where(eq(planFeatures.marinaId, ctx.marinaId));
-      await tx.delete(marinaPlanBases).where(eq(marinaPlanBases.marinaId, ctx.marinaId));
-    }
+    if (!sameFrame) await clearPlanLayout(tx, ctx.marinaId);
     await audit(ctx, "caricamento", "pianta del porto", ctx.marinaId, `Foto ${info.width} × ${info.height} px`, tx);
     return !sameFrame && marina.width !== null;
   });
@@ -92,11 +95,7 @@ export async function DELETE(request: Request) {
       .update(marinas)
       .set({ planWidth: null, planHeight: null, planPxPerMeter: null, planVersion: sql`${marinas.planVersion} + 1` })
       .where(eq(marinas.id, ctx.marinaId));
-    await tx.update(berths).set({ planX: null, planY: null, planAngle: null }).where(eq(berths.marinaId, ctx.marinaId));
-    await tx.update(piers).set({ planAx: null, planAy: null, planBx: null, planBy: null }).where(eq(piers.marinaId, ctx.marinaId));
-    await tx.update(pierSections).set({ planAx: null, planAy: null, planBx: null, planBy: null }).where(eq(pierSections.marinaId, ctx.marinaId));
-    await tx.delete(planFeatures).where(eq(planFeatures.marinaId, ctx.marinaId));
-    await tx.delete(marinaPlanBases).where(eq(marinaPlanBases.marinaId, ctx.marinaId));
+    await clearPlanLayout(tx, ctx.marinaId);
     await audit(ctx, "rimozione", "pianta del porto", ctx.marinaId, undefined, tx);
   });
   revalidatePath("/", "layout");

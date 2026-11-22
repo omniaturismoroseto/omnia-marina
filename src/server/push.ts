@@ -20,7 +20,20 @@ function vapidSubject(): string {
   return process.env.VAPID_SUBJECT ?? process.env.APP_URL ?? "https://omnia-marina.app";
 }
 
-export type PushPayload = { title: string; body: string; url: string; tag?: string; urgent?: boolean };
+// Servizi di notifica dei browser (Chrome/Android, Firefox, Safari/iPhone, Edge). L'indirizzo dell'iscrizione arriva
+// dal browser: se fosse un indirizzo qualsiasi, il server gli manderebbe richieste a ogni messaggio.
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^updates\.push\.services\.mozilla\.com$/, /^([a-z0-9-]+\.)*push\.apple\.com$/, /^[a-z0-9-]+\.notify\.windows\.com$/];
+
+export function isPushEndpoint(endpoint: string): boolean {
+  try {
+    const url = new URL(endpoint);
+    return url.protocol === "https:" && url.port === "" && PUSH_HOSTS.some((re) => re.test(url.hostname));
+  } catch {
+    return false;
+  }
+}
+
+export type PushPayload ={ title: string; body: string; url: string; tag?: string; urgent?: boolean };
 
 export async function saveSubscription(userId: string, sub: { endpoint: string; keys: { p256dh: string; auth: string } }): Promise<void> {
   await db

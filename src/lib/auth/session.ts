@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { connection } from "next/server";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, eq, gt, lt, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { sessions, users } from "@/db/schema";
 
@@ -84,7 +84,7 @@ export async function setSessionOwnerArea(sessionId: string, marinaId: string, o
   await db.update(sessions).set({ marinaId, ownerAccessId }).where(eq(sessions.id, sessionId));
 }
 
-// Invalida tutte le sessioni di un utente (cambio password, rimozione).
-export async function destroyUserSessions(userId: string): Promise<void> {
-  await db.delete(sessions).where(eq(sessions.userId, userId));
+// Chiude le sessioni di un utente dopo un cambio di password, tranne quella indicata (di chi sta operando).
+export async function destroyUserSessions(userId: string, exceptSessionId: string): Promise<void> {
+  await db.delete(sessions).where(and(eq(sessions.userId, userId), ne(sessions.id, exceptSessionId)));
 }
