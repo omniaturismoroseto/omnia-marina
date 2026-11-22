@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { asc, eq } from "drizzle-orm";
-import { Phone } from "lucide-react";
+import { Phone } from "@/components/icons";
 import { MovementButtons } from "@/components/movement-buttons";
 import { page } from "@/components/page";
 import { PortWeatherCard } from "@/components/port-weather";

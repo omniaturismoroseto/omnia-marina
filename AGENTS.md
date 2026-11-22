@@ -32,6 +32,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   composto dai pezzi del logo verticale); per l'interfaccia `src/components/brand.tsx` con le immagini di `src/assets/brand/` (già alla
   misura giusta, `unoptimized`): `BrandWide` in alto nel menu, `BrandLogo` nelle pagine di accesso. Icone in `src/app` (favicon, icon,
   apple-icon) e `public/`. Nome dell'app installata: «Omnia Marina Gestionale» (`src/app/manifest.ts` e metadati in `src/app/layout.tsx`).
+- Aspetto: carattere Figtree (`@fontsource-variable/figtree`, testi e titoli), colori in `src/app/globals.css` (accento `sea` blu navy
+  spento, menu `deep`). Icone Material Symbols arrotondate piene, generate in `src/components/icons.tsx` da `scripts/build-icons.mjs`
+  (`@material-symbols/svg-400`): per una nuova icona aggiungerla alla tabella dello script con il nome usato nell'app e rigenerare.
+  Si importano da `@/components/icons` (tipo `AppIcon`), mai da altre librerie.
 - Logo della società di gestione: caricato da Impostazioni → Porto, salvato in `marina_logos` (PNG/JPEG, mai SVG) e servito da
   `/logo?v=<marinas.logo_version>`; `portLogo` (`src/lib/logo.ts`) e `PortLogo`/`PortLogoTile` (`src/components/port-logo.tsx`) lo mostrano
   nel menu (su riquadro bianco) e nelle intestazioni di contratto e informativa. Il logo di Omnia Marina resta quello dell'app.

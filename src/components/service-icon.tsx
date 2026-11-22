@@ -28,11 +28,11 @@ import {
   WashingMachine,
   Waves,
   Wifi,
-  type LucideIcon,
-} from "lucide-react";
+  type AppIcon,
+} from "@/components/icons";
 import type { PortServiceKey } from "@/lib/port-services";
 
-const ICONS: Record<PortServiceKey, LucideIcon> = {
+const ICONS: Record<PortServiceKey, AppIcon> = {
   carburante: Fuel,
   bar: Coffee,
   ristorante: UtensilsCrossed,
@@ -63,7 +63,7 @@ const ICONS: Record<PortServiceKey, LucideIcon> = {
   accessibile: Accessibility,
 };
 
-export function serviceIcon(key: string): LucideIcon {
+export function serviceIcon(key: string): AppIcon {
   return ICONS[key as PortServiceKey] ?? Info;
 }
 

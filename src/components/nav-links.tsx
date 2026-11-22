@@ -18,8 +18,8 @@ import {
   Users,
   Wallet,
   X,
-  type LucideIcon,
-} from "lucide-react";
+  type AppIcon,
+} from "@/components/icons";
 
 // Le icone vivono qui: da un componente server si possono passare solo le chiavi.
 const ICONS = {
@@ -35,7 +35,7 @@ const ICONS = {
   tariffe: Tags,
   impostazioni: Settings,
   guida: LifeBuoy,
-} satisfies Record<string, LucideIcon>;
+} satisfies Record<string, AppIcon>;
 
 export type NavKey = keyof typeof ICONS;
 export interface NavItem {

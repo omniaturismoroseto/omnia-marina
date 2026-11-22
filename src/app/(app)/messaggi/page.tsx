@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus } from "@/components/icons";
 import { page } from "@/components/page";
 import { Badge, ButtonLink, Card, EmptyState, PageHeader } from "@/components/ui";
 import { EVERYONE, requireMarina } from "@/lib/context";

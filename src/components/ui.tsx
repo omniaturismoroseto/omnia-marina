@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
-import { ChevronLeft, LifeBuoy } from "lucide-react";
+import { ChevronLeft, LifeBuoy } from "@/components/icons";
 
 type Tone = "neutral" | "sea" | "ok" | "warn" | "bad" | "buoy";
 

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ImageUp, Trash2 } from "lucide-react";
+import { ImageUp, Trash2 } from "@/components/icons";
 
 const MAX_BYTES = 15 * 1024 * 1024;
 const MAX_SIDE = 8000;

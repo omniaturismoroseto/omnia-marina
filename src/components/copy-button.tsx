@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy } from "@/components/icons";
 
 /** Copia un testo negli appunti (per incollarlo in un messaggio). */
 export function CopyButton({ text, label = "Copia", size = "sm" }: { text: string; label?: string; size?: "sm" | "lg" }) {

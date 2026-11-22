@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { MailCheck } from "lucide-react";
+import { MailCheck } from "@/components/icons";
 
 export const metadata: Metadata = { title: "Conferma la tua email" };
 

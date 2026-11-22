@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, startTransition, use, useActionState, useEffect, useId, useRef, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "@/components/icons";
 import type { ComponentProps, FormEvent, ReactNode } from "react";
 import type { FormState } from "@/lib/forms";
 

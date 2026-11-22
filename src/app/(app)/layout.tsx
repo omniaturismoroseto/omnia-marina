@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { ArrowLeftRight, LogOut } from "lucide-react";
+import { ArrowLeftRight, LogOut } from "@/components/icons";
 import { eq } from "drizzle-orm";
 import { BrandMark, BrandWide } from "@/components/brand";
 import { BottomBar, SidebarLinks, type NavItem } from "@/components/nav-links";

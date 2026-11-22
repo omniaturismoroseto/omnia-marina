@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, desc, eq } from "drizzle-orm";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus } from "@/components/icons";
 import { ActionButton } from "@/components/form";
 import { MovementButtons } from "@/components/movement-buttons";
 import { page } from "@/components/page";

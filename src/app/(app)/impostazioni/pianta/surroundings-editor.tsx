@@ -22,8 +22,8 @@ import {
   Undo2,
   Wand2,
   X,
-  type LucideIcon,
-} from "lucide-react";
+  type AppIcon,
+} from "@/components/icons";
 import { PlanZoom } from "@/app/(app)/mappa/plan-zoom";
 import { ServiceIcon, ServiceMarker } from "@/components/service-icon";
 import { landContours, landMask } from "@/lib/land-mask";
@@ -398,7 +398,7 @@ export function SurroundingsEditor({
     });
   }
 
-  const allTools: [Tool, string, LucideIcon][] = [
+  const allTools: [Tool, string, AppIcon][] = [
     ["select", "Seleziona", MousePointer2],
     ["terra", "Terra", Wand2],
     ["acqua", "Togli terra", Eraser],

@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Mail, Sailboat, Wallet, type LucideIcon } from "lucide-react";
+import { Mail, Sailboat, Wallet, type AppIcon } from "@/components/icons";
 
 // Schede dell'area diportista: sul telefono stanno in basso, sullo schermo largo sotto la barra in alto.
-const ITEMS: { href: string; label: string; icon: LucideIcon; key: "home" | "messaggi" | "conto" }[] = [
+const ITEMS: { href: string; label: string; icon: AppIcon; key: "home" | "messaggi" | "conto" }[] = [
   { href: "/diportista", label: "La mia barca", icon: Sailboat, key: "home" },
   { href: "/diportista/messaggi", label: "Messaggi", icon: Mail, key: "messaggi" },
   { href: "/diportista/conto", label: "Conto", icon: Wallet, key: "conto" },

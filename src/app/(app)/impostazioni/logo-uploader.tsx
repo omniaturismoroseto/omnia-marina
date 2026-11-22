@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ImageUp, Trash2 } from "lucide-react";
+import { ImageUp, Trash2 } from "@/components/icons";
 
 // Il logo si prepara nel browser: via i margini trasparenti, lato lungo ridotto a una misura che basta per la stampa,
 // salvato in PNG per conservare la trasparenza.

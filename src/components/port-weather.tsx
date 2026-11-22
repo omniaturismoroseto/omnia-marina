@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUp, ShieldAlert, TriangleAlert, Waves, Wind } from "lucide-react";
+import { ArrowUp, ShieldAlert, TriangleAlert, Waves, Wind } from "@/components/icons";
 import { ButtonLink, Card } from "@/components/ui";
 import type { Role } from "@/db/schema";
 import { CIVIL_LEVEL_LABEL, CIVIL_RISKS, NEARBY_KM, type CivilLevel, type PortVigilanceDay, type ZoneOutlook } from "@/lib/civil-protection";

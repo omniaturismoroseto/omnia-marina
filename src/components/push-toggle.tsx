@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, BellOff } from "lucide-react";
+import { Bell, BellOff } from "@/components/icons";
 import { removePushSubscription, savePushSubscription } from "@/server/message-actions";
 
 type State = "loading" | "unsupported" | "ios-install" | "denied" | "off" | "on" | "error";

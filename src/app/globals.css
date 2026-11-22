@@ -1,23 +1,23 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
 
-  /* Carta nautica: fondo color carta, inchiostro blu notte, acqua azzurra, boa arancione. */
+  /* Carta nautica: fondo color carta, inchiostro e accento blu navy (spento, non saturo), boa arancione. */
   --color-paper: #f5f3ec;
   --color-card: #fffefb;
-  --color-ink: #12283a;
-  --color-muted: #566876;
-  --color-faint: #8794a0;
+  --color-ink: #15243a;
+  --color-muted: #56637a;
+  --color-faint: #8791a2;
   --color-line: #dcd8cb;
   --color-line-soft: #ebe8de;
 
-  --color-deep: #0c2130;
-  --color-deep-2: #173445;
-  --color-sea: #0f6480;
-  --color-sea-dark: #0b4d63;
-  --color-sea-soft: #dcebf0;
+  --color-deep: #101e35;
+  --color-deep-2: #1b2d4a;
+  --color-sea: #24497a;
+  --color-sea-dark: #1a3860;
+  --color-sea-soft: #e1e8f2;
   --color-buoy: #d4502a;
   --color-buoy-dark: #a53a1a;
   --color-buoy-soft: #fbe9e2;
@@ -33,7 +33,7 @@
   --color-entrate: #0e7aa8;
   --color-uscite: #d4502a;
 
-  --shadow-card: 0 1px 0 rgb(18 40 58 / 0.04), 0 1px 3px rgb(18 40 58 / 0.06);
+  --shadow-card: 0 1px 0 rgb(21 36 58 / 0.04), 0 1px 3px rgb(21 36 58 / 0.06);
 }
 
 /*
@@ -184,7 +184,7 @@
 }
 .pier-deck {
   background-color: #d5c9a8;
-  background-image: repeating-linear-gradient(90deg, transparent 0 13px, rgb(18 40 58 / 0.1) 13px 14px);
+  background-image: repeating-linear-gradient(90deg, transparent 0 13px, rgb(21 36 58 / 0.1) 13px 14px);
   border: 1px solid #b7a981;
 }
 

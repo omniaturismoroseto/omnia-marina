@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition, type PointerEvent } from "react";
-import { ArrowLeftRight, LoaderCircle, Plus, ScanSearch, X } from "lucide-react";
+import { ArrowLeftRight, LoaderCircle, Plus, ScanSearch, X } from "@/components/icons";
 import { PlanZoom } from "@/app/(app)/mappa/plan-zoom";
 import { berthSizePx, type Point } from "@/lib/plan";
 import { categoryForLength, MAX_BERTHS_PER_SIDE, planBerths, suggestCodes, type Side, type StoredAnalysis, type StructureKind } from "@/lib/plan-analysis";
@@ -324,7 +324,7 @@ function Review({
                     fontSize={13 * u}
                     fontWeight={700}
                     fill="#ffffff"
-                    stroke="#12283a"
+                    stroke="#15243a"
                     strokeWidth={3 * u}
                     paintOrder="stroke"
                     pointerEvents="none"
