@@ -185,7 +185,7 @@ export function AddContractItemForm({
             </div>
             <label className="flex items-center gap-2 text-sm text-ink">
               <input type="checkbox" name="annual" checked={annual} onChange={(e) => changeAnnual(e.target.checked)} />
-              Annuale <span className="text-muted">(un anno intero dalla data di inizio)</span>
+              Annuale <span className="text-muted">(fino al 31 dicembre)</span>
             </label>
           </>
         )}

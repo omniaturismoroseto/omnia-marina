@@ -8,6 +8,7 @@ import { OFFICE, requireMarina } from "@/lib/context";
 import { isValidISODate, todayRome } from "@/lib/dates";
 import { formatDimensions } from "@/lib/format";
 import { one, uuidOrNull, type SearchParams } from "@/lib/params";
+import { loadPlanMap } from "@/server/plan-map";
 import { ContractForm } from "../contract-form";
 
 export const metadata: Metadata = { title: "Nuovo contratto" };
@@ -39,6 +40,9 @@ export default page(async function NewContractPage({ searchParams }: { searchPar
   const startDate = isValidISODate(one(sp.dal)) ? one(sp.dal) : today;
   const berthId = uuidOrNull(sp.posto) ?? "";
 
+  // Schema del porto per «Scegli dalla mappa».
+  const map = await loadPlanMap(ctx.marinaId);
+
   return (
     <>
       <PageHeader help="contratti" title="Nuovo contratto" description="Assegna un posto barca a un cliente per un periodo, con importo e scadenze di pagamento." back={{ href: "/contratti", label: "Contratti" }} />
@@ -57,6 +61,7 @@ export default page(async function NewContractPage({ searchParams }: { searchPar
           today={today}
           defaultVatRate={marina.vat}
           fees={{ gestione: marina.serviceFee, rifiuti: marina.wasteFee }}
+          map={map}
           initial={{
             ownerId: ownerList.some((o) => o.id === ownerId) ? ownerId : "",
             boatId: boat?.id ?? (ownerBoats.length === 1 ? ownerBoats[0].id : ""),

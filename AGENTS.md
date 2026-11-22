@@ -67,6 +67,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Editor dei posti (`plan-editor.tsx`): «Sposta: pontile intero / posto singolo»; con pontile intero trascinamento, frecce e rotazione
   (attorno al centro dei posti) valgono per tutti i posti del pontile e anche per la sua linea salvata, che si risalva con la pianta.
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
+- Periodi dei contratti: annuali per anno solare (`annualEnd` = 31/12 dell'anno di inizio, imposto anche dal server; vale per gli
+  spazi «Annuale»), stagionali dal 1/5 al 30/9 (`SEASON_START`/`SEASON_END`, `yearPeriod` in `src/lib/dates.ts`). «Scegli dalla mappa»
+  nel modulo contratto: `BerthMapPicker` con i dati di `loadPlanMap` (`src/server/plan-map.ts`) e `PlanView` con `onSelect`.
 - Numerazione dei contratti: le bozze non hanno numero (`seq`/`number` vuoti, in stampa «BOZZA»); il numero nasce all'attivazione
   ed è il più basso libero dell'anno (`src/lib/contract-numbers.ts`, `assignContractNumber`). «Torna in bozza» (`revertToDraft`) libera
   numero e addebiti mai incassati; i buchi (`contractNumberGaps`) si segnalano in elenco contratti e cruscotto finché non vengono ripresi.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { categoryForBoat, occupiedUntil, quoteStay, seasonForDate, splitInstalments, annualTotal, grossQuote, lowSeasonRanges, groupPiersByName, pierRate, ratePierId, withVat, type RateRow, type SeasonPeriod } from "../src/lib/pricing";
-import { addMonths, annualEnd, diffDays } from "../src/lib/dates";
+import { addMonths, annualEnd, diffDays, yearPeriod } from "../src/lib/dates";
 import { parseMeters, parseMoney, splitVat } from "../src/lib/format";
 
 const periods: SeasonPeriod[] = [
@@ -209,11 +209,16 @@ describe("date e importi", () => {
     expect(addMonths("2026-01-31", 1)).toBe("2026-02-28");
     expect(addMonths("2026-12-15", 2)).toBe("2027-02-15");
   });
-  it("annualEnd: un anno dalla data di inizio, meno un giorno", () => {
-    expect(annualEnd("2026-11-16")).toBe("2027-11-15");
+  it("annualEnd: gli annuali vanno per anno solare, fino al 31 dicembre", () => {
+    expect(annualEnd("2026-06-01")).toBe("2026-12-31");
     expect(annualEnd("2026-01-01")).toBe("2026-12-31");
-    expect(annualEnd("2028-02-29")).toBe("2029-02-28");
-    expect(annualEnd("2027-03-01")).toBe("2028-02-29");
+    expect(annualEnd("2028-02-29")).toBe("2028-12-31");
+  });
+
+  it("yearPeriod: anno in corso da oggi, anno dopo dal 1° gennaio, stagione dal 1/5 al 30/9", () => {
+    expect(yearPeriod("annuale", 2026, "2026-11-22")).toEqual({ startDate: "2026-11-22", endDate: "2026-12-31" });
+    expect(yearPeriod("annuale", 2027, "2026-11-22")).toEqual({ startDate: "2027-01-01", endDate: "2027-12-31" });
+    expect(yearPeriod("stagionale", 2027, "2026-11-22")).toEqual({ startDate: "2027-05-01", endDate: "2027-09-30" });
   });
   it("diffDays", () => {
     expect(diffDays("2026-03-28", "2026-03-30")).toBe(2); // attraversa il cambio dell'ora

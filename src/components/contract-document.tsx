@@ -248,7 +248,7 @@ export async function ContractDocument({ marinaId, row }: { marinaId: string; ro
             </li>
             {spaces.map((it) => (
               <li key={it.id}>
-                – {SPACE_PHRASE[it.kind](it.reference)}, {it.annual ? "per la durata di un anno, " : ""}con inizio il{" "}
+                – {SPACE_PHRASE[it.kind](it.reference)}, {it.annual ? "per l'anno solare, " : ""}con inizio il{" "}
                 <strong>{formatDate(it.startDate)}</strong> e termine il <strong>{formatDate(it.endDate)}</strong>;
               </li>
             ))}

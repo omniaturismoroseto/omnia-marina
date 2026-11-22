@@ -420,12 +420,12 @@ describe.skipIf(!available)("regole del porto (database)", () => {
     ).rejects.toThrow(/Aliquota/);
   });
 
-  it("uno spazio annuale dura un anno dalla data di inizio", async () => {
-    const space = (endDate: string) => ({ kind: "auto_scoperto" as const, reference: "10", startDate: "2033-11-16", endDate, amountCents: 21000, annual: true });
-    await expect(create(a, { status: "bozza", items: [space("2034-06-30")] })).rejects.toThrow(/annuale/);
-    const c = await create(a, { status: "bozza", startDate: "2033-11-16", endDate: "2033-11-18", items: [space("2034-11-15")] });
+  it("uno spazio annuale va per anno solare: dalla data di inizio al 31 dicembre", async () => {
+    const space = (endDate: string) => ({ kind: "auto_scoperto" as const, reference: "10", startDate: "2033-06-01", endDate, amountCents: 21000, annual: true });
+    await expect(create(a, { status: "bozza", items: [space("2034-05-31")] })).rejects.toThrow(/annuale/);
+    const c = await create(a, { status: "bozza", startDate: "2033-06-01", endDate: "2033-06-03", items: [space("2033-12-31")] });
     const [item] = await db.select().from(contractItems).where(eq(contractItems.contractId, c.id));
-    expect(item).toMatchObject({ annual: true, startDate: "2033-11-16", endDate: "2034-11-15" });
+    expect(item).toMatchObject({ annual: true, startDate: "2033-06-01", endDate: "2033-12-31" });
   });
 
   it("bozze senza numero, ritorno in bozza con buco segnalato e ripreso dal primo contratto attivato", async () => {

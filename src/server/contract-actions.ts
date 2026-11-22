@@ -214,7 +214,7 @@ function parseItems(formData: FormData): { ok: true; items: ContractItemInput[] 
 
   for (const kind of SPACE_ITEM_KINDS) {
     if (read(kind, "on") !== "on") continue;
-    // Con «Annuale» la fine la calcola il server: un anno dalla data di inizio, meno un giorno.
+    // Con «Annuale» la fine la calcola il server: il 31 dicembre dell'anno di inizio.
     const annual = read(kind, "annual") === "on";
     const from = String(read(kind, "from"));
     const to = annual && isValidISODate(from) ? annualEnd(from) : read(kind, "to");
@@ -259,6 +259,8 @@ export async function saveContract(_prev: FormState, formData: FormData): Promis
   if (!parsed.ok) return { ...parsed.state, errors: { ...parsed.state.errors, ...(itemsParsed.ok ? {} : itemsParsed.errors) } };
   if (!itemsParsed.ok) return fail(itemsParsed.errors.servizi ?? "Controlla i campi evidenziati.", itemsParsed.errors);
   const d = parsed.data;
+  // Gli annuali vanno per anno solare: finiscono sempre il 31 dicembre dell'anno di inizio.
+  if (d.type === "annuale") d.endDate = annualEnd(d.startDate);
   if (d.endDate < d.startDate) return fail("Controlla i campi evidenziati.", { endDate: "La fine precede l'inizio." });
 
   let created: { id: string; number: string | null; fillsGap: boolean };
@@ -366,6 +368,8 @@ export async function saveDraftContract(_prev: FormState, formData: FormData): P
   const parsed = parseForm(draftSchema, formData);
   if (!parsed.ok) return parsed.state;
   const { contractId, amount, ...d } = parsed.data;
+  // Gli annuali vanno per anno solare: finiscono sempre il 31 dicembre dell'anno di inizio.
+  if (d.type === "annuale") d.endDate = annualEnd(d.startDate);
   if (d.endDate < d.startDate) return fail("Controlla i campi evidenziati.", { endDate: "La fine precede l'inizio." });
   try {
     await db.transaction(async (tx) => {

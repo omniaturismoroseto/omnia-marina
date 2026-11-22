@@ -11,7 +11,7 @@ import type { ListExtra } from "@/server/list-extras";
 
 type SpaceKind = (typeof SPACE_ITEM_KINDS)[number];
 // fromList: nome della voce del listino scelta, mostrato sotto l'importo al posto del prezzo generico.
-// annual: spazio per un anno intero dalla data di inizio; la fine si calcola e non si modifica.
+// annual: spazio per l'anno solare (fino al 31 dicembre); la fine si calcola e non si modifica.
 type SpaceState = { on: boolean; annual: boolean; ref: string; from: string; to: string; amount: string; fromList?: string };
 type ServiceLine = { key: number; desc: string; amount: string; vatRate: number };
 
@@ -84,7 +84,7 @@ export function ContractExtras({
     setPicked("");
   }
 
-  // Accende uno spazio con il periodo del contratto, o con un anno intero se il contratto è annuale.
+  // Accende uno spazio con il periodo del contratto, o fino al 31 dicembre se il contratto è annuale.
   function turnOn(s: SpaceState): Partial<SpaceState> {
     if (s.on) return {};
     const from = s.from || startDate;
@@ -222,7 +222,7 @@ export function ContractExtras({
                         update(kind, e.target.checked && isValidISODate(s.from) ? { annual: true, to: annualEnd(s.from) } : { annual: e.target.checked })
                       }
                     />
-                    Annuale <span className="text-muted">(un anno intero dalla data di inizio)</span>
+                    Annuale <span className="text-muted">(fino al 31 dicembre)</span>
                   </label>
                 </div>
               )}
