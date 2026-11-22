@@ -115,7 +115,7 @@ export const GUIDE: GuideSection[] = [
       {
         title: "Come si usa",
         items: [
-          "Tocca un posto per vedere barca, proprietario, telefono, contratto e prossime assegnazioni.",
+          "Tocca un posto per vedere barca, proprietario, telefono, contratto e prossime assegnazioni: sul computer il riquadro si apre sopra la mappa, a destra (si chiude con la X); sul telefono sotto la mappa.",
           "Cambia la data in alto per vedere il porto in un altro giorno (per esempio a ferragosto).",
           "Se è stata caricata la pianta dal vero, «Schema» disegna il porto com'è davvero: pontili e banchine in grigio e su ogni posto la barca che lo occupa, lunga e larga quanto la barca vera, con la poppa verso il pontile. I posti liberi sono verdi e vuoti; le barche tratteggiate sono attese o fuori in mare. Il codice del posto è scritto lungo il posto; il nome del pontile compare nel riquadro del posto quando lo tocchi.",
           "Lo schema mostra anche terra, edifici, aree verdi e i servizi del porto (bar, ristorante, parcheggio, cantiere, carburante…) con le loro icone; sotto la mappa c'è l'elenco dei servizi. Si preparano in «Impostazioni» → «Pianta dal vero» → «Sfondo e servizi della mappa».",
