@@ -271,6 +271,8 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
               piers={editorPiers}
               initialBerths={editorBerths}
               initialPierId={uuidOrNull(one(params.struttura)) ?? undefined}
+              categories={categories}
+              usedCodes={pierRows.map((p) => p.code)}
             />
           </Card>
           </div>

@@ -171,6 +171,8 @@ const pointSchema = z.object({ x: z.number().finite(), y: z.number().finite() })
 const proposalsInput = z.object({
   // Scala da usare se il porto non ne ha ancora una (quella stimata dall'analisi).
   scale: z.number().positive().max(2000).nullable(),
+  // Pontile disegnato a mano nell'editor («Nuovo pontile»): le proposte del riconoscimento automatico restano.
+  keepAnalysis: z.boolean().optional(),
   items: z
     .array(
       z.object({
@@ -283,7 +285,7 @@ export async function createFromProposals(input: ProposalsInput): Promise<Result
         })),
       );
     }
-    await tx.update(marinaPlans).set({ analysis: null, analyzedAt: null }).where(eq(marinaPlans.marinaId, ctx.marinaId));
+    if (!parsed.data.keepAnalysis) await tx.update(marinaPlans).set({ analysis: null, analyzedAt: null }).where(eq(marinaPlans.marinaId, ctx.marinaId));
     await audit(ctx, "creazione", "pontili dalla foto", ctx.marinaId, `${items.length} strutture, ${total} posti (${codes.join(", ")})`, tx);
   });
 

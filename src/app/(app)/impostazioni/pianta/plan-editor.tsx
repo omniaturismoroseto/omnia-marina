@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { KeyboardEvent, MouseEvent, PointerEvent } from "react";
-import { MousePointer2, Ruler, Spline } from "@/components/icons";
+import { MousePointer2, Plus, Ruler, Spline } from "@/components/icons";
 import { PlanZoom } from "@/app/(app)/mappa/plan-zoom";
 import { parseMeters } from "@/lib/format";
 import {
@@ -13,8 +13,11 @@ import {
   type Point,
 } from "@/lib/plan";
 import { Field, Form, FormMessage, Submit } from "@/components/form";
+import { compareCodes } from "@/lib/berth-codes";
+import { alignRows } from "@/lib/plan-align";
 import { assignModules } from "@/lib/plan-modules";
-import { savePlanLayout } from "@/server/plan-actions";
+import { MAX_BERTHS_PER_SIDE, planBerths } from "@/lib/plan-analysis";
+import { createFromProposals, savePlanLayout } from "@/server/plan-actions";
 import { makeBerthSection } from "@/server/settings-actions";
 
 export interface EditorBerth {
@@ -36,7 +39,8 @@ export interface EditorBerth {
 }
 
 // select: sposta e ruota i posti · scale: due punti a distanza nota · pier: traccia un pontile · place: posa un posto
-type Tool = "select" | "scale" | "pier" | "place";
+// line: ridisegna i posti scelti lungo una linea (due clic) · newpier: disegna un pontile nuovo (due clic, poi i dati)
+type Tool = "select" | "scale" | "pier" | "place" | "line" | "newpier";
 
 export function PlanEditor({
   imageUrl,
@@ -47,6 +51,8 @@ export function PlanEditor({
   piers,
   initialBerths,
   initialPierId,
+  categories = [],
+  usedCodes = [],
 }: {
   imageUrl: string;
   // Base disegnata (stessa inquadratura della foto): si può mettere sotto i posti al posto della foto.
@@ -66,6 +72,10 @@ export function PlanEditor({
   initialBerths: EditorBerth[];
   /** Pontile o tratto da proporre subito (da «Apri nella pianta» in Pontili e posti). */
   initialPierId?: string;
+  /** Categorie dei posti (per «Nuovo pontile»). */
+  categories?: { id: string; name: string; maxLengthCm: number; maxBeamCm: number }[];
+  /** Sigle dei pontili già usate (per proporne una libera). */
+  usedCodes?: string[];
 }) {
   // I moduli mancanti si riconoscono all'apertura dalle posizioni salvate, poi restano fissi (si salvano con la pianta).
   const [berths, setBerths] = useState(() => withModules(initialBerths, initialPxPerMeter, width));
@@ -107,6 +117,14 @@ export function PlanEditor({
   // «scelti»: i posti toccati uno per uno, per spostare insieme parti vicine che la vicinanza non sa distinguere.
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [sectionLabel, setSectionLabel] = useState("");
+  // «Nuovo pontile»: linea disegnata (radice → testata) e dati del pontile da creare.
+  const [draft, setDraft] = useState<{ a: Point; b: Point } | null>(null);
+  const [draftForm, setDraftForm] = useState(() => {
+    const code = freeCode(usedCodes);
+    return { code, name: `Pontile ${code}`, nameTouched: false, kind: "pontile" as "pontile" | "banchina", left: "10", right: "10", categoryId: categories[0]?.id ?? "" };
+  });
+  // Ultima linea usata per ridisegnare i posti scelti: serve a «Inverti il lato».
+  const [pickedLine, setPickedLine] = useState<{ a: Point; b: Point; flip: boolean } | null>(null);
   const [moveMode, setMoveMode] = useState<"pontile" | "modulo" | "scelti" | "posto">(
     "pontile",
   );
@@ -206,6 +224,50 @@ export function PlanEditor({
     setNotice(null);
   }
 
+  // Posti scelti: nuove posizioni (il modulo si riconosce di nuovo, sono in fila).
+  function placePicked(placements: { id: string; x: number; y: number; angle: number }[], message: string) {
+    if (placements.length === 0) return;
+    const byId = new Map(placements.map((pl) => [pl.id, pl]));
+    setBerths((list) =>
+      withModules(
+        list.map((b) => (byId.has(b.id) ? { ...b, ...byId.get(b.id)!, module: null } : b)),
+        pxPerMeter,
+        width,
+      ),
+    );
+    setDirty(true);
+    setNotice({ ok: true, message });
+  }
+
+  // «Allinea in fila»: dritti dove sono, in ordine di codice, a passo uguale.
+  function alignPicked() {
+    if (!pxPerMeter) return;
+    const list = berths.filter((b) => picked.has(b.id) && b.x !== null && b.y !== null);
+    placePicked(
+      alignRows(
+        list.map((b) => ({ id: b.id, code: b.code, x: b.x!, y: b.y!, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm })),
+        pxPerMeter,
+      ),
+      `${list.length} posti rimessi in fila. Se serve, ritocca e salva la pianta.`,
+    );
+  }
+
+  // «Ridisegna con una linea»: i posti scelti, in ordine di codice, lungo la linea da a a b, tutti dallo stesso lato.
+  function layPickedAlong(a: Point, b: Point, flip: boolean) {
+    if (!pxPerMeter) return;
+    const list = berths.filter((x) => picked.has(x.id)).sort((p, q) => compareCodes(p.code, q.code));
+    const placements = layoutPier(
+      list.map((x, i) => ({ id: x.id, side: "sx" as const, position: i, lengthCm: x.lengthCm, beamCm: x.beamCm })),
+      a,
+      b,
+      pxPerMeter,
+      (parseMeters(pierWidth) ?? 200) / 100,
+      flip,
+    );
+    setPickedLine({ a, b, flip });
+    placePicked(placements, `${list.length} posti ridisegnati lungo la linea. Se sono dalla parte sbagliata premi «Inverti il lato».`);
+  }
+
   function chooseTool(next: Tool) {
     setTool(next);
     setPoints([]);
@@ -230,6 +292,22 @@ export function PlanEditor({
       );
       setDirty(true);
       setNotice(null);
+      setTool("select");
+    } else if (tool === "newpier") {
+      if (points.length === 0) {
+        setPoints([p]);
+        return;
+      }
+      setDraft({ a: points[0], b: p });
+      setPoints([]);
+      setTool("select");
+    } else if (tool === "line") {
+      if (points.length === 0) {
+        setPoints([p]);
+        return;
+      }
+      layPickedAlong(points[0], p, false);
+      setPoints([]);
       setTool("select");
     } else if (tool === "pier") {
       if (points.length === 0) {
@@ -527,20 +605,59 @@ export function PlanEditor({
     return (Math.max(...proj) - Math.min(...proj) + beam) / pxPerMeter;
   })();
 
+  // Posti del pontile disegnato, per l'anteprima sulla foto (stessa regola usata dal server per crearli).
+  const draftSides = (["sx", "dx"] as const).flatMap((side) => {
+    const count = Math.min(MAX_BERTHS_PER_SIDE, Math.max(0, Number.parseInt(side === "sx" ? draftForm.left : draftForm.right, 10) || 0));
+    const category = categories.find((c) => c.id === draftForm.categoryId);
+    return count > 0 && category ? [{ side, count, lengthCm: category.maxLengthCm, beamCm: category.maxBeamCm }] : [];
+  });
+  const draftBerths =
+    draft && pxPerMeter && draftForm.code.trim()
+      ? planBerths(draftForm.code.trim().toUpperCase(), draftForm.kind, draft.a, draft.b, draftSides, pxPerMeter)
+      : [];
+
+  // Disposizione da salvare: posizioni e moduli dei posti, linee tracciate.
+  const layoutPayload = () => ({
+    pxPerMeter,
+    placements: berths.map((b) => ({
+      id: b.id,
+      position: b.x !== null && b.y !== null ? { x: b.x, y: b.y, angle: b.angle ?? 0 } : null,
+      module: b.x !== null && b.y !== null ? b.module : null,
+    })),
+    traces: Object.entries(traces).map(([pierId, t]) => ({ pierId, ...t })),
+  });
+
+  // «Crea il pontile»: salva prima le modifiche in corso, poi crea pontile e posti già disposti lungo la linea.
+  function createDraft() {
+    if (!draft || !pxPerMeter) return;
+    startSaving(async () => {
+      if (dirty) {
+        const saved = await savePlanLayout(layoutPayload());
+        if (!saved.ok) return setNotice(saved);
+        setDirty(false);
+      }
+      const result = await createFromProposals({
+        scale: pxPerMeter,
+        keepAnalysis: true,
+        items: [
+          {
+            code: draftForm.code.trim().toUpperCase(),
+            name: draftForm.name.trim() || `Pontile ${draftForm.code}`,
+            kind: draftForm.kind,
+            a: draft.a,
+            b: draft.b,
+            sides: draftSides.map((x) => ({ side: x.side, count: x.count, categoryId: draftForm.categoryId })),
+          },
+        ],
+      });
+      setNotice(result);
+      if (result.ok) setDraft(null);
+    });
+  }
+
   function save() {
     startSaving(async () => {
-      const result = await savePlanLayout({
-        pxPerMeter,
-        placements: berths.map((b) => ({
-          id: b.id,
-          position:
-            b.x !== null && b.y !== null
-              ? { x: b.x, y: b.y, angle: b.angle ?? 0 }
-              : null,
-          module: b.x !== null && b.y !== null ? b.module : null,
-        })),
-        traces: Object.entries(traces).map(([pierId, t]) => ({ pierId, ...t })),
-      });
+      const result = await savePlanLayout(layoutPayload());
       setNotice(result);
       if (result.ok) {
         setDirty(false);
@@ -572,6 +689,16 @@ export function PlanEditor({
       ? points.length < 2
         ? `Clicca sulla foto i due estremi di una distanza che conosci (per esempio un pontile): punto ${points.length + 1} di 2.`
         : "Scrivi qui a fianco quanti metri separano i due punti e premi «Applica»."
+      : tool === "newpier"
+        ? !pxPerMeter
+          ? "Imposta prima la scala."
+          : points.length === 0
+            ? "Clicca la radice del nuovo pontile (dove si attacca alla banchina)."
+            : "Ora clicca la testata: poi, a destra, scegli sigla, posti per lato e categoria e premi «Crea il pontile»."
+      : tool === "line"
+        ? points.length === 0
+          ? "Clicca dove inizia la fila dei posti scelti (il primo codice)."
+          : "Ora clicca dove finisce: i posti scelti si rimettono lungo la linea, in ordine di codice."
       : tool === "pier"
         ? !pxPerMeter
           ? "Imposta prima la scala."
@@ -600,6 +727,7 @@ export function PlanEditor({
             Spline,
             !pxPerMeter || pierBerths.length === 0,
           )}
+          {toolButton("newpier", "Nuovo pontile", Plus, !pxPerMeter || categories.length === 0)}
           <span
             className="inline-flex items-center gap-1 rounded-md border border-line bg-white p-0.5 text-sm"
             role="group"
@@ -700,6 +828,38 @@ export function PlanEditor({
                   </g>
                 );
               })}
+              {draft && (
+                <g pointerEvents="none">
+                  <line
+                    x1={draft.a.x}
+                    y1={draft.a.y}
+                    x2={draft.b.x}
+                    y2={draft.b.y}
+                    stroke="#d4502a"
+                    strokeWidth={2 * u}
+                    strokeDasharray={`${6 * u} ${4 * u}`}
+                  />
+                  <circle cx={draft.a.x} cy={draft.a.y} r={5 * u} fill="#d4502a" stroke="#fff" strokeWidth={1.5 * u} />
+                  {draftBerths.map((b) => {
+                    const { w, l } = berthSizePx(b, pxPerMeter ?? 1);
+                    return (
+                      <rect
+                        key={b.code}
+                        transform={`translate(${b.placement.x} ${b.placement.y}) rotate(${b.placement.angle})`}
+                        x={-w / 2}
+                        y={-l / 2}
+                        width={w}
+                        height={l}
+                        rx={u}
+                        fill="#d4502a"
+                        fillOpacity={0.35}
+                        stroke="#d4502a"
+                        strokeWidth={1.2 * u}
+                      />
+                    );
+                  })}
+                </g>
+              )}
               {points.length === 2 && (
                 <line
                   x1={points[0].x}
@@ -730,6 +890,102 @@ export function PlanEditor({
       </div>
 
       <aside className="space-y-4 xl:sticky xl:top-6">
+        {draft && (
+          <section className="card space-y-3 border-buoy/40 p-4">
+            <h3 className="text-[15px] font-semibold text-ink">Nuovo pontile</h3>
+            <p className="text-sm text-muted">
+              Linea disegnata dalla radice (pallino) alla testata. I posti si numerano dalla radice: prima il lato sinistro, poi il destro.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label htmlFor="np-code" className="label">
+                  Sigla
+                </label>
+                <input
+                  id="np-code"
+                  className="input"
+                  maxLength={4}
+                  value={draftForm.code}
+                  onChange={(e) => {
+                    const code = e.target.value.toUpperCase();
+                    setDraftForm((f) => ({ ...f, code, name: f.nameTouched ? f.name : `${f.kind === "banchina" ? "Banchina" : "Pontile"} ${code}` }));
+                  }}
+                />
+              </div>
+              <div>
+                <label htmlFor="np-kind" className="label">
+                  Tipo
+                </label>
+                <select
+                  id="np-kind"
+                  className="input"
+                  value={draftForm.kind}
+                  onChange={(e) => {
+                    const kind = e.target.value as "pontile" | "banchina";
+                    setDraftForm((f) => ({
+                      ...f,
+                      kind,
+                      right: kind === "banchina" ? "0" : f.right,
+                      name: f.nameTouched ? f.name : `${kind === "banchina" ? "Banchina" : "Pontile"} ${f.code}`,
+                    }));
+                  }}
+                >
+                  <option value="pontile">Pontile</option>
+                  <option value="banchina">Banchina</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="np-name" className="label">
+                Nome
+              </label>
+              <input id="np-name" className="input" value={draftForm.name} onChange={(e) => setDraftForm((f) => ({ ...f, name: e.target.value, nameTouched: true }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label htmlFor="np-left" className="label">
+                  Posti a sinistra
+                </label>
+                <input id="np-left" className="input" inputMode="numeric" value={draftForm.left} onChange={(e) => setDraftForm((f) => ({ ...f, left: e.target.value }))} />
+              </div>
+              <div>
+                <label htmlFor="np-right" className="label">
+                  Posti a destra
+                </label>
+                <input id="np-right" className="input" inputMode="numeric" value={draftForm.right} onChange={(e) => setDraftForm((f) => ({ ...f, right: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <label htmlFor="np-cat" className="label">
+                Categoria
+              </label>
+              <select id="np-cat" className="input" value={draftForm.categoryId} onChange={(e) => setDraftForm((f) => ({ ...f, categoryId: e.target.value }))}>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="hint">
+              {draftBerths.length === 0
+                ? "Indica quanti posti per lato."
+                : `${draftBerths.length} posti: ${draftBerths[0].code}–${draftBerths[draftBerths.length - 1].code}. Sinistra e destra sono quelle di chi va dalla radice alla testata.`}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn btn-primary btn-sm" disabled={saving || draftBerths.length === 0 || !draftForm.code.trim()} onClick={createDraft}>
+                {saving ? "Attendere…" : "Crea il pontile"}
+              </button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDraft({ a: draft.b, b: draft.a })}>
+                Inverti radice e testata
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDraft(null)}>
+                Annulla
+              </button>
+            </div>
+            {dirty && <p className="hint">Prima di crearlo salvo le modifiche alla pianta che hai fatto.</p>}
+          </section>
+        )}
         <section className="card p-4">
           <h3 className="text-[15px] font-semibold text-ink">Scala</h3>
           <p className="mt-1 text-sm text-muted">
@@ -894,6 +1150,50 @@ export function PlanEditor({
               </button>
             </div>
             {pickedBerths.length > 0 && (
+              <div className="space-y-2 border-t border-line-soft pt-3">
+                <p className="label">Rimetti in ordine</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="button" className="btn btn-secondary btn-sm" disabled={!pxPerMeter || pickedBerths.filter((b) => b.x !== null).length < 2} onClick={alignPicked}>
+                    Allinea in fila
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={!pxPerMeter}
+                    onClick={() => {
+                      setTool("line");
+                      setPoints([]);
+                      setNotice(null);
+                    }}
+                  >
+                    Ridisegna con una linea
+                  </button>
+                  {pickedLine && (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => layPickedAlong(pickedLine.a, pickedLine.b, !pickedLine.flip)}>
+                      Inverti il lato
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm text-bad"
+                    onClick={() => {
+                      setBerths((list) => list.map((b) => (picked.has(b.id) ? { ...b, x: null, y: null, angle: null, module: null } : b)));
+                      setPicked(new Set());
+                      setDirty(true);
+                      setNotice({ ok: true, message: "Posti tolti dalla pianta: li ritrovi in «Da disporre»." });
+                    }}
+                  >
+                    Togli dalla pianta
+                  </button>
+                </div>
+                <p className="hint">
+                  «Allinea in fila» li raddrizza dove sono: stessa linea, stesso angolo, stessa distanza, in ordine di codice. «Ridisegna con
+                  una linea»: clicca inizio e fine sulla foto e si rimettono lungo la linea (larghezza della passerella: quella di «Disponi un
+                  pontile»).
+                </p>
+              </div>
+            )}
+            {pickedBerths.length > 0 && (
               <div className="border-t border-line-soft pt-3">
                 <button
                   type="button"
@@ -1045,6 +1345,32 @@ export function PlanEditor({
                       </p>
                     </div>
                   )}
+                {moveMode === "modulo" && (
+                  <div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        const unit = selected.pierId;
+                        const again = withModules(
+                          berths.map((b) => (b.pierId === unit ? { ...b, module: null } : b)),
+                          pxPerMeter,
+                          width,
+                        );
+                        setBerths(again);
+                        const count = new Set(again.filter((b) => b.pierId === unit && b.module !== null).map((b) => b.module)).size;
+                        setDirty(true);
+                        setNotice({ ok: true, message: `Moduli riconosciuti di nuovo: ${count === 1 ? "1 modulo" : `${count} moduli`}. Salva la pianta per tenerli.` });
+                      }}
+                    >
+                      Riconosci di nuovo i moduli
+                    </button>
+                    <p className="hint mt-1">
+                      Rifà i moduli di questo pontile (o tratto) dalle posizioni attuali: fila per fila, uno accanto all&apos;altro o di
+                      fronte sulla stessa passerella. Per sistemarne uno a mano usa «posti scelti» → «Fai un modulo con questi posti».
+                    </p>
+                  </div>
+                )}
                 {(moveMode === "posto" || group.length < 2) && (
                   <button
                     type="button"
@@ -1151,7 +1477,7 @@ function withModules(list: EditorBerth[], pxPerMeter: number | null, width: numb
   const meter = pxPerMeter ?? (width / 1000) * 4;
   const size = (b: EditorBerth) => (pxPerMeter ? berthSizePx(b, pxPerMeter) : { w: 14 * (width / 1000), l: 36 * (width / 1000) });
   const modules = assignModules(
-    list.flatMap((b) => (b.x !== null && b.y !== null ? [{ id: b.id, unit: b.pierId, x: b.x, y: b.y, ...size(b), module: b.module }] : [])),
+    list.flatMap((b) => (b.x !== null && b.y !== null ? [{ id: b.id, unit: b.pierId, x: b.x, y: b.y, angle: b.angle ?? 0, ...size(b), module: b.module }] : [])),
     meter,
   );
   return list.map((b) => (modules.has(b.id) && b.module !== modules.get(b.id) ? { ...b, module: modules.get(b.id)! } : b));
@@ -1160,4 +1486,16 @@ function withModules(list: EditorBerth[], pxPerMeter: number | null, width: numb
 // Primo numero di modulo libero in una struttura.
 function nextModule(list: EditorBerth[], unit: string): number {
   return list.filter((b) => b.pierId === unit).reduce((max, b) => Math.max(max, b.module ?? 0), 0) + 1;
+}
+
+// Prima sigla libera (A, B, C…; poi P1, P2…) per un pontile nuovo.
+function freeCode(used: string[]): string {
+  const taken = new Set(used.map((c) => c.toUpperCase()));
+  for (let i = 0; i < 26; i++) {
+    const c = String.fromCharCode(65 + i);
+    if (!taken.has(c)) return c;
+  }
+  let n = 1;
+  while (taken.has(`P${n}`)) n++;
+  return `P${n}`;
 }
