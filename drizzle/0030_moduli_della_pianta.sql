@@ -1,0 +1,1 @@
+ALTER TABLE "berths" ADD COLUMN "plan_module" integer;

@@ -18,7 +18,7 @@ const fail = (status: number, message: string) => Response.json({ ok: false, mes
 // Posti, linee dei pontili, sfondo e base disegnata sono legati all'inquadratura della foto: senza foto, o con
 // un'inquadratura diversa, non valgono più.
 async function clearPlanLayout(tx: Tx, marinaId: string) {
-  await tx.update(berths).set({ planX: null, planY: null, planAngle: null }).where(eq(berths.marinaId, marinaId));
+  await tx.update(berths).set({ planX: null, planY: null, planAngle: null, planModule: null }).where(eq(berths.marinaId, marinaId));
   await tx.update(piers).set({ planAx: null, planAy: null, planBx: null, planBy: null }).where(eq(piers.marinaId, marinaId));
   await tx.update(pierSections).set({ planAx: null, planAy: null, planBx: null, planBy: null }).where(eq(pierSections.marinaId, marinaId));
   await tx.delete(planFeatures).where(eq(planFeatures.marinaId, marinaId));

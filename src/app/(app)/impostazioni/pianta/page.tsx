@@ -72,6 +72,7 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
         x: berths.planX,
         y: berths.planY,
         angle: berths.planAngle,
+        module: berths.planModule,
       })
       .from(berths)
       .where(eq(berths.marinaId, ctx.marinaId))
