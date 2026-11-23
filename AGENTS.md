@@ -49,7 +49,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Guida (`/guida`, voce di menu per tutti i ruoli): i testi stanno in `src/lib/guide.ts`, una sezione per voce di menu con i ruoli
   che la vedono; `PageHeader help="<id>"` mette accanto al titolo il collegamento alla sezione. Quando cambiano pulsanti, percorsi
   o regole visibili all'utente, aggiornare anche la guida (`tests/guide.test.ts` controlla ancore e collegamenti).
-- Pianta dal vero: le coordinate dei posti (`berths.plan_x/plan_y/plan_angle`) sono in pixel della foto caricata;
+- Pianta dal vero (in Impostazioni la sezione si chiama «Mappa del porto», `/impostazioni/pianta`): le coordinate dei posti (`berths.plan_x/plan_y/plan_angle`) sono in pixel della foto caricata;
   la geometria sta in `src/lib/plan.ts`, la foto nel database (`marina_plans`) ed è servita da `/pianta/immagine`.
   La mappa (`/mappa`) ha «Schema» (predefinito: disegno pulito ricavato dalla pianta, `buildDrawing` in `src/lib/plan-drawing.ts`)
   e «Foto dal vero» (`?vista=foto`), entrambe in `PlanView` con le sagome delle barche alla loro misura e la poppa verso il pontile.

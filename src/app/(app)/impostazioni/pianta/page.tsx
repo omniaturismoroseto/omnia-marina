@@ -27,7 +27,7 @@ import { PhotoUploader } from "./photo-uploader";
 import { PlanEditor } from "./plan-editor";
 import { SurroundingsEditor, type BerthRect } from "./surroundings-editor";
 
-export const metadata: Metadata = { title: "Pianta dal vero" };
+export const metadata: Metadata = { title: "Mappa del porto" };
 
 export default page(async function PlanSettingsPage() {
   const ctx = await requireMarina(["admin"]);
@@ -366,6 +366,7 @@ export default page(async function PlanSettingsPage() {
             <PlanEditor
               key={`${marina.version}:${berthRows.length}`}
               imageUrl={`/pianta/immagine?v=${marina.version}`}
+              baseUrl={baseUrl}
               width={marina.width!}
               height={marina.height!}
               initialPxPerMeter={marina.pxPerMeter}

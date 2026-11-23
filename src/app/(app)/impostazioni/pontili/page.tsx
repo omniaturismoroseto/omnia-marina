@@ -101,7 +101,7 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
             {" "}
             Sulla pianta ogni pontile di prima resta un tratto a sé: in{" "}
             <Link href="/impostazioni/pianta" className="link">
-              Pianta dal vero
+              Mappa del porto
             </Link>{" "}
             lo sposti, ruoti e tracci da solo.
           </Notice>
