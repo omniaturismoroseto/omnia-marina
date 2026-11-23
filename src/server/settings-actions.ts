@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { and, asc, eq, inArray, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { berthCategories, berths, contracts, marinas, memberships, ownerAccess, piers, users } from "@/db/schema";
+import { berthCategories, berths, contracts, marinas, memberships, ownerAccess, pierSections, piers, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { isAccountManagerEmail, visibleUser } from "@/lib/account-manager";
 import { destroyUserSessions } from "@/lib/auth/session";
@@ -15,6 +15,8 @@ import { ROLE_LABEL } from "@/lib/labels";
 import { renameCodes } from "@/lib/berth-codes";
 import { movedOrder, parseIdList } from "@/lib/pier-merge";
 import { berthSlots } from "@/lib/plan";
+import { placeNewBerths, targetSection } from "@/lib/plan-extend";
+import { traceFromColumns } from "@/lib/plan-units";
 import { pierGroupKey } from "@/lib/pricing";
 import { parseCoordinates } from "@/lib/weather";
 import { checkPassword, createAccount, setPassword } from "./credentials";
@@ -303,7 +305,7 @@ export async function generateBerths(_prev: FormState, formData: FormData): Prom
   if (d.to - d.from >= 200) return fail("Controlla i campi evidenziati.", { to: "Al massimo 200 posti per volta." });
 
   const [pier] = await db
-    .select({ id: piers.id })
+    .select()
     .from(piers)
     .where(and(eq(piers.id, d.pierId), eq(piers.marinaId, ctx.marinaId)))
     .limit(1);
@@ -314,6 +316,31 @@ export async function generateBerths(_prev: FormState, formData: FormData): Prom
     .limit(1);
   if (!pier) return fail("Pontile non trovato.");
   if (!category) return fail("Controlla i campi evidenziati.", { categoryId: "Categoria non trovata." });
+  const prefix = d.prefix.toUpperCase();
+
+  // Pontile unito: i posti nuovi vanno nel tratto con la stessa sigla (CN13 nel tratto dei CN), altrimenti nell'ultimo.
+  const [sections, pierBerths] = await Promise.all([
+    db
+      .select()
+      .from(pierSections)
+      .where(and(eq(pierSections.pierId, pier.id), eq(pierSections.marinaId, ctx.marinaId)))
+      .orderBy(asc(pierSections.sortOrder)),
+    db
+      .select({
+        code: berths.code,
+        sectionId: berths.sectionId,
+        side: berths.side,
+        position: berths.position,
+        x: berths.planX,
+        y: berths.planY,
+        angle: berths.planAngle,
+        lengthCm: berths.lengthCm,
+        beamCm: berths.beamCm,
+      })
+      .from(berths)
+      .where(and(eq(berths.pierId, pier.id), eq(berths.marinaId, ctx.marinaId))),
+  ]);
+  const section = targetSection(sections, pierBerths, prefix);
 
   // I nuovi posti proseguono dopo quelli già presenti sullo stesso lato (vedi berthSlots).
   const [{ nextSx, nextDx }] = await db
@@ -324,11 +351,11 @@ export async function generateBerths(_prev: FormState, formData: FormData): Prom
     .from(berths)
     .where(eq(berths.pierId, pier.id));
 
-  const prefix = d.prefix.toUpperCase();
   const slots = berthSlots(d.layout, d.to - d.from + 1, nextSx, nextDx);
   const values = slots.map((slot, i) => ({
     marinaId: ctx.marinaId,
     pierId: pier.id,
+    sectionId: section?.id ?? null,
     categoryId: category.id,
     code: `${prefix}${String(d.from + i).padStart(2, "0")}`,
     side: slot.side,
@@ -340,11 +367,61 @@ export async function generateBerths(_prev: FormState, formData: FormData): Prom
     hasPower: d.hasPower,
   }));
 
-  const created = await db.insert(berths).values(values).onConflictDoNothing().returning({ id: berths.id });
+  const created = await db.insert(berths).values(values).onConflictDoNothing().returning({
+    id: berths.id,
+    side: berths.side,
+    position: berths.position,
+    lengthCm: berths.lengthCm,
+    beamCm: berths.beamCm,
+  });
+  const placed = await placeOnPlan(ctx.marinaId, created, section ?? pier, pierBerths.filter((b) => b.sectionId === (section?.id ?? null)));
   await audit(ctx, "creazione", "posti barca", pier.id, `${created.length} posti (${values[0].code}–${values[values.length - 1].code})`);
   revalidatePath("/", "layout");
   const skipped = values.length - created.length;
-  return { ok: true, message: `${created.length} posti creati${skipped > 0 ? `, ${skipped} già esistenti saltati` : ""}.` };
+  const where = section ? `nel tratto ${section.label}` : "sul pontile";
+  const plan =
+    placed === null || created.length === 0
+      ? ""
+      : placed === created.length
+        ? ` Già disposti sulla pianta ${where}, dopo gli altri: se serve ritoccali in Pianta dal vero.`
+        : placed > 0
+          ? ` ${placed} già disposti sulla pianta ${where}; gli altri (fuori dalla foto) vanno disposti in Pianta dal vero.`
+          : " Sulla pianta vanno disposti in Pianta dal vero: questo pontile non è ancora disegnato.";
+  const made = created.length === 1 ? "1 posto creato" : `${created.length} posti creati`;
+  return { ok: true, message: `${made}${skipped > 0 ? `, ${skipped} già esistenti saltati` : ""}.${plan}` };
+}
+
+/**
+ * Dispone sulla foto i posti appena creati, in coda a quelli della stessa struttura (pontile o tratto): vedi placeNewBerths.
+ * Restituisce quanti ne ha disposti, o null se il porto non ha ancora la pianta con la scala.
+ */
+async function placeOnPlan(
+  marinaId: string,
+  created: { id: string; side: "sx" | "dx"; position: number; lengthCm: number; beamCm: number }[],
+  unit: { planAx: number | null; planAy: number | null; planBx: number | null; planBy: number | null; planWidthM: number | null },
+  unitBerths: { side: "sx" | "dx"; position: number; x: number | null; y: number | null; angle: number | null; lengthCm: number; beamCm: number }[],
+): Promise<number | null> {
+  const [marina] = await db
+    .select({ width: marinas.planWidth, height: marinas.planHeight, pxPerMeter: marinas.planPxPerMeter })
+    .from(marinas)
+    .where(eq(marinas.id, marinaId));
+  if (!marina?.width || !marina.height || !marina.pxPerMeter) return null;
+  const existing = unitBerths.flatMap((b) => (b.x !== null && b.y !== null ? [{ ...b, x: b.x, y: b.y, angle: b.angle ?? 0 }] : []));
+  // Come nell'editor: un posto può sporgere un poco dal bordo della foto, non stare altrove.
+  const margin = 0.1;
+  const inside = (p: { x: number; y: number }) =>
+    p.x >= -marina.width! * margin && p.x <= marina.width! * (1 + margin) && p.y >= -marina.height! * margin && p.y <= marina.height! * (1 + margin);
+  const placements = placeNewBerths(existing, created, traceFromColumns(unit), marina.pxPerMeter).filter(inside);
+  if (placements.length === 0) return 0;
+  await db.transaction(async (tx) => {
+    for (const p of placements) {
+      await tx
+        .update(berths)
+        .set({ planX: p.x, planY: p.y, planAngle: p.angle })
+        .where(and(eq(berths.id, p.id), eq(berths.marinaId, marinaId)));
+    }
+  });
+  return placements.length;
 }
 
 const berthSchema = z.object({
