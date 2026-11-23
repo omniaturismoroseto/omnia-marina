@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { marinas, memberships, ownerAccess, owners, type Role } from "@/db/schema";
+import { privacyPending } from "./app-privacy";
 import { isAccountManagerEmail } from "./account-manager";
 import { getSession } from "./auth/session";
 
@@ -20,6 +21,8 @@ export interface OwnerAreaInfo {
   marinaName: string;
   ownerId: string;
   ownerName: string;
+  /** Vero finché il diportista non ha accettato l'informativa dell'app nella versione attuale. */
+  privacyPending: boolean;
 }
 
 export interface UserContext {
@@ -47,6 +50,8 @@ export interface OwnerContext {
   marinaName: string;
   ownerId: string;
   ownerName: string;
+  /** Vero finché l'informativa dell'app non è accettata: le pagine rimandano a /diportista/benvenuto. */
+  privacyPending: boolean;
   /** Vero se l'utente ha anche altre aree (altri clienti o il gestionale): mostra «Cambia». */
   canSwitch: boolean;
   /**
@@ -97,19 +102,22 @@ const loadContext = cache(async (): Promise<UserContext | null> => {
 
 /** Clienti di cui l'utente può aprire l'area diportista (accessi non revocati, dati non cancellati). */
 export async function ownerAreasFor(userId: string): Promise<OwnerAreaInfo[]> {
-  return db
+  const rows = await db
     .select({
       accessId: ownerAccess.id,
       marinaId: ownerAccess.marinaId,
       marinaName: marinas.name,
       ownerId: ownerAccess.ownerId,
       ownerName: owners.displayName,
+      acceptedVersion: ownerAccess.privacyVersion,
+      policyVersion: marinas.privacyPolicyVersion,
     })
     .from(ownerAccess)
     .innerJoin(owners, eq(owners.id, ownerAccess.ownerId))
     .innerJoin(marinas, eq(marinas.id, ownerAccess.marinaId))
     .where(and(eq(ownerAccess.userId, userId), isNull(ownerAccess.revokedAt), isNull(owners.anonymizedAt)))
     .orderBy(marinas.name, owners.displayName);
+  return rows.map(({ acceptedVersion, policyVersion, ...area }) => ({ ...area, privacyPending: privacyPending(acceptedVersion, policyVersion) }));
 }
 
 // Utente autenticato, anche senza un porto selezionato.
@@ -143,7 +151,11 @@ export async function requireMarina(allowed: Role[] = EVERYONE): Promise<MarinaC
  * Utente nell'area diportista di un cliente. È il punto unico da cui le pagine del diportista ottengono porto e
  * cliente: ogni lettura filtra per `ownerId` e `marinaId` di qui, mai per identificativi arrivati dal browser.
  */
-export async function requireOwner(): Promise<OwnerContext> {
+/**
+ * Diportista nella sua area. Finché non ha accettato l'informativa dell'app viene rimandato a /diportista/benvenuto;
+ * solo quella pagina e la sua azione passano `allowPrivacyPending`.
+ */
+export async function requireOwner({ allowPrivacyPending = false }: { allowPrivacyPending?: boolean } = {}): Promise<OwnerContext> {
   const ctx = await requireUser();
   if (ctx.accountManager && ctx.previewOwnerId && ctx.activeMarinaId) {
     const [owner] = await db
@@ -153,11 +165,13 @@ export async function requireOwner(): Promise<OwnerContext> {
       .where(and(eq(owners.id, ctx.previewOwnerId), eq(owners.marinaId, ctx.activeMarinaId), isNull(owners.anonymizedAt)))
       .limit(1);
     if (!owner) redirect("/porti");
-    return { sessionId: ctx.sessionId, user: ctx.user, accessId: "", marinaId: ctx.activeMarinaId, ...owner, canSwitch: true, preview: true };
+    // L'account manager in prova non accetta niente al posto del cliente: vede la pagina di benvenuto solo se la apre.
+    return { sessionId: ctx.sessionId, user: ctx.user, accessId: "", marinaId: ctx.activeMarinaId, ...owner, privacyPending: false, canSwitch: true, preview: true };
   }
   const area = ctx.ownerAreas.find((a) => a.accessId === ctx.activeOwnerAccessId);
   // Nessuna area aperta, oppure l'accesso è stato revocato: si torna alla scelta.
   if (!area) redirect("/porti");
+  if (area.privacyPending && !allowPrivacyPending) redirect("/diportista/benvenuto");
   const canSwitch = ctx.ownerAreas.length + ctx.memberships.length > 1;
   return { sessionId: ctx.sessionId, user: ctx.user, ...area, canSwitch, preview: false };
 }

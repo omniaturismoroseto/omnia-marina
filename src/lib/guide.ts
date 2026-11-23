@@ -160,6 +160,8 @@ export const GUIDE: GuideSection[] = [
           "Nasce un codice di 8 caratteri, valido 30 giorni e una volta sola. Consegnalo con il «Foglio di benvenuto» (da stampare, con il QR code), con «Copia messaggio» o con «WhatsApp».",
           "La persona apre il collegamento o inquadra il QR, scrive il codice fiscale dell'intestatario (per le società la partita IVA), sceglie email e password e conferma l'email. Da lì entra dalla normale pagina di accesso e vede solo l'area del suo cliente, mai il gestionale.",
           "Nello stesso riquadro vedi chi ha l'accesso e quando è entrato l'ultima volta. «Revoca» lo toglie subito; «Nuovo codice» sostituisce un codice perso, scaduto o bloccato dopo troppi tentativi sbagliati.",
+          "Al primo accesso il diportista legge l'informativa privacy del porto (quella di «Impostazioni» → «Porto») con la parte sull'uso dell'app e la accetta: la presa visione si registra da sola nella scheda del cliente, in forma digitale. Il passo dopo è «Attiva le notifiche»: con un tocco il telefono chiede il permesso; si può anche scegliere «Non ora» e attivarle più tardi da «Messaggi». Se cambi la versione dell'informativa, al prossimo accesso gliela richiediamo.",
+          "Nell'app il diportista vede la foto della sua barca, se l'avete caricata (altrimenti la sagoma del tipo di barca); non può cambiarla.",
         ],
       },
     ],

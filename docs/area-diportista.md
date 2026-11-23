@@ -114,9 +114,12 @@ Il porto non invia altre email: l'invito viaggia con il codice.
 ## Funzioni dell'area
 
 Fatte (prima versione):
+- **Benvenuto** (`/diportista/benvenuto`): al primo accesso, e quando il porto cambia la versione dell'informativa,
+  il diportista legge l'informativa del porto e la parte sull'uso dell'app (`src/lib/app-privacy.ts`) e la accetta;
+  la presa visione va nel registro dei consensi del cliente (digitale). Secondo passo, facoltativo: le notifiche.
 - **La mia barca** (`/diportista`): posto e pontile, contratto attivo da scaricare (stesso documento della stampa
   dell'ufficio), scadenze (rate da pagare, fine contratto entro 60 giorni, assicurazione entro 30), barche, contatti e
-  orari del porto, informazioni utili, contratti passati. **Estratto conto** su `/diportista/conto`.
+  orari del porto, informazioni utili, contratti passati; la foto della barca caricata dal porto (o la sagoma del tipo). **Estratto conto** su `/diportista/conto`.
 - **Messaggi** (`/messaggi` per il personale, `/diportista/messaggi` per il diportista): a un cliente, a un pontile,
   a un tipo di contratto, a chi è in porto o a tutti; urgenti in evidenza finché non letti; chi ha letto e quando;
   notifiche web push (chiavi VAPID, vedi COME-LAVORIAMO.md).

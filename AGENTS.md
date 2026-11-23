@@ -117,6 +117,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   `src/server/owner-access.ts`; codici, codice fiscale e messaggio in `src/lib/owner-access.ts`; attivazione pubblica
   su `/attiva`; riquadro «Accesso all'app» nella scheda cliente. L'area si apre solo con l'email confermata
   (`isEmailVerified`); anonimizzare un cliente cancella inviti e accessi.
+  Primo accesso: `requireOwner()` rimanda a `/diportista/benvenuto` finché `owner_access.privacy_version` non è
+  `appPrivacyVersion(marinas.privacy_policy_version)` (`src/lib/app-privacy.ts`: informativa del porto + parte sull'app); solo la pagina
+  di benvenuto e il layout passano `allowPrivacyPending`. `acceptAppPrivacy` segna l'accesso e scrive in `privacy_consents`
+  (informativa, digitale). Secondo passo: notifiche (`PushToggle`), facoltative. Marchio Omnia Marina in basso al centro.
+  Il diportista vede la foto delle sue barche (`/barche/[id]/foto` filtra per `ownerId`), non la carica.
   Dati del diportista in `src/server/owner-area.ts` (contratti attivi e conclusi, barche, addebiti, scadenze); il contratto
   stampato è un componente unico (`src/components/contract-document.tsx`) per ufficio e diportista.
 - Messaggi ai diportisti (`/messaggi`, `src/server/messages.ts`): destinatari fissati all'invio in `message_recipients`

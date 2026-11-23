@@ -17,8 +17,9 @@ import { unreadCount } from "@/server/messages";
 export const metadata: Metadata = { appleWebApp: { capable: true, title: "Omnia Marina", statusBarStyle: "black-translucent" } };
 
 // Barra in alto dell'area diportista: porto, cliente, cambio area ed uscita. Niente menu del gestionale.
+// Il layout non controlla l'informativa (lo fanno le pagine): deve poter incorniciare anche la pagina di benvenuto.
 async function TopBar() {
-  const ctx = await requireOwner();
+  const ctx = await requireOwner({ allowPrivacyPending: true });
   const [marina] = await db
     .select({ logoVersion: marinas.logoVersion, logoWidth: marinas.logoWidth, logoHeight: marinas.logoHeight })
     .from(marinas)
@@ -48,14 +49,15 @@ async function TopBar() {
           </button>
         </form>
       </div>
-      <OwnerNav unread={unread} />
+      {/* Finché l'informativa non è accettata le altre pagine non si aprono: niente menu. */}
+      {!ctx.privacyPending && <OwnerNav unread={unread} />}
     </>
   );
 }
 
 // Messaggi urgenti non letti: restano in evidenza su ogni pagina finché qualcuno non li apre.
 async function UrgentBanner() {
-  const ctx = await requireOwner();
+  const ctx = await requireOwner({ allowPrivacyPending: true });
   const { urgent } = await unreadCount({ marinaId: ctx.marinaId, ownerId: ctx.ownerId });
   if (urgent === 0) return null;
   return (
@@ -82,8 +84,9 @@ export default function OwnerAreaLayout({ children }: { children: React.ReactNod
         </Suspense>
         {children}
       </main>
-      <footer className="mx-auto max-w-3xl px-4 pb-24 sm:px-6 sm:pb-8">
-        <div className="w-28 opacity-60">
+      {/* Il marchio di Omnia Marina chiude ogni pagina, in basso al centro. */}
+      <footer className="mx-auto flex max-w-3xl justify-center px-4 pb-24 sm:px-6 sm:pb-8">
+        <div className="w-32 opacity-70">
           <BrandWide />
         </div>
       </footer>
