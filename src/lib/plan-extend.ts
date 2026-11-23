@@ -162,3 +162,73 @@ export function targetSection<S extends { id: string }>(sections: S[], list: { c
   if (!best) return sections[sections.length - 1];
   return sections.find((s) => s.id === best.sectionId) ?? null;
 }
+
+/**
+ * Linea di un pontile (o tratto) mai tracciato, ricavata dai suoi posti disposti: direzione dall'orientamento dei posti,
+ * verso dalla radice alla testata secondo le posizioni, lunghezza quanto i posti, a metà tra i due lati (o dietro le poppe
+ * se c'è un lato solo). Null senza posti disposti.
+ */
+export function estimateTrace(existing: PlacedBerth[], pxPerMeter: number): Trace | null {
+  const m = pxPerMeter;
+  if (existing.length === 0 || m <= 0) return null;
+  let cx = 0;
+  let cy = 0;
+  for (const b of existing) {
+    cx += Math.cos((2 * b.angle * Math.PI) / 180);
+    cy += Math.sin((2 * b.angle * Math.PI) / 180);
+  }
+  const angle = Math.atan2(cy, cx) / 2;
+  let d = { x: Math.cos(angle), y: Math.sin(angle) };
+  const sides = { sx: bySlot(existing.filter((b) => b.side === "sx")), dx: bySlot(existing.filter((b) => b.side === "dx")) };
+  const longest = sides.sx.length >= sides.dx.length ? sides.sx : sides.dx;
+  const first = longest[0];
+  const last = longest[longest.length - 1];
+  if ((last.x - first.x) * d.x + (last.y - first.y) * d.y < 0) d = { x: -d.x, y: -d.y };
+  const left = { x: d.y, y: -d.x };
+  const origin = existing[0];
+  const along = (p: Point) => (p.x - origin.x) * d.x + (p.y - origin.y) * d.y;
+  const across = (p: Point) => (p.x - origin.x) * left.x + (p.y - origin.y) * left.y;
+  let lineAt: number;
+  if (sides.sx.length && sides.dx.length) lineAt = (mean(sides.sx.map(across)) + mean(sides.dx.map(across))) / 2;
+  else {
+    const side = sides.sx.length ? "sx" : "dx";
+    const list = sides[side];
+    lineAt = mean(list.map(across)) - (side === "sx" ? 1 : -1) * (1 + (mean(list.map((b) => b.lengthCm)) / 200) * m);
+  }
+  const ends = existing.flatMap((b) => [along(b) - (b.beamCm / 200) * m, along(b) + (b.beamCm / 200) * m]);
+  const at = (t: number): Point => ({ x: round1(origin.x + d.x * t + left.x * lineAt), y: round1(origin.y + d.y * t + left.y * lineAt) });
+  return { a: at(Math.min(...ends)), b: at(Math.max(...ends)), widthM: 2 };
+}
+
+/**
+ * Posizioni di tutto un pontile dopo aver cambiato un suo tratto: i tratti (gruppi) uno dopo l'altro, ognuno dalla colonna
+ * libera successiva, con dentro le stesse distanze di prima (i posti uno di fronte all'altro restano tali). Serve alla griglia
+ * della mappa senza pianta, dove la posizione è la colonna.
+ */
+export function renumberPier(groups: { id: string; side: "sx" | "dx"; position: number }[][]): Map<string, number> {
+  const result = new Map<string, number>();
+  const next = { sx: 0, dx: 0 };
+  for (const group of groups) {
+    if (group.length === 0) continue;
+    const offset = Math.max(next.sx, next.dx);
+    const min = Math.min(...group.map((b) => b.position));
+    for (const b of group) {
+      const position = offset + b.position - min;
+      result.set(b.id, position);
+      next[b.side] = Math.max(next[b.side], position + 1);
+    }
+  }
+  return result;
+}
+
+/**
+ * Linea abbastanza lunga per `slots` posti larghi `beamPx` (con un piccolo margine tra l'uno e l'altro): se è più corta si allunga
+ * dalla parte della testata, così i posti messi tutti su un lato non si sovrappongono. Se basta, resta com'è.
+ */
+export function fitTrace(trace: Trace, slots: number, beamPx: number): Trace {
+  const len = Math.hypot(trace.b.x - trace.a.x, trace.b.y - trace.a.y);
+  const needed = slots * beamPx * 1.1;
+  if (len < 1 || needed <= len) return trace;
+  const k = needed / len;
+  return { ...trace, b: { x: round1(trace.a.x + (trace.b.x - trace.a.x) * k), y: round1(trace.a.y + (trace.b.y - trace.a.y) * k) } };
+}

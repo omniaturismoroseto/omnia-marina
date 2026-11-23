@@ -383,11 +383,14 @@ export function DeletePierButton({ pierId, berthCount }: { pierId: string; berth
 
 export function GenerateBerthsForm({
   pierId,
+  sectionId,
   prefix,
   nextNumber,
   categories,
 }: {
   pierId: string;
+  /** Tratto di un pontile unito che riceve i posti; senza, quello della sigla. */
+  sectionId?: string;
   prefix: string;
   // Primo numero libero dopo i posti già creati: la numerazione prosegue da lì.
   nextNumber: number;
@@ -396,6 +399,7 @@ export function GenerateBerthsForm({
   return (
     <Form action={generateBerths} className="space-y-3">
       <input type="hidden" name="pierId" value={pierId} />
+      {sectionId && <input type="hidden" name="sectionId" value={sectionId} />}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Field name="prefix" label="Prefisso" defaultValue={prefix} maxLength={4} required />
         {/* key: dopo ogni creazione i numeri ripartono dal successivo, senza ricaricare il modulo (resta il messaggio). */}

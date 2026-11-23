@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { db } from "@/db";
@@ -7,7 +7,7 @@ import { berthCategories, berths, boats, contracts, owners, pierSections, piers,
 import { appendPositions, movedOrder, parseIdList } from "@/lib/pier-merge";
 import { planUnits, unitPositions } from "@/lib/plan-units";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
-import { mergePiers, sectionFromBerths } from "@/server/piers";
+import { arrangeUnit, dissolveSection, mergePiers, sectionFromBerths, splitSection } from "@/server/piers";
 
 describe("unione dei pontili: regole pure", () => {
   it("strutture della pianta: un'unità per tratto, posizioni dalla radice del tratto", () => {
@@ -111,7 +111,7 @@ describe.skipIf(!hasDb)("unione dei pontili (database)", () => {
       { marinaId, pierId: a2.id, categoryId, code: "M201", side: "sx", position: 0, lengthCm: 800, beamCm: 300 },
       { marinaId, pierId: a2.id, categoryId, code: "M202", side: "dx", position: 0, lengthCm: 800, beamCm: 300 },
     ]);
-    const [moved] = await db.select({ id: berths.id }).from(berths).where(eq(berths.code, "M201"));
+    const [moved] = await db.select({ id: berths.id }).from(berths).where(and(eq(berths.code, "M201"), eq(berths.marinaId, marinaId)));
     const [owner] = await db.insert(owners).values({ marinaId, type: "persona", firstName: "Ada", lastName: "Molo", displayName: "Molo Ada" }).returning({ id: owners.id });
     const [boat] = await db.insert(boats).values({ marinaId, ownerId: owner.id, name: "Gamma", lengthCm: 700, beamCm: 280 }).returning({ id: boats.id });
     const [contract] = await db
@@ -170,6 +170,62 @@ describe.skipIf(!hasDb)("unione dei pontili (database)", () => {
     expect(rows.map((b) => b.sectionId === sections[0].id)).toEqual([false, true, true]);
     // Posti di un altro porto non contano.
     await expect(db.transaction((tx) => sectionFromBerths(tx, otherMarinaId, pier.id, [id("L01")], "x"))).rejects.toThrow(/non trovato/);
+  });
+
+  it("un tratto si ridispone, si separa in un pontile a sé o si toglie", async () => {
+    const [x, y] = await db
+      .insert(piers)
+      .values([
+        { marinaId, code: "X", name: "Molo X", sortOrder: 50, baseRate: false },
+        { marinaId, code: "Y", name: "molo x", sortOrder: 51 },
+      ])
+      .returning({ id: piers.id });
+    await db.insert(berths).values([
+      ...["X01", "X02"].map((code, i) => ({ marinaId, pierId: x.id, categoryId, code, side: (i % 2 ? "dx" : "sx") as "sx" | "dx", position: 0, lengthCm: 800, beamCm: 300 })),
+      ...["Y03", "Y01", "Y02"].map((code) => ({ marinaId, pierId: y.id, categoryId, code, side: "sx" as const, position: Number(code.slice(1)), lengthCm: 800, beamCm: 300 })),
+    ]);
+    const [list] = await db.select({ id: priceLists.id }).from(priceLists).where(eq(priceLists.marinaId, marinaId)).limit(1);
+    if (list) await db.insert(rates).values({ marinaId, priceListId: list.id, categoryId, pierId: x.id, annual: 123400 }).onConflictDoNothing();
+    await db.transaction((tx) => mergePiers(tx, marinaId, x.id, [y.id]));
+    const [tratto] = await db.select().from(pierSections).where(and(eq(pierSections.pierId, x.id), eq(pierSections.label, "Y")));
+
+    // Disposizione: tutti a destra, in ordine di codice, dopo i posti del primo tratto.
+    await db.transaction((tx) => arrangeUnit(tx, marinaId, x.id, tratto.id, "dx"));
+    const yRows = await db.select().from(berths).where(eq(berths.sectionId, tratto.id)).orderBy(asc(berths.code));
+    expect(yRows.map((b) => [b.code, b.side, b.position])).toEqual([
+      ["Y01", "dx", 1],
+      ["Y02", "dx", 2],
+      ["Y03", "dx", 3],
+    ]);
+
+    // Separa: nuovo pontile con i posti del tratto e gli stessi prezzi; al pontile di partenza resta un tratto solo, che si toglie.
+    const split = await db.transaction((tx) => splitSection(tx, marinaId, tratto.id, { code: "Y", name: "Molo Y" }));
+    expect(split.moved).toBe(3);
+    const [yPier] = await db.select().from(piers).where(eq(piers.id, split.pierId));
+    expect(yPier.baseRate).toBe(false);
+    expect(yPier.sortOrder).toBe(51);
+    const moved = await db.select().from(berths).where(eq(berths.pierId, split.pierId)).orderBy(asc(berths.code));
+    expect(moved.map((b) => [b.code, b.position, b.sectionId])).toEqual([
+      ["Y01", 0, null],
+      ["Y02", 1, null],
+      ["Y03", 2, null],
+    ]);
+    if (list) expect((await db.select().from(rates).where(eq(rates.pierId, split.pierId)))[0]?.annual).toBe(123400);
+    expect(await db.select().from(pierSections).where(eq(pierSections.pierId, x.id))).toHaveLength(0);
+
+    // Togli tratto (su un altro pontile unito): i posti restano, senza tratto.
+    const [z] = await db.insert(piers).values({ marinaId, code: "Z", name: "Molo Z" }).returning({ id: piers.id });
+    await db.insert(berths).values({ marinaId, pierId: z.id, categoryId, code: "Z01", lengthCm: 800, beamCm: 300 });
+    const [w] = await db.insert(piers).values({ marinaId, code: "W", name: "molo z" }).returning({ id: piers.id });
+    await db.insert(berths).values({ marinaId, pierId: w.id, categoryId, code: "W01", lengthCm: 800, beamCm: 300 });
+    await db.transaction((tx) => mergePiers(tx, marinaId, z.id, [w.id]));
+    const [wSection] = await db.select().from(pierSections).where(and(eq(pierSections.pierId, z.id), eq(pierSections.label, "W")));
+    await db.transaction((tx) => dissolveSection(tx, marinaId, wSection.id));
+    const [w01] = await db.select().from(berths).where(and(eq(berths.code, "W01"), eq(berths.marinaId, marinaId)));
+    expect([w01.pierId, w01.sectionId]).toEqual([z.id, null]);
+    // Un tratto di un altro porto non si tocca.
+    const [zSection] = await db.select().from(pierSections).where(eq(pierSections.pierId, z.id));
+    await expect(db.transaction((tx) => dissolveSection(tx, otherMarinaId, zSection.id))).rejects.toThrow(/non trovato/);
   });
 
   it("non unisce pontili di un altro porto", async () => {

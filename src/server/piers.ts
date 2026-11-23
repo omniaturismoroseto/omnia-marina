@@ -1,8 +1,12 @@
 import "server-only";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import type { Tx } from "@/db";
-import { berths, pierSections, piers } from "@/db/schema";
+import { berths, marinas, pierSections, piers, rates } from "@/db/schema";
+import { compareCodes } from "@/lib/berth-codes";
 import { appendPositions } from "@/lib/pier-merge";
+import { berthSlots, layoutPier } from "@/lib/plan";
+import { estimateTrace, fitTrace, renumberPier, type Trace } from "@/lib/plan-extend";
+import { traceFromColumns, unitPositions } from "@/lib/plan-units";
 import { DomainError } from "./errors";
 
 type PierRow = typeof piers.$inferSelect;
@@ -148,4 +152,154 @@ export async function sectionFromBerths(tx: Tx, marinaId: string, pierId: string
     if (!still) await tx.delete(pierSections).where(and(eq(pierSections.id, id), eq(pierSections.marinaId, marinaId)));
   }
   return picked.length;
+}
+
+// ───────────────────────── Tratti di un pontile ─────────────────────────
+
+export type BerthLayout = "alternati" | "sx" | "dx";
+
+const lineColumns = (t: Trace | null) => ({ planAx: t?.a.x ?? null, planAy: t?.a.y ?? null, planBx: t?.b.x ?? null, planBy: t?.b.y ?? null, planWidthM: t?.widthM ?? null });
+
+async function loadPier(tx: Tx, marinaId: string, pierId: string) {
+  const [pier] = await tx
+    .select()
+    .from(piers)
+    .where(and(eq(piers.id, pierId), eq(piers.marinaId, marinaId)))
+    .for("update");
+  if (!pier) throw new DomainError("Pontile non trovato.");
+  const [sections, rows] = await Promise.all([
+    tx
+      .select()
+      .from(pierSections)
+      .where(and(eq(pierSections.pierId, pierId), eq(pierSections.marinaId, marinaId)))
+      .orderBy(asc(pierSections.sortOrder)),
+    tx
+      .select({
+        id: berths.id,
+        code: berths.code,
+        sectionId: berths.sectionId,
+        side: berths.side,
+        position: berths.position,
+        x: berths.planX,
+        y: berths.planY,
+        angle: berths.planAngle,
+        lengthCm: berths.lengthCm,
+        beamCm: berths.beamCm,
+      })
+      .from(berths)
+      .where(and(eq(berths.pierId, pierId), eq(berths.marinaId, marinaId))),
+  ]);
+  return { pier, sections, rows };
+}
+
+async function loadSection(tx: Tx, marinaId: string, sectionId: string) {
+  const [section] = await tx
+    .select()
+    .from(pierSections)
+    .where(and(eq(pierSections.id, sectionId), eq(pierSections.marinaId, marinaId)))
+    .for("update");
+  if (!section) throw new DomainError("Tratto non trovato.");
+  return section;
+}
+
+/**
+ * Ridispone i posti di un tratto (o del pontile, con `sectionId` null): in ordine di codice dalla radice, alternati sui due lati
+ * o tutti da una parte. Le posizioni del pontile si rinumerano tratto dopo tratto; sulla pianta i posti si rimettono lungo la
+ * linea del tratto (quella tracciata o, se manca, quella ricavata dai posti, che da allora resta salvata).
+ * Restituisce quanti posti ha disposto e se li ha rimessi anche sulla pianta.
+ */
+export async function arrangeUnit(tx: Tx, marinaId: string, pierId: string, sectionId: string | null, layout: BerthLayout): Promise<{ count: number; onPlan: boolean }> {
+  const { pier, sections, rows } = await loadPier(tx, marinaId, pierId);
+  const section = sectionId ? sections.find((s) => s.id === sectionId) : null;
+  if (sectionId && !section) throw new DomainError("Tratto non trovato.");
+  const known = new Set(sections.map((s) => s.id));
+  const groupOf = (b: { sectionId: string | null }) => (b.sectionId && known.has(b.sectionId) ? b.sectionId : null);
+  const unit = rows.filter((b) => groupOf(b) === (sectionId ?? null)).sort((p, q) => compareCodes(p.code, q.code));
+  if (unit.length === 0) throw new DomainError("Non ci sono posti da disporre.");
+
+  // Lato e posizione nuovi dentro il tratto, contati dalla sua radice.
+  const slots = berthSlots(layout, unit.length, 0, 0);
+  const rel = new Map(unit.map((b, i) => [b.id, slots[i]]));
+  const groups = [...sections.map((s) => s.id), null].map((g) =>
+    rows.filter((b) => groupOf(b) === g).map((b) => ({ id: b.id, side: rel.get(b.id)?.side ?? b.side, position: rel.get(b.id)?.position ?? b.position })),
+  );
+  const positions = renumberPier(groups);
+  for (const b of rows) {
+    const side = rel.get(b.id)?.side ?? b.side;
+    const position = positions.get(b.id) ?? b.position;
+    if (side !== b.side || position !== b.position) await tx.update(berths).set({ side, position }).where(eq(berths.id, b.id));
+  }
+
+  const [marina] = await tx.select({ pxPerMeter: marinas.planPxPerMeter }).from(marinas).where(eq(marinas.id, marinaId));
+  const m = marina?.pxPerMeter;
+  if (!m) return { count: unit.length, onPlan: false };
+  const saved = traceFromColumns(section ?? pier);
+  const placed = unit.flatMap((b) => (b.x !== null && b.y !== null ? [{ ...b, x: b.x, y: b.y, angle: b.angle ?? 0 }] : []));
+  const base = saved ?? estimateTrace(placed, m);
+  if (!base) return { count: unit.length, onPlan: false };
+  // Con più posti per lato di prima (es. tutti da una parte) la linea si allunga quanto serve, per non sovrapporli.
+  const slotCount = Math.max(...[...rel.values()].map((r) => r.position)) + 1;
+  const trace = fitTrace(base, slotCount, (Math.max(...unit.map((b) => b.beamCm)) / 100) * m);
+  const placements = layoutPier(
+    unit.map((b) => ({ id: b.id, side: rel.get(b.id)!.side, position: rel.get(b.id)!.position, lengthCm: b.lengthCm, beamCm: b.beamCm })),
+    trace.a,
+    trace.b,
+    m,
+    trace.widthM,
+  );
+  for (const p of placements) await tx.update(berths).set({ planX: p.x, planY: p.y, planAngle: p.angle }).where(eq(berths.id, p.id));
+  if (trace !== saved) {
+    if (section) await tx.update(pierSections).set(lineColumns(trace)).where(eq(pierSections.id, section.id));
+    else await tx.update(piers).set(lineColumns(trace)).where(eq(piers.id, pier.id));
+  }
+  return { count: unit.length, onPlan: placements.length > 0 };
+}
+
+export async function renameSection(tx: Tx, marinaId: string, sectionId: string, label: string): Promise<void> {
+  await loadSection(tx, marinaId, sectionId);
+  await tx.update(pierSections).set({ label }).where(eq(pierSections.id, sectionId));
+}
+
+/** Toglie il tratto: i suoi posti tornano a seguire la linea del pontile (che, se manca, prende quella del tratto). */
+export async function dissolveSection(tx: Tx, marinaId: string, sectionId: string): Promise<{ label: string; pierId: string }> {
+  const section = await loadSection(tx, marinaId, sectionId);
+  await tx.update(berths).set({ sectionId: null }).where(and(eq(berths.sectionId, sectionId), eq(berths.marinaId, marinaId)));
+  const [pier] = await tx.select().from(piers).where(eq(piers.id, section.pierId));
+  if (pier && !traceFromColumns(pier)) await tx.update(piers).set(lineColumns(traceFromColumns(section))).where(eq(piers.id, pier.id));
+  await tx.delete(pierSections).where(eq(pierSections.id, sectionId));
+  return { label: section.label, pierId: section.pierId };
+}
+
+/**
+ * Separa un tratto in un pontile a sé (annulla l'unione per quel tratto): nuovo pontile subito dopo, con i posti del tratto,
+ * la sua linea, la scelta della tariffa base e i prezzi propri del pontile da cui viene. Se al pontile di partenza resta un solo
+ * tratto e nessun altro posto, il tratto si toglie.
+ */
+export async function splitSection(tx: Tx, marinaId: string, sectionId: string, data: { code: string; name: string }): Promise<{ pierId: string; moved: number }> {
+  const section = await loadSection(tx, marinaId, sectionId);
+  const { pier, sections, rows } = await loadPier(tx, marinaId, section.pierId);
+
+  await tx
+    .update(piers)
+    .set({ sortOrder: sql`${piers.sortOrder} + 1` })
+    .where(and(eq(piers.marinaId, marinaId), gt(piers.sortOrder, pier.sortOrder)));
+  const [created] = await tx
+    .insert(piers)
+    .values({ marinaId, code: data.code, name: data.name, sortOrder: pier.sortOrder + 1, baseRate: pier.baseRate, ...lineColumns(traceFromColumns(section)) })
+    .returning({ id: piers.id });
+
+  const own = await tx.select().from(rates).where(and(eq(rates.marinaId, marinaId), eq(rates.pierId, pier.id)));
+  if (own.length > 0) await tx.insert(rates).values(own.map(({ id: _id, ...r }) => ({ ...r, pierId: created.id })));
+
+  const moving = rows.filter((b) => b.sectionId === sectionId);
+  const positions = unitPositions(moving);
+  for (const b of moving) {
+    await tx.update(berths).set({ pierId: created.id, sectionId: null, position: positions.get(b.id) ?? b.position }).where(eq(berths.id, b.id));
+  }
+  await tx.delete(pierSections).where(eq(pierSections.id, sectionId));
+
+  const left = sections.filter((s) => s.id !== sectionId);
+  const loose = rows.filter((b) => b.sectionId !== sectionId && (!b.sectionId || !left.some((s) => s.id === b.sectionId)));
+  if (left.length === 1 && loose.length === 0) await dissolveSection(tx, marinaId, left[0].id);
+  return { pierId: created.id, moved: moving.length };
 }
