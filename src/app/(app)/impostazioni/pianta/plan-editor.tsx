@@ -13,6 +13,8 @@ import {
   type Point,
 } from "@/lib/plan";
 import { Field, Form, FormMessage, Submit } from "@/components/form";
+import { compareCodes } from "@/lib/berth-codes";
+import { alignRows } from "@/lib/plan-align";
 import { assignModules } from "@/lib/plan-modules";
 import { savePlanLayout } from "@/server/plan-actions";
 import { makeBerthSection } from "@/server/settings-actions";
@@ -36,7 +38,8 @@ export interface EditorBerth {
 }
 
 // select: sposta e ruota i posti · scale: due punti a distanza nota · pier: traccia un pontile · place: posa un posto
-type Tool = "select" | "scale" | "pier" | "place";
+// line: ridisegna i posti scelti lungo una linea (due clic)
+type Tool = "select" | "scale" | "pier" | "place" | "line";
 
 export function PlanEditor({
   imageUrl,
@@ -107,6 +110,8 @@ export function PlanEditor({
   // «scelti»: i posti toccati uno per uno, per spostare insieme parti vicine che la vicinanza non sa distinguere.
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [sectionLabel, setSectionLabel] = useState("");
+  // Ultima linea usata per ridisegnare i posti scelti: serve a «Inverti il lato».
+  const [pickedLine, setPickedLine] = useState<{ a: Point; b: Point; flip: boolean } | null>(null);
   const [moveMode, setMoveMode] = useState<"pontile" | "modulo" | "scelti" | "posto">(
     "pontile",
   );
@@ -206,6 +211,50 @@ export function PlanEditor({
     setNotice(null);
   }
 
+  // Posti scelti: nuove posizioni (il modulo si riconosce di nuovo, sono in fila).
+  function placePicked(placements: { id: string; x: number; y: number; angle: number }[], message: string) {
+    if (placements.length === 0) return;
+    const byId = new Map(placements.map((pl) => [pl.id, pl]));
+    setBerths((list) =>
+      withModules(
+        list.map((b) => (byId.has(b.id) ? { ...b, ...byId.get(b.id)!, module: null } : b)),
+        pxPerMeter,
+        width,
+      ),
+    );
+    setDirty(true);
+    setNotice({ ok: true, message });
+  }
+
+  // «Allinea in fila»: dritti dove sono, in ordine di codice, a passo uguale.
+  function alignPicked() {
+    if (!pxPerMeter) return;
+    const list = berths.filter((b) => picked.has(b.id) && b.x !== null && b.y !== null);
+    placePicked(
+      alignRows(
+        list.map((b) => ({ id: b.id, code: b.code, x: b.x!, y: b.y!, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm })),
+        pxPerMeter,
+      ),
+      `${list.length} posti rimessi in fila. Se serve, ritocca e salva la pianta.`,
+    );
+  }
+
+  // «Ridisegna con una linea»: i posti scelti, in ordine di codice, lungo la linea da a a b, tutti dallo stesso lato.
+  function layPickedAlong(a: Point, b: Point, flip: boolean) {
+    if (!pxPerMeter) return;
+    const list = berths.filter((x) => picked.has(x.id)).sort((p, q) => compareCodes(p.code, q.code));
+    const placements = layoutPier(
+      list.map((x, i) => ({ id: x.id, side: "sx" as const, position: i, lengthCm: x.lengthCm, beamCm: x.beamCm })),
+      a,
+      b,
+      pxPerMeter,
+      (parseMeters(pierWidth) ?? 200) / 100,
+      flip,
+    );
+    setPickedLine({ a, b, flip });
+    placePicked(placements, `${list.length} posti ridisegnati lungo la linea. Se sono dalla parte sbagliata premi «Inverti il lato».`);
+  }
+
   function chooseTool(next: Tool) {
     setTool(next);
     setPoints([]);
@@ -230,6 +279,14 @@ export function PlanEditor({
       );
       setDirty(true);
       setNotice(null);
+      setTool("select");
+    } else if (tool === "line") {
+      if (points.length === 0) {
+        setPoints([p]);
+        return;
+      }
+      layPickedAlong(points[0], p, false);
+      setPoints([]);
       setTool("select");
     } else if (tool === "pier") {
       if (points.length === 0) {
@@ -572,6 +629,10 @@ export function PlanEditor({
       ? points.length < 2
         ? `Clicca sulla foto i due estremi di una distanza che conosci (per esempio un pontile): punto ${points.length + 1} di 2.`
         : "Scrivi qui a fianco quanti metri separano i due punti e premi «Applica»."
+      : tool === "line"
+        ? points.length === 0
+          ? "Clicca dove inizia la fila dei posti scelti (il primo codice)."
+          : "Ora clicca dove finisce: i posti scelti si rimettono lungo la linea, in ordine di codice."
       : tool === "pier"
         ? !pxPerMeter
           ? "Imposta prima la scala."
@@ -893,6 +954,50 @@ export function PlanEditor({
                 Nessuno
               </button>
             </div>
+            {pickedBerths.length > 0 && (
+              <div className="space-y-2 border-t border-line-soft pt-3">
+                <p className="label">Rimetti in ordine</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="button" className="btn btn-secondary btn-sm" disabled={!pxPerMeter || pickedBerths.filter((b) => b.x !== null).length < 2} onClick={alignPicked}>
+                    Allinea in fila
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={!pxPerMeter}
+                    onClick={() => {
+                      setTool("line");
+                      setPoints([]);
+                      setNotice(null);
+                    }}
+                  >
+                    Ridisegna con una linea
+                  </button>
+                  {pickedLine && (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => layPickedAlong(pickedLine.a, pickedLine.b, !pickedLine.flip)}>
+                      Inverti il lato
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm text-bad"
+                    onClick={() => {
+                      setBerths((list) => list.map((b) => (picked.has(b.id) ? { ...b, x: null, y: null, angle: null, module: null } : b)));
+                      setPicked(new Set());
+                      setDirty(true);
+                      setNotice({ ok: true, message: "Posti tolti dalla pianta: li ritrovi in «Da disporre»." });
+                    }}
+                  >
+                    Togli dalla pianta
+                  </button>
+                </div>
+                <p className="hint">
+                  «Allinea in fila» li raddrizza dove sono: stessa linea, stesso angolo, stessa distanza, in ordine di codice. «Ridisegna con
+                  una linea»: clicca inizio e fine sulla foto e si rimettono lungo la linea (larghezza della passerella: quella di «Disponi un
+                  pontile»).
+                </p>
+              </div>
+            )}
             {pickedBerths.length > 0 && (
               <div className="border-t border-line-soft pt-3">
                 <button
