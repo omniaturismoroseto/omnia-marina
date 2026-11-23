@@ -218,10 +218,10 @@ export function PierDetail({
               <b className="text-ink tabular-nums">{c.total}</b> {c.total === 1 ? "posto" : "posti"}
             </span>
             <span>
-              <b className="text-ink tabular-nums">{c.busy}</b> occupati
+              <b className="text-ink tabular-nums">{c.busy}</b> {c.busy === 1 ? "occupato" : "occupati"}
             </span>
             <span>
-              <b className="text-ink tabular-nums">{c.free}</b> liberi
+              <b className="text-ink tabular-nums">{c.free}</b> {c.free === 1 ? "libero" : "liberi"}
             </span>
             <span>
               <b className="text-ink tabular-nums">{c.stopped}</b> non disponibili
@@ -335,7 +335,8 @@ export function PierDetail({
               <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
                 <h3 className="text-sm font-semibold text-ink">{u.title}</h3>
                 <span className="text-sm text-muted">
-                  {uc.total} {uc.total === 1 ? "posto" : "posti"} · {uc.busy} occupati · {uc.free} liberi
+                  {uc.total} {uc.total === 1 ? "posto" : "posti"} · {uc.busy} {uc.busy === 1 ? "occupato" : "occupati"} · {uc.free}{" "}
+                  {uc.free === 1 ? "libero" : "liberi"}
                 </span>
                 <span className="flex flex-1 flex-wrap justify-end gap-x-3 gap-y-1 text-sm">
                   {u.berths.length > 0 && (
@@ -496,7 +497,37 @@ function UnitLink({ children, onClick, active }: { children: React.ReactNode; on
   );
 }
 
-// Posti su due file come sul pontile: sopra il lato sinistro, sotto il destro, dalla radice alla testata.
+// Larghezza delle celle dei posti (px): si allargano fino a CELL_MAX per riempire la riga; sotto CELL_MIN il pontile va a capo.
+const CELL_MIN = 46;
+const CELL_MAX = 64;
+const GAP = 4;
+
+// Larghezza disponibile del riquadro (si aggiorna quando cambia lo schermo).
+function useWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width] as const;
+}
+
+// Primo e ultimo codice di un gruppo di posti (R23–R33), per riconoscere i pezzi di un pontile andato a capo.
+function codeRange(list: ManagerBerth[]): string {
+  if (list.length === 0) return "";
+  const sorted = [...list].sort((a, b) => compareCodes(a.code, b.code));
+  return sorted.length === 1 ? sorted[0].code : `${sorted[0].code}–${sorted[sorted.length - 1].code}`;
+}
+
+/**
+ * Posti su due file come sul pontile: sopra il lato sinistro, sotto il destro, dalla radice alla testata. Le celle si adattano
+ * alla larghezza dello schermo, senza barra di scorrimento; se non ci stanno il pontile (o il tratto) va a capo in più pezzi,
+ * ognuno con i suoi codici scritti sopra.
+ */
 function BerthStrip({
   berths,
   picked,
@@ -510,33 +541,56 @@ function BerthStrip({
   found: string | null;
   onBerth: (e: MouseEvent, b: ManagerBerth) => void;
 }) {
+  const [ref, width] = useWidth<HTMLDivElement>();
   if (berths.length === 0) return <p className="text-sm text-muted">Nessun posto in questo tratto.</p>;
   const cols = unitPositions(berths);
-  const width = Math.max(...berths.map((b) => (cols.get(b.id) ?? 0) + 1));
+  const total = Math.max(...berths.map((b) => (cols.get(b.id) ?? 0) + 1));
+  // Quante colonne stanno in una riga; finché non si conosce la larghezza, tutte.
+  const perRow = width ? Math.max(1, Math.floor((width + GAP) / (CELL_MIN + GAP))) : total;
+  const rows = Math.ceil(total / perRow);
+  const inRow = Math.ceil(total / rows);
+  const cell = width ? Math.min(CELL_MAX, Math.floor((width + GAP) / inRow) - GAP) : CELL_MIN;
+  const chunks = Array.from({ length: rows }, (_, r) => {
+    const from = r * inRow;
+    return { from, list: berths.filter((b) => (cols.get(b.id) ?? 0) >= from && (cols.get(b.id) ?? 0) < from + inRow) };
+  });
+
   return (
-    <div className="overflow-x-auto pb-1">
-      <div className="grid w-max gap-1" style={{ gridTemplateColumns: `repeat(${width}, 3.25rem)`, gridTemplateRows: "auto 0.5rem auto" }}>
-        {berths.map((b) => {
-          const on = picked.has(b.id);
-          return (
-            <button
-              key={b.id}
-              type="button"
-              data-berth={b.id}
-              onClick={(e) => onBerth(e, b)}
-              aria-pressed={selecting ? on : undefined}
-              title={`${b.code} · ${STATE_LABEL[b.state]}${b.occupant ? ` · ${b.occupant.boatName}` : ""}`}
-              style={{ gridColumn: (cols.get(b.id) ?? 0) + 1, gridRow: b.side === "sx" ? 1 : 3 }}
-              className={`relative flex h-10 items-center justify-center rounded-md border text-[13px] font-semibold tabular-nums transition hover:-translate-y-px hover:shadow ${STATE_CELL[b.state]} ${
-                on ? "ring-2 ring-buoy ring-offset-1" : ""
-              } ${found === b.id ? "animate-pulse ring-2 ring-buoy ring-offset-2" : ""}`}
-            >
-              {b.code}
-            </button>
-          );
-        })}
-        <div className="rounded-sm bg-line" style={{ gridColumn: `1 / ${width + 1}`, gridRow: 2 }} aria-hidden="true" />
-      </div>
+    <div ref={ref} className="space-y-3">
+      {chunks.map(({ from, list }) => {
+        const span = Math.max(...list.map((b) => (cols.get(b.id) ?? 0) - from + 1), 1);
+        const sx = list.filter((b) => b.side === "sx");
+        const dx = list.filter((b) => b.side === "dx");
+        return (
+          <div key={from}>
+            {rows > 1 && (
+              <p className="mb-1 text-xs font-medium text-muted">{[codeRange(sx), codeRange(dx)].filter(Boolean).join(" · ")}</p>
+            )}
+            <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${span}, ${cell}px)`, gridTemplateRows: "auto 0.5rem auto" }}>
+              {list.map((b) => {
+                const on = picked.has(b.id);
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    data-berth={b.id}
+                    onClick={(e) => onBerth(e, b)}
+                    aria-pressed={selecting ? on : undefined}
+                    title={`${b.code} · ${STATE_LABEL[b.state]}${b.occupant ? ` · ${b.occupant.boatName}` : ""}`}
+                    style={{ gridColumn: (cols.get(b.id) ?? 0) - from + 1, gridRow: b.side === "sx" ? 1 : 3 }}
+                    className={`relative flex h-10 min-w-0 items-center justify-center overflow-hidden rounded-md border px-0.5 text-[13px] font-semibold tabular-nums transition hover:-translate-y-px hover:shadow ${STATE_CELL[b.state]} ${
+                      on ? "ring-2 ring-buoy ring-offset-1" : ""
+                    } ${found === b.id ? "animate-pulse ring-2 ring-buoy ring-offset-2" : ""}`}
+                  >
+                    {b.code}
+                  </button>
+                );
+              })}
+              <div className="rounded-sm bg-line" style={{ gridColumn: `1 / ${span + 1}`, gridRow: 2 }} aria-hidden="true" />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

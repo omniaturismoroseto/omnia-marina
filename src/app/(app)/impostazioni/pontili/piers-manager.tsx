@@ -158,7 +158,8 @@ export function PiersManager({
                   <b className="text-ink">Totale porto</b> · {total.total} posti
                 </span>
                 <span>
-                  <b className="text-ink tabular-nums">{total.busy}</b> occupati · <b className="text-ink tabular-nums">{total.free}</b> liberi
+                  <b className="text-ink tabular-nums">{total.busy}</b> {total.busy === 1 ? "occupato" : "occupati"} · <b className="text-ink tabular-nums">{total.free}</b>{" "}
+                  {total.free === 1 ? "libero" : "liberi"}
                 </span>
               </p>
               <OccupancyBar c={total} />
