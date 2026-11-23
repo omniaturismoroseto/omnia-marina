@@ -68,8 +68,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Con la pianta la pagina Mappa è a tutta larghezza (`data-wide`, il layout toglie `max-w-6xl`) e `PlanZoom fillScreen` arriva al fondo
   dello schermo; il riquadro del posto sta sopra la mappa sugli schermi grandi (`?posto=`, X per chiudere), sotto sul telefono.
   Le icone dei servizi restano della stessa misura a ogni ingrandimento (`--plan-zoom` impostato da `PlanZoom`).
-  Editor dei posti (`plan-editor.tsx`): «Sposta: pontile intero / posto singolo»; con pontile intero trascinamento, frecce e rotazione
-  (attorno al centro dei posti) valgono per tutti i posti del pontile e anche per la sua linea salvata, che si risalva con la pianta.
+  Editor dei posti (`plan-editor.tsx`, dentro `PlanZoom arrowKeys={false}`: trascina e zoom come la Mappa, niente barre; riquadri senza
+  codici): «Sposta: pontile o tratto / modulo / posto singolo». Modulo = posti collegati per vicinanza (`moduleOf`). Con un gruppo:
+  trascinamento, frecce, rotazione (attorno al centro) e «Lunghezza ±1/±5 m» (`stretch`, scala le posizioni lungo il pontile); la linea
+  salvata segue solo con «pontile o tratto» e si risalva con la pianta.
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
 - Periodi dei contratti: annuali per anno solare (`annualEnd` = 31/12 dell'anno di inizio, imposto anche dal server; vale per gli
   spazi «Annuale»), stagionali dal 1/5 al 30/9 (`SEASON_START`/`SEASON_END`, `yearPeriod` in `src/lib/dates.ts`). «Scegli dalla mappa»

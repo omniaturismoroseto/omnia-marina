@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { KeyboardEvent, MouseEvent, PointerEvent } from "react";
-import { Minus, MousePointer2, Plus, Ruler, Spline } from "@/components/icons";
+import { MousePointer2, Ruler, Spline } from "@/components/icons";
+import { PlanZoom } from "@/app/(app)/mappa/plan-zoom";
 import { parseMeters } from "@/lib/format";
 import {
   berthSizePx,
@@ -28,8 +29,6 @@ export interface EditorBerth {
 
 // select: sposta e ruota i posti · scale: due punti a distanza nota · pier: traccia un pontile · place: posa un posto
 type Tool = "select" | "scale" | "pier" | "place";
-
-const ZOOMS = [1, 1.5, 2, 3, 4];
 
 export function PlanEditor({
   imageUrl,
@@ -73,7 +72,6 @@ export function PlanEditor({
   );
   const [pierWidth, setPierWidth] = useState("2,00");
   const [meters, setMeters] = useState("");
-  const [zoom, setZoom] = useState(1);
   const [dirty, setDirty] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(
     null,
@@ -89,7 +87,10 @@ export function PlanEditor({
   } | null>(null);
   // Cosa si sposta e si ruota con «Seleziona»: il singolo posto o tutto il pontile (o banchina) a cui appartiene.
   // Qui un «pontile» è una struttura della pianta (planUnits): nei pontili uniti ogni tratto si sposta da solo.
-  const [moveMode, setMoveMode] = useState<"pontile" | "posto">("pontile");
+  // «modulo»: una parte staccata del pontile (posti vicini tra loro), riconosciuta da sola.
+  const [moveMode, setMoveMode] = useState<"pontile" | "modulo" | "posto">(
+    "pontile",
+  );
   const lastAngle = useRef(0);
   // Ultimo pontile tracciato: serve a rifarlo con i lati invertiti senza ricliccare sulla foto.
   const [lastTrace, setLastTrace] = useState<{
@@ -134,12 +135,35 @@ export function PlanEditor({
     pxPerMeter ? berthSizePx(b, pxPerMeter) : { w: 14 * u, l: 36 * u };
   const pierBerths = berths.filter((b) => b.pierId === pierId);
   // Posti che si muovono insieme al posto scelto.
-  const groupOf = (b: EditorBerth) =>
-    moveMode === "pontile"
-      ? berths.filter(
-          (x) => x.pierId === b.pierId && x.x !== null && x.y !== null,
-        )
-      : [b];
+  const groupOf = (b: EditorBerth) => {
+    if (moveMode === "posto") return [b];
+    const unit = berths.filter(
+      (x) => x.pierId === b.pierId && x.x !== null && x.y !== null,
+    );
+    return moveMode === "pontile" ? unit : moduleOf(b, unit);
+  };
+  // Modulo: i posti raggiungibili da quello scelto passando per posti vicini (affiancati, o di fronte sullo stesso pontile).
+  const moduleOf = (start: EditorBerth, unit: EditorBerth[]) => {
+    const meter = pxPerMeter ?? u * 4;
+    const near = (a: EditorBerth, b: EditorBerth) => {
+      const sa = sizeOf(a);
+      const sb = sizeOf(b);
+      const limit = Math.max((sa.l + sb.l) / 2, (sa.w + sb.w) / 2) + 3 * meter;
+      return Math.hypot(a.x! - b.x!, a.y! - b.y!) <= limit;
+    };
+    const found = new Set([start.id]);
+    const queue = [start];
+    while (queue.length) {
+      const cur = queue.pop()!;
+      for (const other of unit) {
+        if (!found.has(other.id) && near(cur, other)) {
+          found.add(other.id);
+          queue.push(other);
+        }
+      }
+    }
+    return unit.filter((x) => found.has(x.id));
+  };
   const group = selected && selected.x !== null ? groupOf(selected) : [];
   const groupIds = new Set(group.map((b) => b.id));
   const selectedPier = selected
@@ -390,7 +414,7 @@ export function PlanEditor({
           : b,
       ),
     );
-    const t = currentTrace(selected.pierId);
+    const t = moveMode === "pontile" ? currentTrace(selected.pierId) : null;
     if (t)
       setTraces((all) => ({
         ...all,
@@ -400,6 +424,64 @@ export function PlanEditor({
     setDirty(true);
     setNotice(null);
   }
+
+  // Allunga (metri > 0) o accorcia il gruppo scelto lungo il pontile: cambia la distanza tra i posti, non le loro misure.
+  function stretch(meters: number) {
+    if (!selected || !pxPerMeter || group.length < 2) return;
+    // Direzione del pontile: media degli angoli dei posti (sugli angoli doppi), di traverso al lato lungo del posto.
+    let sx = 0;
+    let sy = 0;
+    for (const b of group) {
+      const a = ((b.angle ?? 0) * Math.PI) / 90;
+      sx += Math.cos(a);
+      sy += Math.sin(a);
+    }
+    const th = Math.atan2(sy, sx) / 2;
+    const d = { x: Math.cos(th), y: Math.sin(th) };
+    const proj = group.map((b) => b.x! * d.x + b.y! * d.y);
+    const lo = Math.min(...proj);
+    const hi = Math.max(...proj);
+    const len = hi - lo;
+    if (len < 1) return;
+    const k = Math.max(0.1, (len + meters * pxPerMeter) / len);
+    const mid = (lo + hi) / 2;
+    const move = (p: Point): Point => {
+      const t = p.x * d.x + p.y * d.y - mid;
+      return {
+        x: Math.round((p.x + (k - 1) * t * d.x) * 10) / 10,
+        y: Math.round((p.y + (k - 1) * t * d.y) * 10) / 10,
+      };
+    };
+    setBerths((list) =>
+      list.map((b) =>
+        groupIds.has(b.id) ? { ...b, ...move({ x: b.x!, y: b.y! }) } : b,
+      ),
+    );
+    const t = moveMode === "pontile" ? currentTrace(selected.pierId) : null;
+    if (t)
+      setTraces((all) => ({
+        ...all,
+        [selected.pierId]: { a: move(t.a), b: move(t.b), widthM: t.widthM },
+      }));
+    setDirty(true);
+    setNotice(null);
+  }
+
+  // Lunghezza del gruppo scelto lungo il pontile, in metri (dal primo all'ultimo posto, con la loro larghezza).
+  const groupLengthM = (() => {
+    if (!pxPerMeter || group.length < 2) return null;
+    let sx = 0;
+    let sy = 0;
+    for (const b of group) {
+      const a = ((b.angle ?? 0) * Math.PI) / 90;
+      sx += Math.cos(a);
+      sy += Math.sin(a);
+    }
+    const th = Math.atan2(sy, sx) / 2;
+    const proj = group.map((b) => b.x! * Math.cos(th) + b.y! * Math.sin(th));
+    const beam = Math.max(...group.map((b) => sizeOf(b).w));
+    return (Math.max(...proj) - Math.min(...proj) + beam) / pxPerMeter;
+  })();
 
   function save() {
     startSaving(async () => {
@@ -454,8 +536,10 @@ export function PlanEditor({
         : tool === "place"
           ? `Clicca sulla foto il punto in cui si trova il posto ${selected?.code ?? ""}.`
           : moveMode === "pontile"
-            ? "Trascina un posto per spostare tutto il suo pontile; con le frecce della tastiera lo sposti di poco."
-            : "Trascina un posto per spostare solo quello; con le frecce della tastiera lo sposti di poco.";
+            ? "Trascina un posto per spostare tutto il suo pontile o tratto; trascina la foto per muoverti, rotellina o due dita per ingrandire."
+            : moveMode === "modulo"
+              ? "Trascina un posto per spostare solo la parte di pontile a cui appartiene; trascina la foto per muoverti, rotellina o due dita per ingrandire."
+              : "Trascina un posto per spostare solo quello; trascina la foto per muoverti, rotellina o due dita per ingrandire.";
 
   return (
     <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
@@ -475,7 +559,7 @@ export function PlanEditor({
             aria-label="Cosa spostare"
           >
             <span className="px-1.5 text-muted">Sposta:</span>
-            {(["pontile", "posto"] as const).map((m) => (
+            {(["pontile", "modulo", "posto"] as const).map((m) => (
               <button
                 key={m}
                 type="button"
@@ -483,138 +567,110 @@ export function PlanEditor({
                 onClick={() => setMoveMode(m)}
                 className={`rounded px-2 py-1 font-medium ${moveMode === m ? "bg-ink text-white" : "text-ink hover:bg-line-soft"}`}
               >
-                {m === "pontile" ? "pontile o tratto" : "posto singolo"}
+                {m === "pontile"
+                  ? "pontile o tratto"
+                  : m === "modulo"
+                    ? "modulo"
+                    : "posto singolo"}
               </button>
             ))}
           </span>
           {baseUrl && (
             <label className="inline-flex items-center gap-1.5 text-sm text-muted">
               Sotto
-              <select className="input w-auto py-1 text-sm" value={under} onChange={(e) => setUnder(e.target.value as "foto" | "base")}>
+              <select
+                className="input w-auto py-1 text-sm"
+                value={under}
+                onChange={(e) => setUnder(e.target.value as "foto" | "base")}
+              >
                 <option value="foto">foto aerea</option>
                 <option value="base">base disegnata</option>
               </select>
             </label>
           )}
-          <span className="ml-auto flex items-center gap-1">
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              aria-label="Riduci"
-              disabled={zoom === ZOOMS[0]}
-              onClick={() =>
-                setZoom(ZOOMS[Math.max(0, ZOOMS.indexOf(zoom) - 1)])
-              }
-            >
-              <Minus size={15} aria-hidden="true" />
-            </button>
-            <span className="w-12 text-center text-sm text-muted tabular-nums">
-              {Math.round(zoom * 100)}%
-            </span>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              aria-label="Ingrandisci"
-              disabled={zoom === ZOOMS[ZOOMS.length - 1]}
-              onClick={() =>
-                setZoom(
-                  ZOOMS[Math.min(ZOOMS.length - 1, ZOOMS.indexOf(zoom) + 1)],
-                )
-              }
-            >
-              <Plus size={15} aria-hidden="true" />
-            </button>
-          </span>
         </div>
         <p className="mb-2 min-h-10 text-sm text-muted" aria-live="polite">
           {hint}
         </p>
 
-        <div
-          className="max-h-[78vh] overflow-auto rounded-lg border border-line bg-deep/5 focus-visible:outline-2"
-          tabIndex={0}
-          onKeyDown={onKeyDown}
-          aria-label="Editor della pianta"
-        >
-          <svg
-            ref={svgRef}
-            viewBox={`0 0 ${width} ${height}`}
-            style={{
-              width: `${zoom * 100}%`,
-              cursor: tool === "select" ? "default" : "crosshair",
-            }}
-            className="block h-auto max-w-none select-none"
-            onClick={onCanvasClick}
-          >
-            <image href={under === "base" && baseUrl ? baseUrl : imageUrl} width={width} height={height} preserveAspectRatio="none" />
-            {berths.map((b) => {
-              if (b.x === null || b.y === null) return null;
-              const { w, l } = sizeOf(b);
-              const active = b.id === selectedId || groupIds.has(b.id);
-              return (
-                <g
-                  key={b.id}
-                  transform={`translate(${b.x} ${b.y})`}
-                  style={{
-                    cursor: tool === "select" ? "move" : "inherit",
-                    touchAction: tool === "select" ? "none" : "auto",
-                  }}
-                  onPointerDown={(e) => onBerthDown(e, b)}
-                  onPointerMove={onBerthMove}
-                  onPointerUp={() => (drag.current = null)}
-                  onPointerCancel={() => (drag.current = null)}
-                  onClick={(e) => tool === "select" && e.stopPropagation()}
-                >
-                  <rect
-                    transform={`rotate(${b.angle ?? 0})`}
-                    x={-w / 2}
-                    y={-l / 2}
-                    width={w}
-                    height={l}
-                    rx={u}
-                    fill={active ? "#d4502a" : "#24497a"}
-                    fillOpacity={active ? 0.75 : 0.6}
-                    stroke="#fff"
-                    strokeWidth={(active ? 2.4 : 1.2) * u}
-                  />
-                  <text
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fontSize={clamp(w * 0.42, 7 * u, 15 * u)}
-                    fontWeight={600}
-                    fill="#fff"
-                    pointerEvents="none"
+        {/* Si trascina la foto per muoversi e si ingrandisce con rotellina o due dita (come nella Mappa); le frecce spostano i posti scelti. */}
+        <div onKeyDown={onKeyDown} aria-label="Editor della pianta">
+          <PlanZoom width={width} height={height} arrowKeys={false}>
+            <svg
+              ref={svgRef}
+              viewBox={`0 0 ${width} ${height}`}
+              style={{
+                cursor: tool === "select" ? "default" : "crosshair",
+              }}
+              className="block h-auto w-full select-none"
+              onClick={onCanvasClick}
+            >
+              <image
+                href={under === "base" && baseUrl ? baseUrl : imageUrl}
+                width={width}
+                height={height}
+                preserveAspectRatio="none"
+              />
+              {berths.map((b) => {
+                if (b.x === null || b.y === null) return null;
+                const { w, l } = sizeOf(b);
+                const active = b.id === selectedId || groupIds.has(b.id);
+                return (
+                  <g
+                    key={b.id}
+                    transform={`translate(${b.x} ${b.y})`}
+                    style={{
+                      cursor: tool === "select" ? "move" : "inherit",
+                      touchAction: tool === "select" ? "none" : "auto",
+                    }}
+                    onPointerDown={(e) => onBerthDown(e, b)}
+                    onPointerMove={onBerthMove}
+                    onPointerUp={() => (drag.current = null)}
+                    onPointerCancel={() => (drag.current = null)}
+                    onClick={(e) => tool === "select" && e.stopPropagation()}
                   >
-                    {b.code}
-                  </text>
-                </g>
-              );
-            })}
-            {points.length === 2 && (
-              <line
-                x1={points[0].x}
-                y1={points[0].y}
-                x2={points[1].x}
-                y2={points[1].y}
-                stroke="#d4502a"
-                strokeWidth={2 * u}
-                strokeDasharray={`${6 * u} ${4 * u}`}
-                pointerEvents="none"
-              />
-            )}
-            {points.map((p, i) => (
-              <circle
-                key={i}
-                cx={p.x}
-                cy={p.y}
-                r={5 * u}
-                fill="#d4502a"
-                stroke="#fff"
-                strokeWidth={1.5 * u}
-                pointerEvents="none"
-              />
-            ))}
-          </svg>
+                    <title>{`Posto ${b.code}`}</title>
+                    <rect
+                      transform={`rotate(${b.angle ?? 0})`}
+                      x={-w / 2}
+                      y={-l / 2}
+                      width={w}
+                      height={l}
+                      rx={u}
+                      fill={active ? "#d4502a" : "#24497a"}
+                      fillOpacity={active ? 0.75 : 0.6}
+                      stroke="#fff"
+                      strokeWidth={(active ? 2.4 : 1.2) * u}
+                    />
+                  </g>
+                );
+              })}
+              {points.length === 2 && (
+                <line
+                  x1={points[0].x}
+                  y1={points[0].y}
+                  x2={points[1].x}
+                  y2={points[1].y}
+                  stroke="#d4502a"
+                  strokeWidth={2 * u}
+                  strokeDasharray={`${6 * u} ${4 * u}`}
+                  pointerEvents="none"
+                />
+              )}
+              {points.map((p, i) => (
+                <circle
+                  key={i}
+                  cx={p.x}
+                  cy={p.y}
+                  r={5 * u}
+                  fill="#d4502a"
+                  stroke="#fff"
+                  strokeWidth={1.5 * u}
+                  pointerEvents="none"
+                />
+              ))}
+            </svg>
+          </PlanZoom>
         </div>
       </div>
 
@@ -731,8 +787,8 @@ export function PlanEditor({
         {selected && (
           <section className="card p-4">
             <h3 className="text-[15px] font-semibold text-ink">
-              {moveMode === "pontile" && group.length > 1
-                ? `${selectedPier?.name ?? "Pontile"} (${group.length} posti)`
+              {moveMode !== "posto" && group.length > 1
+                ? `${moveMode === "modulo" ? "Modulo di " : ""}${selectedPier?.name ?? "Pontile"} (${group.length} posti)`
                 : `Posto ${selected.code}`}
             </h3>
             {selected.x === null ? (
@@ -742,8 +798,12 @@ export function PlanEditor({
             ) : (
               <div className="mt-3 space-y-3">
                 <div>
-                  {moveMode === "pontile" && group.length > 1 ? (
-                    <p className="label">Ruota tutto il pontile</p>
+                  {moveMode !== "posto" && group.length > 1 ? (
+                    <p className="label">
+                      {moveMode === "modulo"
+                        ? "Ruota il modulo"
+                        : "Ruota tutto il pontile"}
+                    </p>
                   ) : (
                     <>
                       <label htmlFor="plan-angle" className="label">
@@ -779,6 +839,35 @@ export function PlanEditor({
                     ))}
                   </div>
                 </div>
+                {moveMode !== "posto" &&
+                  group.length > 1 &&
+                  groupLengthM !== null && (
+                    <div>
+                      <p className="label">
+                        Lunghezza:{" "}
+                        {groupLengthM.toLocaleString("it-IT", {
+                          maximumFractionDigits: 1,
+                        })}{" "}
+                        m
+                      </p>
+                      <div className="mt-1 flex gap-1">
+                        {[-5, -1, 1, 5].map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            className="btn btn-secondary btn-sm flex-1 px-1"
+                            onClick={() => stretch(m)}
+                          >
+                            {m > 0 ? `+${m} m` : `${m} m`}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="hint mt-1">
+                        Allunga o accorcia cambiando lo spazio tra i posti; le
+                        misure dei posti restano le stesse.
+                      </p>
+                    </div>
+                  )}
                 {(moveMode === "posto" || group.length < 2) && (
                   <button
                     type="button"
