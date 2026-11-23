@@ -7,6 +7,7 @@ import { requireOwner } from "@/lib/context";
 import { f, fail, parseForm, type FormState } from "@/lib/forms";
 import { toFormState } from "./errors";
 import { acceptAppPrivacy } from "./owner-access";
+import { pushPublicKey } from "./push";
 
 const schema = z.object({ accept: f.checkbox() });
 
@@ -25,5 +26,6 @@ export async function acceptAppPrivacyAction(_prev: FormState, formData: FormDat
     }
     revalidatePath(`/clienti/${ctx.ownerId}`);
   }
-  redirect("/diportista/benvenuto?passo=notifiche");
+  // Il secondo passo (notifiche) c'è solo se le notifiche sono configurate.
+  redirect(pushPublicKey() ? "/diportista/benvenuto?passo=notifiche" : "/diportista");
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
-import { Bell, ShieldAlert } from "@/components/icons";
+import { ShieldAlert } from "@/components/icons";
 import { NoticeText } from "@/components/notice-text";
 import { page } from "@/components/page";
 import { PushToggle } from "@/components/push-toggle";
@@ -25,29 +25,30 @@ export default page(async function OwnerWelcomePage({ searchParams }: { searchPa
   if (step === "privacy" && !ctx.privacyPending && !ctx.preview) redirect("/diportista");
   if (step === "notifiche" && ctx.privacyPending) redirect("/diportista/benvenuto");
 
+  // Senza le chiavi delle notifiche (VAPID) il secondo passo non serve: l'informativa è l'unico.
+  const publicKey = pushPublicKey();
+  const steps = publicKey ? 2 : 1;
   if (step === "notifiche") {
-    const publicKey = pushPublicKey();
+    if (!publicKey) redirect("/diportista");
     return (
       <>
         <p className="text-sm font-medium text-muted">Passo 2 di 2</p>
-        <h1 className="mt-1 text-3xl font-bold text-ink">Vuoi le notifiche sul telefono?</h1>
+        <h1 className="mt-1 text-3xl font-bold text-ink">Attiva le notifiche</h1>
         <p className="mt-2 max-w-prose text-[15px] text-muted">
-          Ti avvisiamo quando {ctx.marinaName} ti scrive: allerte meteo, lavori in banchina, scadenze. Puoi cambiare idea quando vuoi dalla pagina «Messaggi».
+          Ti avvisiamo sul telefono quando {ctx.marinaName} ti scrive: allerte meteo, lavori in banchina, scadenze. Puoi spegnerle quando vuoi dalla pagina
+          «Messaggi».
         </p>
-        <div className="mt-6 space-y-4">
+        <div className="mt-6 max-w-md">
           {ctx.preview ? (
-            <p className="card p-4 text-sm text-muted">In prova come diportista le notifiche non si attivano: qui il cliente vede il pulsante «Attiva le notifiche».</p>
-          ) : publicKey ? (
-            <PushToggle publicKey={publicKey} />
+            <div className="space-y-4">
+              <p className="card p-4 text-sm text-muted">In prova come diportista le notifiche non si attivano: qui il cliente vede il pulsante «Attiva le notifiche».</p>
+              <ButtonLink href="/diportista" variant="primary" size="lg" className="w-full">
+                Vai alla tua barca
+              </ButtonLink>
+            </div>
           ) : (
-            <p className="card flex items-center gap-3 p-4 text-sm text-muted">
-              <Bell size={20} aria-hidden="true" className="shrink-0" />
-              Le notifiche non sono ancora disponibili: trovi gli avvisi del porto nella pagina «Messaggi».
-            </p>
+            <PushToggle publicKey={publicKey} continueHref="/diportista" />
           )}
-          <ButtonLink href="/diportista" variant="secondary" size="lg" className="w-full sm:w-auto">
-            Vai alla tua barca
-          </ButtonLink>
         </div>
       </>
     );
@@ -58,7 +59,7 @@ export default page(async function OwnerWelcomePage({ searchParams }: { searchPa
   const appText = fillTemplate(APP_PRIVACY_TEXT, marina);
   return (
     <>
-      <p className="text-sm font-medium text-muted">Passo 1 di 2</p>
+      {steps > 1 && <p className="text-sm font-medium text-muted">Passo 1 di {steps}</p>}
       <h1 className="mt-1 text-3xl font-bold text-ink">Benvenuto, {ctx.user.name.split(" ")[0]}</h1>
       <p className="mt-2 max-w-prose text-[15px] text-muted">
         Prima di entrare leggi come {ctx.marinaName} tratta i tuoi dati e come funziona l&apos;app. Lo chiediamo una volta sola, e di nuovo solo se

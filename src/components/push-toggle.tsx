@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, BellOff } from "@/components/icons";
+import Link from "next/link";
+import { Bell, BellOff, Check } from "@/components/icons";
 import { removePushSubscription, savePushSubscription } from "@/server/message-actions";
 
 type State = "loading" | "unsupported" | "ios-install" | "denied" | "off" | "on" | "error";
@@ -22,8 +23,12 @@ function isStandalone() {
   return window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 }
 
-/** Attiva o spegne le notifiche dei messaggi del porto su questo dispositivo. */
-export function PushToggle({ publicKey }: { publicKey: string | null }) {
+/**
+ * Attiva o spegne le notifiche dei messaggi del porto su questo dispositivo.
+ * Con `continueHref` è il passo del primo accesso: pulsante grande che chiede subito il permesso al telefono,
+ * poi il pulsante per entrare nell'app (o «Non ora» per saltare).
+ */
+export function PushToggle({ publicKey, continueHref }: { publicKey: string | null; continueHref?: string }) {
   const [state, setState] = useState<State>("loading");
   const [busy, setBusy] = useState(false);
 
@@ -72,6 +77,7 @@ export function PushToggle({ publicKey }: { publicKey: string | null }) {
     }
   }
 
+  if (continueHref) return <PushStep state={state} busy={busy} enable={enable} continueHref={continueHref} />;
   if (state === "loading" || state === "unsupported") return null;
   return (
     <div className="card flex flex-wrap items-center gap-3 p-4">
@@ -97,6 +103,50 @@ export function PushToggle({ publicKey }: { publicKey: string | null }) {
         <button type="button" className="btn btn-ghost btn-sm" onClick={disable} disabled={busy}>
           Spegni
         </button>
+      )}
+    </div>
+  );
+}
+
+function PushStep({ state, busy, enable, continueHref }: { state: State; busy: boolean; enable: () => void; continueHref: string }) {
+  const canAsk = state === "off" || state === "error";
+  return (
+    <div className="space-y-4">
+      <div className="card p-5">
+        <div className="flex items-start gap-3">
+          <span className={`grid size-11 shrink-0 place-items-center rounded-full ${state === "on" ? "bg-ok-soft text-ok" : "bg-sea-soft text-sea"}`} aria-hidden="true">
+            {state === "on" ? <Check size={24} /> : <Bell size={24} />}
+          </span>
+          <p className="text-[15px] text-ink" role="status">
+            {state === "loading" && "Controllo il telefono…"}
+            {state === "off" && "Tocca il pulsante: il telefono ti chiederà il permesso, rispondi «Consenti»."}
+            {state === "on" && "Fatto: le notifiche sono attive su questo telefono."}
+            {state === "denied" && "Le notifiche sono bloccate per questa app: puoi riattivarle dalle impostazioni del telefono o del browser."}
+            {state === "error" && "Non è stato possibile attivare le notifiche. Riprova; se non va, puoi farlo più tardi dalla pagina «Messaggi»."}
+            {state === "unsupported" && "Questo browser non riceve notifiche: trovi gli avvisi del porto nella pagina «Messaggi»."}
+            {state === "ios-install" && (
+              <>
+                Su iPhone le notifiche arrivano solo dall&apos;app sulla schermata Home: tocca <strong>Condividi</strong>, poi{" "}
+                <strong>Aggiungi alla schermata Home</strong>, apri l&apos;app da lì e attivale dalla pagina «Messaggi».
+              </>
+            )}
+          </p>
+        </div>
+        {canAsk && (
+          <button type="button" className="btn btn-primary btn-lg mt-4 w-full" onClick={enable} disabled={busy}>
+            <Bell size={20} aria-hidden="true" />
+            {busy ? "Attendere…" : "Attiva le notifiche"}
+          </button>
+        )}
+      </div>
+      {state === "on" ? (
+        <Link href={continueHref} className="btn btn-primary btn-lg w-full">
+          Vai alla tua barca
+        </Link>
+      ) : (
+        <Link href={continueHref} className={`btn ${canAsk ? "btn-ghost" : "btn-secondary btn-lg"} w-full`}>
+          {canAsk ? "Non ora" : "Vai alla tua barca"}
+        </Link>
       )}
     </div>
   );
