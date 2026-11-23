@@ -556,7 +556,7 @@ export async function makeBerthSection(_prev: FormState, formData: FormData): Pr
       return n;
     });
     revalidatePath("/", "layout");
-    return { ok: true, message: `Tratto «${parsed.data.label}» creato con ${count} ${count === 1 ? "posto" : "posti"}: in Pianta dal vero ora si sposta da solo.` };
+    return { ok: true, message: `Tratto «${parsed.data.label}» creato con ${count} ${count === 1 ? "posto" : "posti"}: in Mappa del porto ora si sposta da solo.` };
   } catch (err) {
     return toFormState(err);
   }

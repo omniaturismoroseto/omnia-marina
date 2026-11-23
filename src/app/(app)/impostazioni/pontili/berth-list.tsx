@@ -184,7 +184,7 @@ export function BerthList({
             <input type="hidden" name="berthIds" value={ids} />
             <h3 className="text-sm font-semibold text-ink">Fai un tratto della pianta</h3>
             <p className="text-sm text-muted">
-              I posti scelti diventano un tratto che in Pianta dal vero si sposta, ruota e traccia da solo (per esempio un braccio del
+              I posti scelti diventano un tratto che in Mappa del porto si sposta, ruota e traccia da solo (per esempio un braccio del
               pontile o un pontile unito a questo). Per la gestione il pontile resta uno solo.
             </p>
             <div className="flex flex-wrap items-end gap-3">

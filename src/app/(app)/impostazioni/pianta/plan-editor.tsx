@@ -33,6 +33,7 @@ const ZOOMS = [1, 1.5, 2, 3, 4];
 
 export function PlanEditor({
   imageUrl,
+  baseUrl = null,
   width,
   height,
   initialPxPerMeter,
@@ -40,6 +41,8 @@ export function PlanEditor({
   initialBerths,
 }: {
   imageUrl: string;
+  // Base disegnata (stessa inquadratura della foto): si può mettere sotto i posti al posto della foto.
+  baseUrl?: string | null;
   width: number;
   height: number;
   initialPxPerMeter: number | null;
@@ -55,6 +58,7 @@ export function PlanEditor({
   initialBerths: EditorBerth[];
 }) {
   const [berths, setBerths] = useState(initialBerths);
+  const [under, setUnder] = useState<"foto" | "base">("foto");
   const [pxPerMeter, setPxPerMeter] = useState(initialPxPerMeter);
   const [tool, setTool] = useState<Tool>(
     initialPxPerMeter ? "select" : "scale",
@@ -483,6 +487,15 @@ export function PlanEditor({
               </button>
             ))}
           </span>
+          {baseUrl && (
+            <label className="inline-flex items-center gap-1.5 text-sm text-muted">
+              Sotto
+              <select className="input w-auto py-1 text-sm" value={under} onChange={(e) => setUnder(e.target.value as "foto" | "base")}>
+                <option value="foto">foto aerea</option>
+                <option value="base">base disegnata</option>
+              </select>
+            </label>
+          )}
           <span className="ml-auto flex items-center gap-1">
             <button
               type="button"
@@ -533,7 +546,7 @@ export function PlanEditor({
             className="block h-auto max-w-none select-none"
             onClick={onCanvasClick}
           >
-            <image href={imageUrl} width={width} height={height} />
+            <image href={under === "base" && baseUrl ? baseUrl : imageUrl} width={width} height={height} preserveAspectRatio="none" />
             {berths.map((b) => {
               if (b.x === null || b.y === null) return null;
               const { w, l } = sizeOf(b);
