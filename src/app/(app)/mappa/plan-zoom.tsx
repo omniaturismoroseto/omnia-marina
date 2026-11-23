@@ -34,12 +34,15 @@ export function PlanZoom({
   height,
   children,
   fillScreen = false,
+  arrowKeys = true,
 }: {
   width: number;
   height: number;
   children: ReactNode;
   // Mappa: alta fino al fondo dello schermo, qualunque siano le proporzioni della pianta.
   fillScreen?: boolean;
+  // false: le frecce della tastiera non spostano la vista (nell'editor spostano i posti scelti).
+  arrowKeys?: boolean;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
@@ -254,7 +257,7 @@ export function PlanZoom({
       ArrowUp: [0, step],
       ArrowDown: [0, -step],
     };
-    if (moves[e.key]) {
+    if (moves[e.key] && arrowKeys) {
       e.preventDefault();
       const [dx, dy] = moves[e.key];
       setView((v) => (v ? bound({ ...v, x: v.x + dx, y: v.y + dy }, box) : v));
