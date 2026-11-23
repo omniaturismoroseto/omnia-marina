@@ -280,7 +280,8 @@ export async function arrangeUnit(tx: Tx, marinaId: string, pierId: string, sect
     m,
     trace.widthM,
   );
-  for (const p of placements) await tx.update(berths).set({ planX: p.x, planY: p.y, planAngle: p.angle }).where(eq(berths.id, p.id));
+  // Ridisposti in fila: il modulo si riconosce di nuovo all'apertura dell'editor.
+  for (const p of placements) await tx.update(berths).set({ planX: p.x, planY: p.y, planAngle: p.angle, planModule: null }).where(eq(berths.id, p.id));
   if (trace !== saved) {
     if (section) await tx.update(pierSections).set(lineColumns(trace)).where(eq(pierSections.id, section.id));
     else await tx.update(piers).set(lineColumns(trace)).where(eq(piers.id, pier.id));

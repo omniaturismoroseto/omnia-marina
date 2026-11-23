@@ -13,6 +13,7 @@ import {
   type Point,
 } from "@/lib/plan";
 import { Field, Form, FormMessage, Submit } from "@/components/form";
+import { assignModules } from "@/lib/plan-modules";
 import { savePlanLayout } from "@/server/plan-actions";
 import { makeBerthSection } from "@/server/settings-actions";
 
@@ -30,6 +31,8 @@ export interface EditorBerth {
   x: number | null;
   y: number | null;
   angle: number | null;
+  /** Modulo fisso della pianta (vedi src/lib/plan-modules.ts); vuoto = da riconoscere. */
+  module: number | null;
 }
 
 // select: sposta e ruota i posti · scale: due punti a distanza nota · pier: traccia un pontile · place: posa un posto
@@ -64,7 +67,8 @@ export function PlanEditor({
   /** Pontile o tratto da proporre subito (da «Apri nella pianta» in Pontili e posti). */
   initialPierId?: string;
 }) {
-  const [berths, setBerths] = useState(initialBerths);
+  // I moduli mancanti si riconoscono all'apertura dalle posizioni salvate, poi restano fissi (si salvano con la pianta).
+  const [berths, setBerths] = useState(() => withModules(initialBerths, initialPxPerMeter, width));
   const [under, setUnder] = useState<"foto" | "base">("foto");
   const [pxPerMeter, setPxPerMeter] = useState(initialPxPerMeter);
   const [tool, setTool] = useState<Tool>(
@@ -161,31 +165,13 @@ export function PlanEditor({
     );
     return moveMode === "pontile" ? unit : moduleOf(b, unit);
   };
-  // Modulo: i posti raggiungibili da quello scelto passando per posti vicini (affiancati, o di fronte sullo stesso pontile).
-  const moduleOf = (start: EditorBerth, unit: EditorBerth[]) => {
-    const meter = pxPerMeter ?? u * 4;
-    const near = (a: EditorBerth, b: EditorBerth) => {
-      const sa = sizeOf(a);
-      const sb = sizeOf(b);
-      const limit = Math.max((sa.l + sb.l) / 2, (sa.w + sb.w) / 2) + 3 * meter;
-      return Math.hypot(a.x! - b.x!, a.y! - b.y!) <= limit;
-    };
-    const found = new Set([start.id]);
-    const queue = [start];
-    while (queue.length) {
-      const cur = queue.pop()!;
-      for (const other of unit) {
-        if (!found.has(other.id) && near(cur, other)) {
-          found.add(other.id);
-          queue.push(other);
-        }
-      }
-    }
-    return unit.filter((x) => found.has(x.id));
-  };
+  // Modulo: i posti della stessa struttura con lo stesso modulo fisso (riconosciuto all'apertura o scelto a mano).
+  const moduleOf = (start: EditorBerth, unit: EditorBerth[]) =>
+    start.module === null ? [start] : unit.filter((x) => x.module === start.module);
   const group = selected && selected.x !== null ? groupOf(selected) : [];
   const pickedBerths = berths.filter((b) => picked.has(b.id));
   const pickedPiers = new Set(pickedBerths.map((b) => b.realPierId ?? b.pierId));
+  const pickedUnits = new Set(pickedBerths.map((b) => b.pierId));
   const groupIds = new Set(group.map((b) => b.id));
   const selectedPier = selected
     ? piers.find((p) => p.id === selected.pierId)
@@ -234,7 +220,16 @@ export function PlanEditor({
     } else if (tool === "scale") {
       setPoints((list) => (list.length >= 2 ? [p] : [...list, p]));
     } else if (tool === "place" && selectedId) {
-      update(selectedId, { x: p.x, y: p.y, angle: lastAngle.current });
+      const placedId = selectedId;
+      setBerths((list) =>
+        withModules(
+          list.map((b) => (b.id === placedId ? { ...b, x: p.x, y: p.y, angle: lastAngle.current, module: null } : b)),
+          pxPerMeter,
+          width,
+        ),
+      );
+      setDirty(true);
+      setNotice(null);
       setTool("select");
     } else if (tool === "pier") {
       if (points.length === 0) {
@@ -280,8 +275,10 @@ export function PlanEditor({
       return;
     }
     const byId = new Map(placements.map((pl) => [pl.id, pl]));
+    // Un pontile appena tracciato è un modulo solo.
+    const traced = nextModule(berths, trace.pierId);
     setBerths((list) =>
-      list.map((b) => (byId.has(b.id) ? { ...b, ...byId.get(b.id)! } : b)),
+      list.map((b) => (byId.has(b.id) ? { ...b, ...byId.get(b.id)!, module: traced } : b)),
     );
     lastAngle.current = placements[0].angle;
     setLastTrace(trace);
@@ -540,6 +537,7 @@ export function PlanEditor({
             b.x !== null && b.y !== null
               ? { x: b.x, y: b.y, angle: b.angle ?? 0 }
               : null,
+          module: b.x !== null && b.y !== null ? b.module : null,
         })),
         traces: Object.entries(traces).map(([pierId, t]) => ({ pierId, ...t })),
       });
@@ -585,7 +583,7 @@ export function PlanEditor({
           : moveMode === "pontile"
             ? "Trascina un posto per spostare tutto il suo pontile o tratto; trascina la foto per muoverti, rotellina o due dita per ingrandire."
             : moveMode === "modulo"
-              ? "Trascina un posto per spostare solo la parte di pontile a cui appartiene; trascina la foto per muoverti, rotellina o due dita per ingrandire."
+              ? "Trascina un posto per spostare il suo modulo (la parte staccata del pontile). I moduli restano separati anche se li avvicini; per cambiarli usa «posti scelti» → «Fai un modulo con questi posti»."
               : moveMode === "scelti"
                 ? "Tocca i posti da spostare insieme (toccane uno già scelto per toglierlo), poi trascinane uno: si muovono solo quelli scelti, anche se sono vicini ad altri."
               : "Trascina un posto per spostare solo quello; trascina la foto per muoverti, rotellina o due dita per ingrandire.";
@@ -897,6 +895,31 @@ export function PlanEditor({
             </div>
             {pickedBerths.length > 0 && (
               <div className="border-t border-line-soft pt-3">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={pickedUnits.size !== 1}
+                  onClick={() => {
+                    const unit = pickedBerths[0].pierId;
+                    const made = nextModule(berths, unit);
+                    setBerths((list) => list.map((b) => (picked.has(b.id) ? { ...b, module: made } : b)));
+                    setMoveMode("modulo");
+                    setPicked(new Set());
+                    setDirty(true);
+                    setNotice({ ok: true, message: `Modulo di ${pickedBerths.length} posti: ora con «modulo» si spostano insieme. Ricordati di salvare la pianta.` });
+                  }}
+                >
+                  Fai un modulo con questi posti
+                </button>
+                <p className="hint mt-1">
+                  {pickedUnits.size !== 1
+                    ? "Un modulo si fa con posti dello stesso pontile o tratto."
+                    : "Con «modulo» si sposteranno sempre insieme, separati dagli altri anche se li avvicini."}
+                </p>
+              </div>
+            )}
+            {pickedBerths.length > 0 && (
+              <div className="border-t border-line-soft pt-3">
                 <p className="label">Separali per sempre</p>
                 {pickedPiers.size > 1 ? (
                   <p className="text-sm text-muted">
@@ -1027,7 +1050,7 @@ export function PlanEditor({
                     type="button"
                     className="btn btn-danger btn-sm"
                     onClick={() =>
-                      update(selected.id, { x: null, y: null, angle: null })
+                      update(selected.id, { x: null, y: null, angle: null, module: null })
                     }
                   >
                     Togli dalla pianta
@@ -1120,4 +1143,21 @@ function clamp(value: number, min: number, max: number): number {
 function commonLetters(list: { code: string }[]): string {
   const letters = list.map((b) => b.code.replace(/\d+$/, ""));
   return letters.every((l) => l === letters[0]) ? (letters[0] ?? "") : "";
+}
+
+// Riconosce i moduli dei posti disposti che non ne hanno ancora uno (vedi assignModules); gli altri restano come sono.
+function withModules(list: EditorBerth[], pxPerMeter: number | null, width: number): EditorBerth[] {
+  if (!list.some((b) => b.module === null && b.x !== null && b.y !== null)) return list;
+  const meter = pxPerMeter ?? (width / 1000) * 4;
+  const size = (b: EditorBerth) => (pxPerMeter ? berthSizePx(b, pxPerMeter) : { w: 14 * (width / 1000), l: 36 * (width / 1000) });
+  const modules = assignModules(
+    list.flatMap((b) => (b.x !== null && b.y !== null ? [{ id: b.id, unit: b.pierId, x: b.x, y: b.y, ...size(b), module: b.module }] : [])),
+    meter,
+  );
+  return list.map((b) => (modules.has(b.id) && b.module !== modules.get(b.id) ? { ...b, module: modules.get(b.id)! } : b));
+}
+
+// Primo numero di modulo libero in una struttura.
+function nextModule(list: EditorBerth[], unit: string): number {
+  return list.filter((b) => b.pierId === unit).reduce((max, b) => Math.max(max, b.module ?? 0), 0) + 1;
 }

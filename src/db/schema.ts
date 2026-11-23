@@ -559,6 +559,9 @@ export const berths = pgTable(
     planX: real("plan_x"),
     planY: real("plan_y"),
     planAngle: real("plan_angle"),
+    // Modulo della pianta (pezzo staccato di un pontile o tratto): riconosciuto una volta dalle posizioni e poi fisso, così due
+    // moduli avvicinati restano separati. Vuoto = ancora da riconoscere (lo fa l'editor della Mappa del porto).
+    planModule: integer("plan_module"),
   },
   (t) => [uniqueIndex("berths_marina_code_uq").on(t.marinaId, t.code), index("berths_pier_idx").on(t.pierId)],
 );

@@ -21,6 +21,8 @@ const layoutSchema = z.object({
         id: z.uuid(),
         // null = posto tolto dalla pianta
         position: z.object({ x: z.number().finite(), y: z.number().finite(), angle: z.number().min(-360).max(360) }).nullable(),
+        // Modulo fisso della pianta (vedi src/lib/plan-modules.ts); assente = lascia quello salvato.
+        module: z.number().int().min(1).max(100_000).nullable().optional(),
       }),
     )
     .max(5000),
@@ -61,13 +63,17 @@ export async function savePlanLayout(input: z.input<typeof layoutSchema>): Promi
     await tx.update(marinas).set({ planPxPerMeter: pxPerMeter }).where(eq(marinas.id, ctx.marinaId));
     if (placements.length > 0) {
       const rows = sql.join(
-        placements.map((p) => sql`(${p.id}::uuid, ${p.position?.x ?? null}::real, ${p.position?.y ?? null}::real, ${p.position?.angle ?? null}::real)`),
+        placements.map(
+          (p) =>
+            sql`(${p.id}::uuid, ${p.position?.x ?? null}::real, ${p.position?.y ?? null}::real, ${p.position?.angle ?? null}::real, ${p.module ?? null}::int, ${p.module !== undefined}::boolean)`,
+        ),
         sql`, `,
       );
       // Il filtro sul porto garantisce che non si possano spostare posti di altri porti.
       await tx.execute(sql`
-        update berths set plan_x = v.x, plan_y = v.y, plan_angle = v.angle
-        from (values ${rows}) as v(id, x, y, angle)
+        update berths set plan_x = v.x, plan_y = v.y, plan_angle = v.angle,
+          plan_module = case when v.has_module then v.module else berths.plan_module end
+        from (values ${rows}) as v(id, x, y, angle, module, has_module)
         where berths.id = v.id and berths.marina_id = ${ctx.marinaId}
       `);
     }
