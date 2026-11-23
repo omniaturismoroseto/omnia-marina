@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, desc, eq } from "drizzle-orm";
+import { BoatPicture } from "@/components/boat-picture";
+import { BoatPhotoButton } from "@/components/boat-photo-button";
 import { Pencil, Plus } from "@/components/icons";
 import { ActionButton } from "@/components/form";
 import { MovementButtons } from "@/components/movement-buttons";
@@ -189,6 +191,13 @@ export default page(async function BoatPage({ params }: { params: Promise<{ id: 
         </div>
 
         <div className="space-y-5">
+          <div className="card overflow-hidden">
+            <BoatPicture boat={boat} />
+            <div className="p-4">
+              <BoatPhotoButton boatId={boat.id} hasPhoto={boat.hasPhoto} />
+              {!boat.hasPhoto && <p className="mt-2 text-sm text-muted">Senza foto si vede la sagoma del tipo di barca. Dal telefono puoi scattarla direttamente.</p>}
+            </div>
+          </div>
           {current && (
             <Card title="In banchina">
               <p className="mb-3 text-sm text-muted">

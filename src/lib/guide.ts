@@ -116,6 +116,8 @@ export const GUIDE: GuideSection[] = [
         title: "Come si usa",
         items: [
           "Tocca un posto per vedere barca, proprietario, telefono, contratto e prossime assegnazioni: sul computer il riquadro si apre sopra la mappa, a destra (si chiude con la X); sul telefono sotto la mappa.",
+          "Per l'ufficio il riquadro si apre con la foto della barca (o la sagoma del suo tipo, se la foto manca), il proprietario con il pulsante verde per chiamarlo e il contratto con una barra che mostra quanto manca alla partenza. Per la banchina in alto c'è una fascia colorata con lo stato del posto, poi righe grandi da toccare col telefono e i pulsanti di arrivo e partenza.",
+          "«Aggiungi foto», sull'immagine o sotto il nome della barca, carica la foto o la scatta col telefono: resta nella scheda della barca e si vede ogni volta che si apre il posto.",
           "Cambia la data in alto per vedere il porto in un altro giorno (per esempio a ferragosto).",
           "Se è stata caricata la pianta dal vero, «Schema» disegna il porto com'è davvero: pontili e banchine in grigio e su ogni posto la barca che lo occupa, lunga e larga quanto la barca vera, con la poppa verso il pontile. I posti liberi sono verdi e vuoti; le barche tratteggiate sono attese o fuori in mare. Il codice del posto è scritto lungo il posto; il nome del pontile compare nel riquadro del posto quando lo tocchi.",
           "Lo schema mostra anche terra, edifici, aree verdi e i servizi del porto (bar, ristorante, parcheggio, cantiere, carburante…) con le loro icone; sotto la mappa c'è l'elenco dei servizi. Si preparano in «Impostazioni» → «Mappa del porto» → «Sfondo e servizi della mappa».",
@@ -181,6 +183,7 @@ export const GUIDE: GuideSection[] = [
           "Lunghezza fuori tutto e larghezza massima sono obbligatorie: servono a proporre solo i posti in cui la barca entra.",
           "Inserisci compagnia, polizza e scadenza dell'assicurazione: le scadenze compaiono nel cruscotto.",
           "La scheda della barca mostra contratto, posto e ultimi movimenti in banchina.",
+          "In alto a destra c'è la foto della barca: «Aggiungi foto» la carica dal computer o la scatta col telefono, «Cambia foto» la sostituisce e «Togli la foto» la elimina. Senza foto si vede una sagoma del tipo di barca (vela, motore, gommone, catamarano). Le foto non si cercano in rete: si usano solo quelle caricate da voi.",
         ],
       },
     ],

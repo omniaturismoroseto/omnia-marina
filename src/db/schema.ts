@@ -439,11 +439,28 @@ export const boats = pgTable(
     insuranceExpiry: date("insurance_expiry"),
     notes: text("notes"),
     importId: uuid("import_id").references(() => ownerImports.id, { onDelete: "set null" }),
+    // Foto della barca (in boat_photos): hasPhoto dice se c'è, photoVersion cambia a ogni caricamento o rimozione
+    // e finisce nell'indirizzo dell'immagine, così il browser non mostra una copia vecchia.
+    hasPhoto: boolean("has_photo").notNull().default(false),
+    photoVersion: integer("photo_version").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [index("boats_marina_name_idx").on(t.marinaId, t.name), index("boats_owner_idx").on(t.ownerId)],
 );
+
+// Foto della barca, caricata dall'ufficio o scattata in banchina (JPEG già ridotto nel browser).
+export const boatPhotos = pgTable("boat_photos", {
+  boatId: uuid("boat_id")
+    .primaryKey()
+    .references(() => boats.id, { onDelete: "cascade" }),
+  marinaId: uuid("marina_id")
+    .notNull()
+    .references(() => marinas.id, { onDelete: "cascade" }),
+  mime: text("mime").notNull(),
+  data: bytea("data").notNull(),
+  updatedAt: updatedAt(),
+});
 
 // ───────────────────────── Pontili e posti barca ─────────────────────────
 

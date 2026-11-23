@@ -48,6 +48,7 @@ export const BOAT_TYPE_LABEL = {
   catamarano: "Catamarano",
   altro: "Altro",
 } as const;
+export type BoatType = keyof typeof BOAT_TYPE_LABEL;
 
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   contanti: "Contanti",
