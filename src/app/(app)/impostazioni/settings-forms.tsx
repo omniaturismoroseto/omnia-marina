@@ -398,8 +398,9 @@ export function GenerateBerthsForm({
       <input type="hidden" name="pierId" value={pierId} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Field name="prefix" label="Prefisso" defaultValue={prefix} maxLength={4} required />
-        <Field name="from" label="Dal numero" defaultValue={String(nextNumber)} inputMode="numeric" required />
-        <Field name="to" label="Al numero" defaultValue={String(nextNumber + 9)} inputMode="numeric" required />
+        {/* key: dopo ogni creazione i numeri ripartono dal successivo, senza ricaricare il modulo (resta il messaggio). */}
+        <Field key={`from-${nextNumber}`} name="from" label="Dal numero" defaultValue={String(nextNumber)} inputMode="numeric" required />
+        <Field key={`to-${nextNumber}`} name="to" label="Al numero" defaultValue={String(nextNumber + 9)} inputMode="numeric" required />
         <SelectField
           name="layout"
           label="Disposizione"
@@ -421,7 +422,7 @@ export function GenerateBerthsForm({
         <Submit variant="secondary">Crea i posti</Submit>
         <FormMessage />
       </div>
-      <p className="hint">I posti prendono le misure della categoria scelta: potrai modificarli uno per uno. I codici già esistenti vengono saltati.</p>
+      <p className="hint">I posti prendono le misure della categoria scelta: potrai modificarli uno per uno. I codici già esistenti vengono saltati. Se il pontile è già disegnato sulla pianta, i posti nuovi ci si dispongono da soli, dopo gli altri.</p>
     </Form>
   );
 }

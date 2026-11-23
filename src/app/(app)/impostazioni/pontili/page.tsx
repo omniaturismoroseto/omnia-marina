@@ -262,8 +262,7 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
                         Servono prima le <Link href="/impostazioni/categorie" className="link">categorie</Link>.
                       </p>
                     ) : (
-                      // key: dopo ogni creazione il modulo riparte con il numero successivo già proposto.
-                      <GenerateBerthsForm key={list.length} pierId={pier.id} prefix={pier.code} nextNumber={nextNumber(pier.code, list)} categories={categoryOptions} />
+                      <GenerateBerthsForm pierId={pier.id} prefix={pier.code} nextNumber={nextNumber(pier.code, list)} categories={categoryOptions} />
                     )}
                   </div>
                 </section>
