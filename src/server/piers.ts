@@ -5,7 +5,7 @@ import { berths, marinas, pierSections, piers, rates } from "@/db/schema";
 import { compareCodes } from "@/lib/berth-codes";
 import { appendPositions } from "@/lib/pier-merge";
 import { berthSlots, layoutPier } from "@/lib/plan";
-import { estimateTrace, fitTrace, renumberPier, type Trace } from "@/lib/plan-extend";
+import { clipTrace, estimateTrace, fitTrace, renumberPier, type Trace } from "@/lib/plan-extend";
 import { traceFromColumns, unitPositions } from "@/lib/plan-units";
 import { DomainError } from "./errors";
 
@@ -151,7 +151,40 @@ export async function sectionFromBerths(tx: Tx, marinaId: string, pierId: string
     const [still] = await tx.select({ id: berths.id }).from(berths).where(eq(berths.sectionId, id)).limit(1);
     if (!still) await tx.delete(pierSections).where(and(eq(pierSections.id, id), eq(pierSections.marinaId, marinaId)));
   }
+  await fitLines(tx, marinaId, pierId, section.id, left, picked.some((b) => b.sectionId === null));
   return picked.length;
+}
+
+/**
+ * Linee della pianta dopo aver fatto un tratto: il tratto nuovo prende la linea ricavata dai suoi posti; le linee dei pezzi
+ * da cui venivano (tratti o il pontile) si accorciano ai posti rimasti, così sulla mappa non coprono il tratto nuovo.
+ * Il pontile senza più posti fuori dai tratti perde la sua linea.
+ */
+async function fitLines(tx: Tx, marinaId: string, pierId: string, newSectionId: string, fromSections: string[], fromPier: boolean) {
+  const [marina] = await tx.select({ m: marinas.planPxPerMeter }).from(marinas).where(eq(marinas.id, marinaId));
+  const m = marina?.m;
+  const rows = await tx
+    .select({ sectionId: berths.sectionId, side: berths.side, position: berths.position, x: berths.planX, y: berths.planY, angle: berths.planAngle, lengthCm: berths.lengthCm, beamCm: berths.beamCm })
+    .from(berths)
+    .where(and(eq(berths.marinaId, marinaId), eq(berths.pierId, pierId)));
+  const placedIn = (sectionId: string | null) =>
+    rows.flatMap((b) => (b.sectionId === sectionId && b.x !== null && b.y !== null ? [{ ...b, x: b.x, y: b.y, angle: b.angle ?? 0 }] : []));
+  if (m) {
+    const own = estimateTrace(placedIn(newSectionId), m);
+    if (own) await tx.update(pierSections).set(lineColumns(own)).where(eq(pierSections.id, newSectionId));
+  }
+  for (const id of fromSections) {
+    const [sec] = await tx.select().from(pierSections).where(eq(pierSections.id, id));
+    const line = sec ? traceFromColumns(sec) : null;
+    if (line && m) await tx.update(pierSections).set(lineColumns(clipTrace(line, placedIn(id), m))).where(eq(pierSections.id, id));
+  }
+  if (fromPier) {
+    const [pier] = await tx.select().from(piers).where(eq(piers.id, pierId));
+    const line = pier ? traceFromColumns(pier) : null;
+    const loose = rows.filter((b) => b.sectionId === null);
+    if (line && loose.length === 0) await tx.update(piers).set(lineColumns(null)).where(eq(piers.id, pierId));
+    else if (line && m) await tx.update(piers).set(lineColumns(clipTrace(line, placedIn(null), m))).where(eq(piers.id, pierId));
+  }
 }
 
 // ───────────────────────── Tratti di un pontile ─────────────────────────

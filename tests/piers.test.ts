@@ -3,7 +3,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { db } from "@/db";
-import { berthCategories, berths, boats, contracts, owners, pierSections, piers, priceLists, rates, users } from "@/db/schema";
+import { berthCategories, berths, boats, contracts, marinas, owners, pierSections, piers, priceLists, rates, users } from "@/db/schema";
 import { appendPositions, movedOrder, parseIdList } from "@/lib/pier-merge";
 import { planUnits, unitPositions } from "@/lib/plan-units";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
@@ -226,6 +226,31 @@ describe.skipIf(!hasDb)("unione dei pontili (database)", () => {
     // Un tratto di un altro porto non si tocca.
     const [zSection] = await db.select().from(pierSections).where(eq(pierSections.pierId, z.id));
     await expect(db.transaction((tx) => dissolveSection(tx, otherMarinaId, zSection.id))).rejects.toThrow(/non trovato/);
+  });
+
+  it("un tratto fatto dall'editor ha la sua linea e accorcia quella del pontile", async () => {
+    await db.update(marinas).set({ planPxPerMeter: 10 }).where(eq(marinas.id, marinaId));
+    const [pier] = await db.insert(piers).values({ marinaId, code: "Q", name: "Molo Q", planAx: 0, planAy: 100, planBx: 400, planBy: 100, planWidthM: 2 }).returning({ id: piers.id });
+    // Una fila sul pontile (Q01–Q03) e, accanto, una fila staccata (Q04–Q05) più in basso.
+    const made = await db
+      .insert(berths)
+      .values([
+        { code: "Q01", x: 40, y: 40, side: "sx" as const, position: 0 },
+        { code: "Q02", x: 80, y: 40, side: "sx" as const, position: 1 },
+        { code: "Q03", x: 120, y: 40, side: "sx" as const, position: 2 },
+        { code: "Q04", x: 200, y: 300, side: "sx" as const, position: 3 },
+        { code: "Q05", x: 240, y: 300, side: "sx" as const, position: 4 },
+      ].map((b) => ({ marinaId, pierId: pier.id, categoryId, code: b.code, side: b.side, position: b.position, lengthCm: 1000, beamCm: 400, planX: b.x, planY: b.y, planAngle: 0 })))
+      .returning({ id: berths.id, code: berths.code });
+    const ids = made.filter((b) => b.code === "Q04" || b.code === "Q05").map((b) => b.id);
+    await db.transaction((tx) => sectionFromBerths(tx, marinaId, pier.id, ids, "fila sud"));
+    const [sec] = await db.select().from(pierSections).where(eq(pierSections.pierId, pier.id));
+    expect(sec.planAy).not.toBeNull();
+    expect(sec.planAx).toBeCloseTo(180, 0);
+    expect(sec.planBx).toBeCloseTo(260, 0);
+    const [q] = await db.select().from(piers).where(eq(piers.id, pier.id));
+    expect([q.planAx, q.planBx]).toEqual([20, 140]);
+    await db.update(marinas).set({ planPxPerMeter: null }).where(eq(marinas.id, marinaId));
   });
 
   it("non unisce pontili di un altro porto", async () => {

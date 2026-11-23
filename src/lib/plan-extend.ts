@@ -232,3 +232,20 @@ export function fitTrace(trace: Trace, slots: number, beamPx: number): Trace {
   const k = needed / len;
   return { ...trace, b: { x: round1(trace.a.x + (trace.b.x - trace.a.x) * k), y: round1(trace.a.y + (trace.b.y - trace.a.y) * k) } };
 }
+
+/**
+ * Linea accorciata ai posti che le restano (per esempio dopo averne fatto un tratto a parte): stessa direzione e stessa
+ * posizione di traverso, lunga dal primo all'ultimo posto con la loro larghezza. Senza posti resta com'è.
+ */
+export function clipTrace(trace: Trace, berths: { x: number; y: number; beamCm: number }[], pxPerMeter: number): Trace {
+  const len = Math.hypot(trace.b.x - trace.a.x, trace.b.y - trace.a.y);
+  if (berths.length === 0 || len < 1) return trace;
+  const d = { x: (trace.b.x - trace.a.x) / len, y: (trace.b.y - trace.a.y) / len };
+  const ends = berths.flatMap((b) => {
+    const t = (b.x - trace.a.x) * d.x + (b.y - trace.a.y) * d.y;
+    const r = (b.beamCm / 200) * pxPerMeter;
+    return [t - r, t + r];
+  });
+  const at = (t: number) => ({ x: round1(trace.a.x + d.x * t), y: round1(trace.a.y + d.y * t) });
+  return { ...trace, a: at(Math.min(...ends)), b: at(Math.max(...ends)) };
+}

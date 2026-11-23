@@ -103,7 +103,7 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
   }));
   const editorBerths = units.flatMap((unit) => {
     const positions = unitPositions(unit.berths);
-    return unit.berths.map(({ sectionId: _section, ...b }) => ({ ...b, pierId: unit.id, position: positions.get(b.id) ?? b.position }));
+    return unit.berths.map(({ sectionId: _section, ...b }) => ({ ...b, pierId: unit.id, realPierId: b.pierId, position: positions.get(b.id) ?? b.position }));
   });
   const [[plan], categories, featureRows, [base]] = await Promise.all([
     db
@@ -363,10 +363,10 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
                 </Notice>
               </div>
             )}
-            {/* key: una nuova foto o posti nuovi (per esempio creati dalle proposte, che fissano anche la scala) fanno ripartire
+            {/* key: una nuova foto, posti nuovi (per esempio creati dalle proposte, che fissano anche la scala) o un tratto nuovo fanno ripartire
                 l'editor dai dati aggiornati; i salvataggi fatti dall'editor stesso no, così il suo messaggio resta visibile. */}
             <PlanEditor
-              key={`${marina.version}:${berthRows.length}`}
+              key={`${marina.version}:${berthRows.length}:${sectionRows.map((sec) => sec.id).join(",")}`}
               imageUrl={`/pianta/immagine?v=${marina.version}`}
               baseUrl={baseUrl}
               width={marina.width!}
