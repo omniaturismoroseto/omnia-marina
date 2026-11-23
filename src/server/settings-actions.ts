@@ -210,7 +210,7 @@ export async function savePier(_prev: FormState, formData: FormData): Promise<Pi
 
 // Esito dell'unione nell'indirizzo della pagina: lo legge `mergeNotice` in Pontili e posti.
 function mergedUrl(r: MergeResult): string {
-  const q = new URLSearchParams({ unito: r.target.id, da: r.merged.map((p) => p.code).join(","), posti: String(r.moved) });
+  const q = new URLSearchParams({ pontile: r.target.id, unito: r.target.id, da: r.merged.map((p) => p.code).join(","), posti: String(r.moved) });
   return `/impostazioni/pontili?${q}`;
 }
 
@@ -239,6 +239,44 @@ export async function mergePierGroup(_prev: FormState, formData: FormData): Prom
 }
 
 // Sposta un pontile di un posto in su o in giù nell'ordine (mappa, elenchi, tariffe).
+// Nuovo ordine dei pontili, trascinando le righe in Pontili e posti: l'elenco completo degli id, dal primo all'ultimo.
+export async function reorderPiers(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const ids = parseIdList(formData.get("ids"));
+  const rows = await db.select({ id: piers.id, sortOrder: piers.sortOrder }).from(piers).where(eq(piers.marinaId, ctx.marinaId));
+  const known = new Set(rows.map((p) => p.id));
+  if (ids.length !== rows.length || ids.some((id) => !known.has(id))) return fail("L'elenco dei pontili è cambiato: ricarica la pagina.");
+  const current = new Map(rows.map((p) => [p.id, p.sortOrder]));
+  await db.transaction(async (tx) => {
+    for (const [i, id] of ids.entries()) {
+      if (current.get(id) !== i) await tx.update(piers).set({ sortOrder: i }).where(and(eq(piers.id, id), eq(piers.marinaId, ctx.marinaId)));
+    }
+  });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// «Unisci con un altro pontile…» dal menu del pontile: i suoi posti passano al pontile scelto (anche con un altro nome).
+export async function mergePierInto(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const pierId = String(formData.get("pierId") ?? "");
+  const targetId = String(formData.get("targetId") ?? "");
+  if (!z.uuid().safeParse(pierId).success || !z.uuid().safeParse(targetId).success) return fail("Scegli il pontile a cui unirlo.");
+  if (pierId === targetId) return fail("Scegli un altro pontile.");
+  let result: MergeResult;
+  try {
+    result = await db.transaction(async (tx) => {
+      const merged = await mergePiers(tx, ctx.marinaId, targetId, [pierId]);
+      await audit(ctx, "modifica", "pontile", targetId, `Unito ${merged.merged.map((p) => p.code).join(", ")} in ${merged.target.code} (${merged.moved} posti)`, tx);
+      return merged;
+    });
+  } catch (err) {
+    return toFormState(err);
+  }
+  revalidatePath("/", "layout");
+  redirect(mergedUrl(result));
+}
+
 export async function movePier(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
   const pierId = String(formData.get("pierId") ?? "");
@@ -469,6 +507,8 @@ export async function saveBerth(_prev: FormState, formData: FormData): Promise<F
   }
   await audit(ctx, "modifica", "posto barca", id, data.code);
   revalidatePath("/", "layout");
+  // Dal pannello del posto in Pontili e posti si resta sulla pagina.
+  if (formData.get("stay")) return { ok: true, message: `Posto ${data.code} salvato.` };
   redirect("/impostazioni/pontili");
 }
 
@@ -487,6 +527,7 @@ export async function deleteBerth(_prev: FormState, formData: FormData): Promise
     return { ...toFormState(err), message: "Il posto ha contratti collegati: mettilo fuori servizio invece di eliminarlo." };
   }
   revalidatePath("/", "layout");
+  if (formData.get("stay")) return { ok: true, message: "Posto eliminato." };
   redirect("/impostazioni/pontili");
 }
 
@@ -732,7 +773,7 @@ export async function splitSectionAction(_prev: FormState, formData: FormData): 
     return err instanceof DomainError ? state : { ...state, message: "Esiste già un pontile con questa sigla.", errors: { code: "Sigla già usata" } };
   }
   revalidatePath("/", "layout");
-  redirect(`/impostazioni/pontili#pontile-${pierId}`);
+  redirect(`/impostazioni/pontili?pontile=${pierId}`);
 }
 
 // Elimina i posti scelti; quelli con contratti (anche vecchi) restano: vanno messi fuori servizio.
