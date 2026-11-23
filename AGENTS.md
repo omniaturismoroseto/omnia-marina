@@ -74,6 +74,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   trascinamento, frecce, rotazione (attorno al centro) e «Lunghezza ±1/±5 m» (`stretch`, scala le posizioni lungo il pontile); la linea
   salvata segue solo con «pontile o tratto» e si risalva con la pianta.
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
+- Riquadro del posto sulla mappa (`src/app/(app)/mappa/berth-panel.tsx`): ufficio e direzione vedono la scheda con foto della barca,
+  proprietario con pulsante per chiamare e barra del periodo; la banchina la fascia dello stato e righe grandi. Calcoli puri in
+  `src/lib/berth-panel.ts`. Foto della barca in `boat_photos` (`boats.has_photo`/`photo_version`), servita e caricata da
+  `/barche/[id]/foto` (tutti i ruoli, ridotta nel browser da `BoatPhotoButton`); senza foto `BoatPicture` disegna la sagoma del tipo.
+  Niente immagini cercate in rete dal modello.
 - Periodi dei contratti: annuali per anno solare (`annualEnd` = 31/12 dell'anno di inizio, imposto anche dal server; vale per gli
   spazi «Annuale»), stagionali dal 1/5 al 30/9 (`SEASON_START`/`SEASON_END`, `yearPeriod` in `src/lib/dates.ts`). «Scegli dalla mappa»
   nel modulo contratto: `BerthMapPicker` con i dati di `loadPlanMap` (`src/server/plan-map.ts`) e `PlanView` con `onSelect`.

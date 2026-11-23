@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, eq, lte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { berthCategories, berths, boats, contracts, owners, pierSections, piers, type BerthStatus, type ContractType, type Presence } from "@/db/schema";
+import type { BoatType } from "@/lib/labels";
 import { traceFromColumns, type UnitSection } from "@/lib/plan-units";
 
 /*
@@ -25,6 +26,11 @@ export interface Occupant {
   endDate: string;
   boatId: string;
   boatName: string;
+  boatType: BoatType;
+  boatBuilder: string | null;
+  boatModel: string | null;
+  boatHasPhoto: boolean;
+  boatPhotoVersion: number;
   boatLengthCm: number;
   boatBeamCm: number;
   ownerId: string;
@@ -92,6 +98,11 @@ export async function getBoard(marinaId: string, date: string, today: string): P
         endDate: contracts.endDate,
         boatId: boats.id,
         boatName: boats.name,
+        boatType: boats.type,
+        boatBuilder: boats.builder,
+        boatModel: boats.model,
+        boatHasPhoto: boats.hasPhoto,
+        boatPhotoVersion: boats.photoVersion,
         boatLengthCm: boats.lengthCm,
         boatBeamCm: boats.beamCm,
         ownerId: owners.id,

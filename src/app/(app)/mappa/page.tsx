@@ -1,18 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { and, asc, eq, gt, inArray } from "drizzle-orm";
-import { ArrowDownToLine, ArrowUpFromLine, Clock, Droplets, Phone, Waves, Wrench, X, Zap } from "@/components/icons";
-import { MovementButtons } from "@/components/movement-buttons";
+import { asc, eq } from "drizzle-orm";
+import { ArrowDownToLine, ArrowUpFromLine, Clock, Waves, Wrench } from "@/components/icons";
 import { page } from "@/components/page";
-import { Badge, ButtonLink, Details, EmptyState, FilterTabs, PageHeader } from "@/components/ui";
+import { ButtonLink, EmptyState, FilterTabs, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { boats, contracts, marinaPlanBases, marinas, owners, planFeatures } from "@/db/schema";
+import { marinaPlanBases, marinas, planFeatures } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
-import { formatDate, formatDateLong, isValidISODate, todayRome } from "@/lib/dates";
-import { formatDimensions, formatMeters } from "@/lib/format";
-import { BERTH_STATUS_LABEL, CONTRACT_TYPE_LABEL } from "@/lib/labels";
+import { formatDateLong, isValidISODate, todayRome } from "@/lib/dates";
 import { one, qs, uuidOrNull, type SearchParams } from "@/lib/params";
-import { contractNumberLabel } from "@/lib/contract-numbers";
 import { countStates, getBoard, STATE_LABEL, type BerthState, type BoardBerth, type BoardPier } from "@/server/board";
 import { ServiceIcon } from "@/components/service-icon";
 import { buildDrawing } from "@/lib/plan-drawing";
@@ -22,6 +18,7 @@ import { serviceTitle } from "@/lib/port-services";
 import { PlanView } from "./plan-view";
 import { PlanZoom } from "./plan-zoom";
 import { ScrollIntoViewOnPhone } from "./scroll-into-view";
+import { BerthPanel } from "./berth-panel";
 
 export const metadata: Metadata = { title: "Mappa dei posti barca" };
 
@@ -36,16 +33,6 @@ const CELL: Record<BerthState, string> = {
 };
 
 const STATE_ORDER: BerthState[] = ["libero", "occupato", "fuori", "atteso", "partenza", "ritardo", "fermo"];
-const STATE_TONE: Record<BerthState, "ok" | "sea" | "warn" | "buoy" | "bad" | "neutral"> = {
-  libero: "ok",
-  occupato: "sea",
-  fuori: "sea",
-  atteso: "warn",
-  partenza: "buoy",
-  ritardo: "bad",
-  fermo: "neutral",
-};
-
 function StateGlyph({ state }: { state: BerthState }) {
   const props = { size: 12, "aria-hidden": true } as const;
   if (state === "fuori") return <Waves {...props} />;
@@ -96,172 +83,6 @@ function Pier({ pier, hrefFor, selectedId }: { pier: BoardPier; hrefFor: (berthI
           </span>
         </div>
       </div>
-    </div>
-  );
-}
-
-async function BerthPanel({
-  berth,
-  pierName,
-  date,
-  today,
-  marinaId,
-  office,
-  closeHref,
-}: {
-  closeHref: string | null;
-  berth: BoardBerth;
-  pierName: string | null;
-  date: string;
-  today: string;
-  marinaId: string;
-  office: boolean;
-}) {
-  const o = berth.occupant;
-  const upcoming = await db
-    .select({ id: contracts.id, number: contracts.number, type: contracts.type, status: contracts.status, startDate: contracts.startDate, endDate: contracts.endDate, boatName: boats.name, ownerName: owners.displayName })
-    .from(contracts)
-    .innerJoin(boats, eq(boats.id, contracts.boatId))
-    .innerJoin(owners, eq(owners.id, contracts.ownerId))
-    .where(and(eq(contracts.marinaId, marinaId), eq(contracts.berthId, berth.id), inArray(contracts.status, ["attivo", "bozza"]), gt(contracts.startDate, date)))
-    .orderBy(asc(contracts.startDate))
-    .limit(4);
-
-  return (
-    <div className="card p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xs font-medium text-muted">Posto barca{pierName ? ` · ${pierName}` : ""}</p>
-          <h2 className="font-display text-3xl leading-none font-semibold">{berth.code}</h2>
-        </div>
-        <div className="flex items-center gap-1">
-          <Badge tone={STATE_TONE[berth.state]}>{STATE_LABEL[berth.state]}</Badge>
-          {closeHref && (
-            <Link href={closeHref} className="btn btn-ghost btn-sm -mr-2" aria-label="Chiudi il riquadro del posto">
-              <X size={16} aria-hidden="true" />
-            </Link>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
-        <span>{formatDimensions(berth.lengthCm, berth.beamCm)}</span>
-        {berth.draftCm && <span>fondale {formatMeters(berth.draftCm)}</span>}
-        {berth.hasWater && (
-          <span className="inline-flex items-center gap-1">
-            <Droplets size={14} aria-hidden="true" /> acqua
-          </span>
-        )}
-        {berth.hasPower && (
-          <span className="inline-flex items-center gap-1">
-            <Zap size={14} aria-hidden="true" /> corrente
-          </span>
-        )}
-      </div>
-      {berth.categoryName && <p className="mt-1 text-xs text-muted">Categoria {berth.categoryName}</p>}
-      {berth.status !== "attivo" && (
-        <p className="mt-3 rounded-md bg-line-soft px-3 py-2 text-sm text-ink">
-          {BERTH_STATUS_LABEL[berth.status]}
-          {berth.notes ? ` · ${berth.notes}` : ""}
-        </p>
-      )}
-
-      {o ? (
-        <div className="mt-4 border-t border-line-soft pt-4">
-          <Details
-            columns={1}
-            items={[
-              [
-                "Barca",
-                <Link key="b" href={`/barche/${o.boatId}`} className="link">
-                  {o.boatName}
-                </Link>,
-              ],
-              ["Dimensioni", formatDimensions(o.boatLengthCm, o.boatBeamCm)],
-              [
-                "Proprietario",
-                office ? (
-                  <Link key="o" href={`/clienti/${o.ownerId}`} className="link">
-                    {o.ownerName}
-                  </Link>
-                ) : (
-                  o.ownerName
-                ),
-              ],
-              [
-                "Telefono",
-                o.ownerPhone ? (
-                  <a key="t" href={`tel:${o.ownerPhone.replace(/\s/g, "")}`} className="link inline-flex items-center gap-1">
-                    <Phone size={14} aria-hidden="true" />
-                    {o.ownerPhone}
-                  </a>
-                ) : null,
-              ],
-              [
-                "Contratto",
-                office ? (
-                  <Link key="c" href={`/contratti/${o.contractId}`} className="link">
-                    {contractNumberLabel(o.number)} · {CONTRACT_TYPE_LABEL[o.type]}
-                  </Link>
-                ) : (
-                  `${contractNumberLabel(o.number)} · ${CONTRACT_TYPE_LABEL[o.type]}`
-                ),
-              ],
-              ["Periodo", `${formatDate(o.startDate)} – ${formatDate(o.endDate)}`],
-            ]}
-          />
-          {date === today && (
-            <div className="mt-4">
-              <MovementButtons contractId={o.contractId} presence={o.presence} canArrive={o.startDate <= today} departing={o.endDate <= today} earlyDeparture />
-            </div>
-          )}
-          {berth.incoming && (
-            <p className="mt-3 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn">
-              Oggi è atteso anche <strong>{berth.incoming.boatName}</strong> su questo posto.
-            </p>
-          )}
-        </div>
-      ) : (
-        berth.status === "attivo" && (
-          <div className="mt-4 border-t border-line-soft pt-4">
-            <p className="text-sm text-muted">Nessuna barca assegnata il {formatDate(date)}.</p>
-            {office && (
-              <ButtonLink href={`/contratti/nuovo${qs({ posto: berth.id, dal: date })}`} variant="primary" className="mt-3">
-                Assegna il posto
-              </ButtonLink>
-            )}
-          </div>
-        )
-      )}
-
-      {upcoming.length > 0 && (
-        <div className="mt-4 border-t border-line-soft pt-3">
-          <p className="text-xs font-semibold tracking-wide text-muted uppercase">Prossime assegnazioni</p>
-          <ul className="mt-2 space-y-1.5 text-sm">
-            {upcoming.map((u) => (
-              <li key={u.id} className="flex items-baseline justify-between gap-2">
-                <span className="min-w-0">
-                  {/* A chi è intestato il contratto, poi la barca; l'ufficio apre il contratto. */}
-                  {office ? (
-                    <Link href={`/contratti/${u.id}`} className="link block truncate font-medium">
-                      {u.ownerName}
-                    </Link>
-                  ) : (
-                    <span className="block truncate font-medium">{u.ownerName}</span>
-                  )}
-                  <span className="block truncate text-xs text-muted">
-                    {u.boatName}
-                    {u.status === "bozza" ? " · bozza" : u.number ? ` · ${contractNumberLabel(u.number)}` : ""}
-                  </span>
-                </span>
-                <span className="shrink-0 text-xs text-muted tabular-nums">
-                  {formatDate(u.startDate)} – {formatDate(u.endDate)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }
