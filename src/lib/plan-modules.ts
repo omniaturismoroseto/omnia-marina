@@ -7,16 +7,33 @@ export interface ModuleBerth {
   unit: string;
   x: number;
   y: number;
+  /** Rotazione in gradi (a 0° il lato lungo è verticale). */
+  angle: number;
   /** Lunghezza e larghezza del posto in pixel della foto. */
   l: number;
   w: number;
   module: number | null;
 }
 
-/** Due posti sono dello stesso modulo se sono affiancati o uno di fronte all'altro sulla stessa passerella. */
+/**
+ * Due posti sono dello stesso modulo se sono orientati allo stesso modo e affiancati sulla stessa fila (uno accanto all'altro,
+ * senza sfalsamento) oppure uno di fronte all'altro sulla stessa passerella. Due file vicine ma sfalsate restano moduli diversi.
+ */
 export function nearBerths(a: ModuleBerth, b: ModuleBerth, meterPx: number): boolean {
-  const limit = Math.max((a.l + b.l) / 2, (a.w + b.w) / 2) + 3 * meterPx;
-  return Math.hypot(a.x - b.x, a.y - b.y) <= limit;
+  const turn = ((((a.angle - b.angle) % 180) + 180) % 180);
+  if (Math.min(turn, 180 - turn) > 20) return false;
+  const r = (a.angle * Math.PI) / 180;
+  const along = { x: Math.cos(r), y: Math.sin(r) }; // lungo il pontile
+  const across = { x: -Math.sin(r), y: Math.cos(r) }; // lungo il posto
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const t = Math.abs(dx * along.x + dy * along.y);
+  const n = Math.abs(dx * across.x + dy * across.y);
+  const L = (a.l + b.l) / 2;
+  const W = (a.w + b.w) / 2;
+  const sideBySide = n <= 0.35 * L && t <= W + 1.5 * meterPx;
+  const facing = t <= 0.6 * W && n <= L + 4 * meterPx;
+  return sideBySide || facing;
 }
 
 /**

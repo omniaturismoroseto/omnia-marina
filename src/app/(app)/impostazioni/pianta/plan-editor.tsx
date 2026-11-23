@@ -1045,6 +1045,32 @@ export function PlanEditor({
                       </p>
                     </div>
                   )}
+                {moveMode === "modulo" && (
+                  <div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        const unit = selected.pierId;
+                        const again = withModules(
+                          berths.map((b) => (b.pierId === unit ? { ...b, module: null } : b)),
+                          pxPerMeter,
+                          width,
+                        );
+                        setBerths(again);
+                        const count = new Set(again.filter((b) => b.pierId === unit && b.module !== null).map((b) => b.module)).size;
+                        setDirty(true);
+                        setNotice({ ok: true, message: `Moduli riconosciuti di nuovo: ${count === 1 ? "1 modulo" : `${count} moduli`}. Salva la pianta per tenerli.` });
+                      }}
+                    >
+                      Riconosci di nuovo i moduli
+                    </button>
+                    <p className="hint mt-1">
+                      Rifà i moduli di questo pontile (o tratto) dalle posizioni attuali: fila per fila, uno accanto all&apos;altro o di
+                      fronte sulla stessa passerella. Per sistemarne uno a mano usa «posti scelti» → «Fai un modulo con questi posti».
+                    </p>
+                  </div>
+                )}
                 {(moveMode === "posto" || group.length < 2) && (
                   <button
                     type="button"
@@ -1151,7 +1177,7 @@ function withModules(list: EditorBerth[], pxPerMeter: number | null, width: numb
   const meter = pxPerMeter ?? (width / 1000) * 4;
   const size = (b: EditorBerth) => (pxPerMeter ? berthSizePx(b, pxPerMeter) : { w: 14 * (width / 1000), l: 36 * (width / 1000) });
   const modules = assignModules(
-    list.flatMap((b) => (b.x !== null && b.y !== null ? [{ id: b.id, unit: b.pierId, x: b.x, y: b.y, ...size(b), module: b.module }] : [])),
+    list.flatMap((b) => (b.x !== null && b.y !== null ? [{ id: b.id, unit: b.pierId, x: b.x, y: b.y, angle: b.angle ?? 0, ...size(b), module: b.module }] : [])),
     meter,
   );
   return list.map((b) => (modules.has(b.id) && b.module !== modules.get(b.id) ? { ...b, module: modules.get(b.id)! } : b));
