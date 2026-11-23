@@ -336,3 +336,35 @@ export async function splitSection(tx: Tx, marinaId: string, sectionId: string, 
   if (left.length === 1 && loose.length === 0) await dissolveSection(tx, marinaId, left[0].id);
   return { pierId: created.id, moved: moving.length };
 }
+
+/**
+ * Divide un pontile (o un suo tratto) in due tratti dello stesso pontile, in ordine di codice: fino al posto prima di `fromBerthId`
+ * il primo, da lì in poi il secondo. Il pontile resta uno solo (sigla, prezzi, categorie e codici dei posti non cambiano); sulla
+ * pianta i due tratti si spostano e si tracciano da soli, come quelli di un'unione.
+ */
+export async function splitUnitAt(
+  tx: Tx,
+  marinaId: string,
+  pierId: string,
+  sectionId: string | null,
+  fromBerthId: string,
+  labels: { first: string; second: string },
+): Promise<{ first: number; second: number }> {
+  const { sections, rows } = await loadPier(tx, marinaId, pierId);
+  if (sectionId && !sections.some((s) => s.id === sectionId)) throw new DomainError("Tratto non trovato.");
+  const known = new Set(sections.map((s) => s.id));
+  const unit = rows
+    .filter((b) => (sectionId ? b.sectionId === sectionId : !b.sectionId || !known.has(b.sectionId)))
+    .sort((p, q) => compareCodes(p.code, q.code));
+  const at = unit.findIndex((b) => b.id === fromBerthId);
+  if (at < 1) throw new DomainError("Scegli il posto da cui parte il secondo tratto (non il primo).", "fromBerthId");
+  const first = unit.slice(0, at).map((b) => b.id);
+  const second = unit.slice(at).map((b) => b.id);
+  if (sectionId) {
+    await tx.update(pierSections).set({ label: labels.first }).where(eq(pierSections.id, sectionId));
+  } else {
+    await sectionFromBerths(tx, marinaId, pierId, first, labels.first);
+  }
+  await sectionFromBerths(tx, marinaId, pierId, second, labels.second);
+  return { first: first.length, second: second.length };
+}

@@ -1116,7 +1116,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-// Lettere comuni ai codici (CN01, CN02 → CN): nome proposto per il tratto.
+// Lettere comuni ai codici (CN1, CN2 → CN): nome proposto per il tratto.
 function commonLetters(list: { code: string }[]): string {
   const letters = list.map((b) => b.code.replace(/\d+$/, ""));
   return letters.every((l) => l === letters[0]) ? (letters[0] ?? "") : "";

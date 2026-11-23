@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, inArray, lte, ne, or, sql } from "drizzle-orm"
 import { db } from "@/db";
 import { berths, boats, charges, contracts, movements, owners, payments, tasks, users } from "@/db/schema";
 import { visibleUser } from "@/lib/account-manager";
+import { byBerthCode } from "@/server/berth-order";
 
 // Incassato per addebito, da unire alle query sugli addebiti.
 export const paidByCharge = db
@@ -78,7 +79,7 @@ export async function getDockRows(marinaId: string, today: string): Promise<Dock
         or(and(eq(contracts.presence, "atteso"), lte(contracts.startDate, today)), inArray(contracts.presence, ["in_porto", "fuori"])),
       ),
     )
-    .orderBy(asc(berths.code), asc(boats.name));
+    .orderBy(...byBerthCode, asc(boats.name));
 }
 
 export async function getOpenTasks(marinaId: string) {

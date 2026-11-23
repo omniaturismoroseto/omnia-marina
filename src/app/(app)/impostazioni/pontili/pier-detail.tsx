@@ -15,14 +15,14 @@ import { BulkCodesForm, BulkDeleteForm, BulkEditForm, BulkSectionForm, pickedSum
 import { Drawer } from "./drawer";
 import { STATE_CELL, STATE_ORDER, stateCounts } from "./states";
 import type { ManagerBerth, ManagerCategory, ManagerPier, ManagerUnit } from "./types";
-import { ArrangeForm, DissolveSectionButton, RenameSectionForm, SplitSectionForm } from "./unit-tools";
+import { ArrangeForm, DissolveSectionButton, RenameSectionForm, SplitAtForm, SplitSectionForm } from "./unit-tools";
 
 type Bulk = "edit" | "codes" | "section" | "delete";
-type UnitAction = "arrange" | "rename" | "split";
+type UnitAction = "arrange" | "divide" | "rename" | "split";
 
 const unitKey = (u: ManagerUnit) => u.sectionId ?? "pontile";
 
-// Lettere più usate nei codici (CN01, CN02 → CN), per proporre la sigla dei posti nuovi.
+// Lettere più usate nei codici (CN1, CN2 → CN), per proporre la sigla dei posti nuovi.
 function commonPrefix(list: { code: string }[], fallback: string): string {
   const counts = new Map<string, number>();
   for (const b of list) {
@@ -154,7 +154,7 @@ export function PierDetail({
             Vedi sulla mappa
           </Link>
           {hasPlan && (
-            <Link href={`/impostazioni/pianta?struttura=${firstUnitId}#editor`} className={linkBtn}>
+            <Link href={`/impostazioni/pianta?parte=posti&struttura=${firstUnitId}#editor`} className={linkBtn}>
               Apri nella pianta
             </Link>
           )}
@@ -320,7 +320,7 @@ export function PierDetail({
           </p>
         )}
 
-        {multi && <p className="text-sm text-muted">Pontile unito: per elenchi, codici e tariffe è uno solo, ma ogni tratto si gestisce anche da sé e sulla pianta si sposta da solo.</p>}
+        {multi && <p className="text-sm text-muted">Pontile in più tratti (unito o diviso): per elenchi, codici e tariffe è uno solo, ma ogni tratto si gestisce anche da sé e sulla pianta si sposta da solo.</p>}
 
         {all.length === 0 && !add && <p className="text-sm text-muted">Questo pontile non ha ancora posti: usa «Aggiungi posti».</p>}
 
@@ -343,6 +343,11 @@ export function PierDetail({
                       Disposizione
                     </UnitLink>
                   )}
+                  {u.berths.length > 1 && (
+                    <UnitLink active={open === "divide"} onClick={() => toggle("divide")}>
+                      Dividi
+                    </UnitLink>
+                  )}
                   {multi && (
                     <UnitLink active={add?.sectionId === u.sectionId} onClick={() => setAdd(add?.sectionId === u.sectionId ? null : { sectionId: u.sectionId })}>
                       Aggiungi posti
@@ -354,12 +359,12 @@ export function PierDetail({
                         Rinomina
                       </UnitLink>
                       <UnitLink active={open === "split"} onClick={() => toggle("split")}>
-                        Separa
+                        Rendi pontile a sé
                       </UnitLink>
                     </>
                   )}
                   {hasPlan && (
-                    <Link href={`/impostazioni/pianta?struttura=${u.sectionId ?? pier.id}#editor`} className="link">
+                    <Link href={`/impostazioni/pianta?parte=posti&struttura=${u.sectionId ?? pier.id}#editor`} className="link">
                       Apri nella pianta
                     </Link>
                   )}
@@ -369,6 +374,15 @@ export function PierDetail({
               {open && (
                 <div className="mb-3 rounded-md border border-line-soft bg-paper p-3">
                   {open === "arrange" && <ArrangeForm pierId={pier.id} sectionId={u.sectionId} hasPlan={hasPlan} />}
+                  {open === "divide" && (
+                    <SplitAtForm
+                      pierId={pier.id}
+                      sectionId={u.sectionId}
+                      berths={[...u.berths].sort((a, b) => compareCodes(a.code, b.code))}
+                      first={u.label || "1"}
+                      second={u.label ? `${u.label} 2` : "2"}
+                    />
+                  )}
                   {open === "rename" && u.sectionId && <RenameSectionForm sectionId={u.sectionId} label={u.label} />}
                   {open === "split" && u.sectionId && <SplitSectionForm sectionId={u.sectionId} code={u.label.slice(0, 4).toUpperCase()} name={`${pier.name} ${u.label}`} />}
                 </div>

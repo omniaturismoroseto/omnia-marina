@@ -25,12 +25,15 @@ import { AutoDetect } from "./auto-detect";
 import { BaseUploader } from "./base-uploader";
 import { PhotoUploader } from "./photo-uploader";
 import { PlanEditor } from "./plan-editor";
+import { PlanSection, PlanSections } from "./plan-sections";
 import { one, uuidOrNull, type SearchParams } from "@/lib/params";
 import { SurroundingsEditor, type BerthRect } from "./surroundings-editor";
+import { byBerthCode } from "@/server/berth-order";
 
 export const metadata: Metadata = { title: "Mappa del porto" };
 
 export default page(async function PlanSettingsPage({ searchParams }: { searchParams: SearchParams }) {
+  const params = await searchParams;
   const ctx = await requireMarina(["admin"]);
   const [[marina], pierRows, berthRows, sectionRows] = await Promise.all([
     db
@@ -72,7 +75,7 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
       })
       .from(berths)
       .where(eq(berths.marinaId, ctx.marinaId))
-      .orderBy(asc(berths.code)),
+      .orderBy(...byBerthCode),
     db
       .select()
       .from(pierSections)
@@ -224,117 +227,9 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
       />
       <SettingsTabs current="pianta" />
 
-      <div className="space-y-5">
-        <Card title="Foto aerea del porto">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-            <div className="max-w-2xl space-y-2 text-sm text-muted">
-              <p>
-                Va bene un&apos;immagine salvata da Google Earth,
-                un&apos;ortofoto del geoportale regionale, una foto da drone o
-                la planimetria del progetto: l&apos;importante è che sia{" "}
-                <strong className="font-medium text-ink">
-                  ripresa dall&apos;alto, non inclinata
-                </strong>
-                , e che inquadri tutti i pontili.
-              </p>
-              <p>
-                Con Google Earth Pro: inquadra il porto, premi{" "}
-                <kbd className="rounded border border-line bg-white px-1 text-ink">
-                  R
-                </kbd>{" "}
-                per la vista dall&apos;alto con il nord in alto, poi File →
-                Salva → Salva immagine. Con il righello misura la lunghezza di
-                un pontile: ti servirà per impostare la scala.
-              </p>
-              <p className="text-xs">
-                Rispetta le condizioni d&apos;uso della fonte: per le immagini
-                di Google Earth va mantenuta visibile l&apos;attribuzione.
-              </p>
-            </div>
-            <PhotoUploader hasPhoto={hasPhoto} placedCount={placedCount} />
-          </div>
-        </Card>
-
+      <PlanSections initial={one(params.parte) || (hasPhoto ? "posti" : "foto")}>
         {hasPhoto && (
-          <Card
-            title={
-              analysis ? "Proposte dalla foto" : "Riconoscimento automatico"
-            }
-          >
-            <AutoDetect
-              available={planAnalysisAvailable()}
-              analysis={analysis}
-              imageUrl={`/pianta/immagine?v=${marina.version}`}
-              width={marina.width!}
-              height={marina.height!}
-              pxPerMeter={marina.pxPerMeter}
-              categories={categories}
-              usedCodes={pierRows.map((p) => p.code)}
-              placed={placedBerths}
-            />
-          </Card>
-        )}
-
-        {hasPhoto && (
-          <Card title="Base disegnata della mappa">
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-              <div className="max-w-2xl space-y-2 text-sm text-muted">
-                <p>
-                  Per uno schema da mappa illustrata si può far disegnare la
-                  base (terra, moli, pontili, edifici, verde, rosa dei venti) a
-                  un grafico, ricalcando questa foto aerea. Nella base{" "}
-                  <strong className="font-medium text-ink">non vanno</strong>{" "}
-                  barche, nomi dei pontili e servizi: li aggiunge l&apos;app,
-                  così restano sempre aggiornati e la direzione può cambiarli.
-                </p>
-                <p>
-                  Va esportata in PNG con{" "}
-                  <strong className="font-medium text-ink">
-                    la stessa inquadratura della foto
-                  </strong>
-                  {` (${marina.width} × ${marina.height} pixel o un multiplo, per esempio il doppio)`}
-                  , senza ritagliare: così i posti già disposti cadono al loro
-                  posto.
-                </p>
-              </div>
-              <BaseUploader hasBase={Boolean(base)} />
-            </div>
-            {baseUrl && (
-              // eslint-disable-next-line @next/next/no-img-element -- immagine servita dall'app, già alla misura giusta
-              <img
-                src={baseUrl}
-                alt="Base disegnata caricata"
-                className="mt-4 max-h-72 w-auto rounded-md border border-line"
-              />
-            )}
-          </Card>
-        )}
-
-        {hasPhoto && (
-          <Card title="Sfondo e servizi della mappa">
-            <p className="mb-4 max-w-3xl text-sm text-muted">
-              Lo schema della mappa disegna il porto come una mappa illustrata:
-              terra, moli ed edifici in grigio, aree verdi e i servizi (bar,
-              ristorante, parcheggio, cantiere, carburante…). Ricava terra e
-              acqua dai colori della foto, chiedi a Claude edifici e servizi,
-              poi ritocca a mano e salva.
-            </p>
-            <SurroundingsEditor
-              key={`${marina.version}:${baseUrl ?? ""}`}
-              imageUrl={`/pianta/immagine?v=${marina.version}`}
-              width={marina.width!}
-              height={marina.height!}
-              pxPerMeter={marina.pxPerMeter}
-              initialFeatures={featureRows}
-              berthRects={berthRects}
-              waterSeeds={waterSeeds}
-              aiAvailable={planAnalysisAvailable()}
-              baseUrl={baseUrl}
-            />
-          </Card>
-        )}
-
-        {hasPhoto && (
+          <PlanSection id="posti" label="Posti sulla foto">
           <div id="editor" className="scroll-mt-4">
           <Card title="Disponi i posti sulla foto">
             <ol className="mb-4 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
@@ -374,12 +269,126 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
               initialPxPerMeter={marina.pxPerMeter}
               piers={editorPiers}
               initialBerths={editorBerths}
-              initialPierId={uuidOrNull(one((await searchParams).struttura)) ?? undefined}
+              initialPierId={uuidOrNull(one(params.struttura)) ?? undefined}
             />
           </Card>
           </div>
+          </PlanSection>
         )}
-      </div>
+        <PlanSection id="foto" label="Foto aerea">
+        <Card title="Foto aerea del porto">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+            <div className="max-w-2xl space-y-2 text-sm text-muted">
+              <p>
+                Va bene un&apos;immagine salvata da Google Earth,
+                un&apos;ortofoto del geoportale regionale, una foto da drone o
+                la planimetria del progetto: l&apos;importante è che sia{" "}
+                <strong className="font-medium text-ink">
+                  ripresa dall&apos;alto, non inclinata
+                </strong>
+                , e che inquadri tutti i pontili.
+              </p>
+              <p>
+                Con Google Earth Pro: inquadra il porto, premi{" "}
+                <kbd className="rounded border border-line bg-white px-1 text-ink">
+                  R
+                </kbd>{" "}
+                per la vista dall&apos;alto con il nord in alto, poi File →
+                Salva → Salva immagine. Con il righello misura la lunghezza di
+                un pontile: ti servirà per impostare la scala.
+              </p>
+              <p className="text-xs">
+                Rispetta le condizioni d&apos;uso della fonte: per le immagini
+                di Google Earth va mantenuta visibile l&apos;attribuzione.
+              </p>
+            </div>
+            <PhotoUploader hasPhoto={hasPhoto} placedCount={placedCount} />
+          </div>
+        </Card>
+        </PlanSection>
+        {hasPhoto && (
+          <PlanSection id="riconoscimento" label="Riconoscimento automatico">
+          <Card
+            title={
+              analysis ? "Proposte dalla foto" : "Riconoscimento automatico"
+            }
+          >
+            <AutoDetect
+              available={planAnalysisAvailable()}
+              analysis={analysis}
+              imageUrl={`/pianta/immagine?v=${marina.version}`}
+              width={marina.width!}
+              height={marina.height!}
+              pxPerMeter={marina.pxPerMeter}
+              categories={categories}
+              usedCodes={pierRows.map((p) => p.code)}
+              placed={placedBerths}
+            />
+          </Card>
+          </PlanSection>
+        )}
+        {hasPhoto && (
+          <PlanSection id="sfondo" label="Sfondo e servizi">
+          <Card title="Sfondo e servizi della mappa">
+            <p className="mb-4 max-w-3xl text-sm text-muted">
+              Lo schema della mappa disegna il porto come una mappa illustrata:
+              terra, moli ed edifici in grigio, aree verdi e i servizi (bar,
+              ristorante, parcheggio, cantiere, carburante…). Ricava terra e
+              acqua dai colori della foto, chiedi a Claude edifici e servizi,
+              poi ritocca a mano e salva.
+            </p>
+            <SurroundingsEditor
+              key={`${marina.version}:${baseUrl ?? ""}`}
+              imageUrl={`/pianta/immagine?v=${marina.version}`}
+              width={marina.width!}
+              height={marina.height!}
+              pxPerMeter={marina.pxPerMeter}
+              initialFeatures={featureRows}
+              berthRects={berthRects}
+              waterSeeds={waterSeeds}
+              aiAvailable={planAnalysisAvailable()}
+              baseUrl={baseUrl}
+            />
+          </Card>
+          </PlanSection>
+        )}
+        {hasPhoto && (
+          <PlanSection id="base" label="Base disegnata">
+          <Card title="Base disegnata della mappa">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+              <div className="max-w-2xl space-y-2 text-sm text-muted">
+                <p>
+                  Per uno schema da mappa illustrata si può far disegnare la
+                  base (terra, moli, pontili, edifici, verde, rosa dei venti) a
+                  un grafico, ricalcando questa foto aerea. Nella base{" "}
+                  <strong className="font-medium text-ink">non vanno</strong>{" "}
+                  barche, nomi dei pontili e servizi: li aggiunge l&apos;app,
+                  così restano sempre aggiornati e la direzione può cambiarli.
+                </p>
+                <p>
+                  Va esportata in PNG con{" "}
+                  <strong className="font-medium text-ink">
+                    la stessa inquadratura della foto
+                  </strong>
+                  {` (${marina.width} × ${marina.height} pixel o un multiplo, per esempio il doppio)`}
+                  , senza ritagliare: così i posti già disposti cadono al loro
+                  posto.
+                </p>
+              </div>
+              <BaseUploader hasBase={Boolean(base)} />
+            </div>
+            {baseUrl && (
+              // eslint-disable-next-line @next/next/no-img-element -- immagine servita dall'app, già alla misura giusta
+              <img
+                src={baseUrl}
+                alt="Base disegnata caricata"
+                className="mt-4 max-h-72 w-auto rounded-md border border-line"
+              />
+            )}
+          </Card>
+          </PlanSection>
+        )}
+      </PlanSections>
     </>
   );
 });

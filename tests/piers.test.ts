@@ -7,7 +7,8 @@ import { berthCategories, berths, boats, contracts, marinas, owners, pierSection
 import { appendPositions, movedOrder, parseIdList } from "@/lib/pier-merge";
 import { planUnits, unitPositions } from "@/lib/plan-units";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
-import { arrangeUnit, dissolveSection, mergePiers, sectionFromBerths, splitSection } from "@/server/piers";
+import { arrangeUnit, dissolveSection, mergePiers, sectionFromBerths, splitSection, splitUnitAt } from "@/server/piers";
+import { byBerthCode } from "@/server/berth-order";
 
 describe("unione dei pontili: regole pure", () => {
   it("strutture della pianta: un'unità per tratto, posizioni dalla radice del tratto", () => {
@@ -253,6 +254,26 @@ describe.skipIf(!hasDb)("unione dei pontili (database)", () => {
     await db.update(marinas).set({ planPxPerMeter: null }).where(eq(marinas.id, marinaId));
   });
 
+  it("dividere un pontile lo lascia uno solo, con due tratti e gli stessi codici", async () => {
+    const [pier] = await db.insert(piers).values({ marinaId, code: "D", name: "Molo D", baseRate: false }).returning({ id: piers.id });
+    const made = await db
+      .insert(berths)
+      .values(["D1", "D2", "D3", "D10", "D11"].map((code, i) => ({ marinaId, pierId: pier.id, categoryId, code, position: i, lengthCm: 800, beamCm: 300 })))
+      .returning({ id: berths.id, code: berths.code });
+    const id = (code: string) => made.find((b) => b.code === code)!.id;
+    // In ordine naturale D10 viene dopo D3: il secondo tratto parte da D10.
+    const r = await db.transaction((tx) => splitUnitAt(tx, marinaId, pier.id, null, id("D10"), { first: "1", second: "2" }));
+    expect(r).toEqual({ first: 3, second: 2 });
+    const sections = await db.select().from(pierSections).where(eq(pierSections.pierId, pier.id)).orderBy(asc(pierSections.sortOrder));
+    expect(sections.map((x) => x.label)).toEqual(["1", "2"]);
+    const rows = await db.select({ code: berths.code, pierId: berths.pierId, sectionId: berths.sectionId, categoryId: berths.categoryId }).from(berths).where(eq(berths.pierId, pier.id)).orderBy(...byBerthCode);
+    expect(rows.map((b) => b.code)).toEqual(["D1", "D2", "D3", "D10", "D11"]);
+    expect(rows.map((b) => sections.find((x) => x.id === b.sectionId)?.label)).toEqual(["1", "1", "1", "2", "2"]);
+    expect(new Set(rows.map((b) => b.categoryId))).toEqual(new Set([categoryId]));
+    // Il primo posto non può aprire il secondo tratto.
+    await expect(db.transaction((tx) => splitUnitAt(tx, marinaId, pier.id, sections[0].id, id("D1"), { first: "a", second: "b" }))).rejects.toThrow(/non il primo/);
+  });
+
   it("non unisce pontili di un altro porto", async () => {
     const [mine] = await db.insert(piers).values({ marinaId, code: "P", name: "Pontile" }).returning({ id: piers.id });
     const [theirs] = await db.insert(piers).values({ marinaId: otherMarinaId, code: "P", name: "Pontile" }).returning({ id: piers.id });
@@ -275,18 +296,18 @@ describe("nuovi codici dei posti", () => {
     expect(r).toEqual({
       ok: true,
       codes: [
-        { id: "n1", code: "G01" },
-        { id: "n2", code: "G02" },
-        { id: "n10", code: "G03" },
-        { id: "s1", code: "G04" },
+        { id: "n1", code: "G1" },
+        { id: "n2", code: "G2" },
+        { id: "n10", code: "G3" },
+        { id: "s1", code: "G4" },
       ],
     });
   });
 
   it("mantenendo i numeri rifiuta i doppioni e i codici senza numero", async () => {
     const { renameCodes } = await import("@/lib/berth-codes");
-    expect(renameCodes(list, "G", { mode: "mantieni" })).toMatchObject({ ok: false, message: expect.stringMatching(/CN01 e CS01 diventerebbero entrambi G01/) });
-    expect(renameCodes([{ id: "x", code: "CN07" }], "G", { mode: "mantieni" })).toEqual({ ok: true, codes: [{ id: "x", code: "G07" }] });
+    expect(renameCodes(list, "G", { mode: "mantieni" })).toMatchObject({ ok: false, message: expect.stringMatching(/CN01 e CS01 diventerebbero entrambi G1/) });
+    expect(renameCodes([{ id: "x", code: "CN07" }], "G", { mode: "mantieni" })).toEqual({ ok: true, codes: [{ id: "x", code: "G7" }] });
     expect(renameCodes([{ id: "x", code: "TESTA" }], "G", { mode: "mantieni" })).toMatchObject({ ok: false });
     expect(renameCodes(list, "  ", { mode: "mantieni" })).toMatchObject({ ok: false });
   });

@@ -15,6 +15,7 @@ import { MergePiersButton } from "../settings-forms";
 import { SettingsTabs } from "../tabs";
 import { PiersManager } from "./piers-manager";
 import type { ManagerBerth, ManagerPier } from "./types";
+import { byBerthCode } from "@/server/berth-order";
 
 export const metadata: Metadata = { title: "Pontili e posti barca" };
 
@@ -26,7 +27,7 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
 
   const [pierRows, berthRows, categories, board, contractRows, sectionRows, [marina], [rateCount]] = await Promise.all([
     db.select().from(piers).where(eq(piers.marinaId, ctx.marinaId)).orderBy(asc(piers.sortOrder), asc(piers.code)),
-    db.select().from(berths).where(eq(berths.marinaId, ctx.marinaId)).orderBy(asc(berths.code)),
+    db.select().from(berths).where(eq(berths.marinaId, ctx.marinaId)).orderBy(...byBerthCode),
     db.select().from(berthCategories).where(eq(berthCategories.marinaId, ctx.marinaId)).orderBy(asc(berthCategories.sortOrder), asc(berthCategories.maxLengthCm)),
     getBoard(ctx.marinaId, today, today),
     // Contratti attivi in corso o che devono ancora iniziare, per pontile.

@@ -204,6 +204,13 @@
       "when": 1795451965575,
       "tag": "0028_privacy_app_diportista",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1795461901856,
+      "tag": "0029_codici_senza_zeri",
+      "breakpoints": true
     }
   ]
 }

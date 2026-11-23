@@ -184,7 +184,7 @@ export function planBerths(code: string, kind: StructureKind, a: Point, b: Point
   let n = 1;
   for (const side of ordered) {
     for (let position = 0; position < side.count; position++) {
-      rows.push({ code: `${code}${String(n++).padStart(2, "0")}`, side: side.side, position, lengthCm: side.lengthCm, beamCm: side.beamCm });
+      rows.push({ code: `${code}${n++}`, side: side.side, position, lengthCm: side.lengthCm, beamCm: side.beamCm });
     }
   }
   const placements = layoutPier(
