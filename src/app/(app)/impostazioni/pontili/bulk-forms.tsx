@@ -1,0 +1,122 @@
+"use client";
+
+import { CheckboxField, Field, Form, FormMessage, SelectField, Submit } from "@/components/form";
+import { deleteBerths, makeBerthSection, renameBerths, updateBerths } from "@/server/settings-actions";
+import type { ManagerBerth, ManagerCategory } from "./types";
+
+// Moduli della barra «posti scelti»: ognuno lavora sui posti scelti di un pontile (pierId + berthIds).
+
+const KEEP = "Non cambiare";
+const YES_NO = [
+  { value: "si", label: "Sì" },
+  { value: "no", label: "No" },
+];
+
+function Hidden({ pierId, berths }: { pierId: string; berths: ManagerBerth[] }) {
+  return (
+    <>
+      <input type="hidden" name="pierId" value={pierId} />
+      <input type="hidden" name="berthIds" value={berths.map((b) => b.id).join(",")} />
+    </>
+  );
+}
+
+export function pickedSummary(berths: ManagerBerth[]): string {
+  const codes = berths.map((b) => b.code);
+  return `${codes.slice(0, 12).join(", ")}${codes.length > 12 ? "…" : ""}`;
+}
+
+export function BulkEditForm({ pierId, berths, categories }: { pierId: string; berths: ManagerBerth[]; categories: ManagerCategory[] }) {
+  return (
+    <Form action={updateBerths} className="space-y-4">
+      <Hidden pierId={pierId} berths={berths} />
+      <p className="text-sm text-muted">Cambia solo quello che scegli: i campi lasciati su «{KEEP}» o vuoti restano come sono in ogni posto.</p>
+      <SelectField name="categoryId" label="Categoria" placeholder={KEEP} options={categories.map((c) => ({ value: c.id, label: c.label }))} />
+      <CheckboxField name="categorySizes" label="Con lunghezza e larghezza della categoria" hint="Al posto delle misure scritte qui sotto." />
+      <SelectField
+        name="status"
+        label="Stato"
+        placeholder={KEEP}
+        options={[
+          { value: "attivo", label: "In servizio" },
+          { value: "manutenzione", label: "In manutenzione" },
+          { value: "fuori_servizio", label: "Fuori servizio" },
+        ]}
+      />
+      <div className="grid grid-cols-2 gap-3">
+        <Field name="lengthCm" label="Lunghezza (m)" inputMode="decimal" placeholder={KEEP} />
+        <Field name="beamCm" label="Larghezza (m)" inputMode="decimal" placeholder={KEEP} />
+        <Field name="draftCm" label="Fondale (m)" inputMode="decimal" placeholder={KEEP} />
+        <span />
+        <SelectField name="hasWater" label="Acqua" placeholder={KEEP} options={YES_NO} />
+        <SelectField name="hasPower" label="Corrente" placeholder={KEEP} options={YES_NO} />
+      </div>
+      <Submit>{berths.length === 1 ? "Applica al posto" : `Applica a ${berths.length} posti`}</Submit>
+      <FormMessage />
+    </Form>
+  );
+}
+
+export function BulkCodesForm({ pierId, berths, prefix }: { pierId: string; berths: ManagerBerth[]; prefix: string }) {
+  return (
+    <Form action={renameBerths} className="space-y-4">
+      <Hidden pierId={pierId} berths={berths} />
+      <p className="text-sm text-muted">
+        Nuova sigla per i posti scelti, per esempio da CN01 a {prefix || "G"}01. Se hanno sigle diverse con gli stessi numeri (CN01 e CS01), scegli
+        «Rinumera in fila»: in ordine di codice prendono i numeri dal primo in poi. Contratti e pianta restano collegati.
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <Field name="prefix" label="Nuova sigla" defaultValue={prefix} maxLength={6} required />
+        <Field name="from" label="Primo numero (se rinumeri)" defaultValue="1" inputMode="numeric" />
+      </div>
+      <SelectField
+        name="numbering"
+        label="Numeri"
+        defaultValue="mantieni"
+        options={[
+          { value: "mantieni", label: "Mantieni i numeri" },
+          { value: "rinumera", label: "Rinumera in fila" },
+        ]}
+      />
+      <Submit>{berths.length === 1 ? "Cambia il codice" : `Cambia ${berths.length} codici`}</Submit>
+      <FormMessage />
+    </Form>
+  );
+}
+
+export function BulkSectionForm({ pierId, berths }: { pierId: string; berths: ManagerBerth[] }) {
+  const letters = berths.map((b) => b.code.replace(/\d+$/, ""));
+  const label = letters.every((l) => l === letters[0]) ? (letters[0] ?? "") : "";
+  return (
+    <Form action={makeBerthSection} className="space-y-4">
+      <Hidden pierId={pierId} berths={berths} />
+      <p className="text-sm text-muted">
+        I posti scelti diventano un tratto che nella Mappa del porto si sposta, ruota e traccia da solo (per esempio un braccio del pontile). Per
+        la gestione il pontile resta uno solo.
+      </p>
+      <Field name="label" label="Nome del tratto" defaultValue={label} maxLength={20} required />
+      <Submit>Crea il tratto</Submit>
+      <FormMessage />
+    </Form>
+  );
+}
+
+export function BulkDeleteForm({ pierId, berths }: { pierId: string; berths: ManagerBerth[] }) {
+  const linked = berths.filter((b) => b.occupant);
+  return (
+    <Form action={deleteBerths} className="space-y-4">
+      <Hidden pierId={pierId} berths={berths} />
+      <div className="rounded-md border border-bad/30 bg-bad-soft px-3 py-2 text-sm text-bad">
+        <p className="font-medium">
+          {berths.length === 1 ? `Il posto ${berths[0].code} verrà eliminato.` : `${berths.length} posti verranno eliminati.`}
+        </p>
+        <p className="mt-1">
+          I posti con contratti (anche conclusi) non si eliminano: restano e vanno messi fuori servizio.
+          {linked.length > 0 && ` Oggi ne sono occupati ${linked.length}: ${linked.map((b) => b.code).slice(0, 8).join(", ")}${linked.length > 8 ? "…" : ""}.`}
+        </p>
+      </div>
+      <Submit variant="danger">Elimina</Submit>
+      <FormMessage />
+    </Form>
+  );
+}

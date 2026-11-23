@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowUp } from "@/components/icons";
 import { ActionButton, CheckboxField, Field, Form, FormMessage, SelectField, Submit, TextareaField, useFormResult } from "@/components/form";
 import { pierGroupKey } from "@/lib/pricing";
 import { moneyInput } from "@/lib/format";
@@ -13,10 +12,7 @@ import {
   changeOwnPassword,
   deleteBerth,
   deleteCategory,
-  deletePier,
-  generateBerths,
   mergePierGroup,
-  movePier,
   removeMember,
   resetMemberPassword,
   saveBerth,
@@ -345,89 +341,6 @@ export function MergePiersButton({ targetId, label, confirm }: { targetId: strin
     <ActionButton action={mergePierGroup} fields={{ targetId }} size="sm" confirm={confirm}>
       {label}
     </ActionButton>
-  );
-}
-
-export function MovePierButtons({ pierId, first, last }: { pierId: string; first: boolean; last: boolean }) {
-  return (
-    <span className="inline-flex gap-1">
-      {!first && (
-        <ActionButton action={movePier} fields={{ pierId, direction: "su" }} variant="ghost" size="sm" className="px-2">
-          <span className="sr-only">Sposta in su</span>
-          <ArrowUp className="size-4" aria-hidden="true" />
-        </ActionButton>
-      )}
-      {!last && (
-        <ActionButton action={movePier} fields={{ pierId, direction: "giu" }} variant="ghost" size="sm" className="px-2">
-          <span className="sr-only">Sposta in giù</span>
-          <ArrowUp className="size-4 rotate-180" aria-hidden="true" />
-        </ActionButton>
-      )}
-    </span>
-  );
-}
-
-export function DeletePierButton({ pierId, berthCount }: { pierId: string; berthCount: number }) {
-  return (
-    <ActionButton
-      action={deletePier}
-      fields={{ pierId }}
-      variant="danger"
-      size="sm"
-      confirm={berthCount > 0 ? `Eliminare il pontile con i suoi ${berthCount} posti barca?` : "Eliminare questo pontile?"}
-    >
-      Elimina pontile
-    </ActionButton>
-  );
-}
-
-export function GenerateBerthsForm({
-  pierId,
-  sectionId,
-  prefix,
-  nextNumber,
-  categories,
-}: {
-  pierId: string;
-  /** Tratto di un pontile unito che riceve i posti; senza, quello della sigla. */
-  sectionId?: string;
-  prefix: string;
-  // Primo numero libero dopo i posti già creati: la numerazione prosegue da lì.
-  nextNumber: number;
-  categories: { id: string; label: string }[];
-}) {
-  return (
-    <Form action={generateBerths} className="space-y-3">
-      <input type="hidden" name="pierId" value={pierId} />
-      {sectionId && <input type="hidden" name="sectionId" value={sectionId} />}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Field name="prefix" label="Prefisso" defaultValue={prefix} maxLength={4} required />
-        {/* key: dopo ogni creazione i numeri ripartono dal successivo, senza ricaricare il modulo (resta il messaggio). */}
-        <Field key={`from-${nextNumber}`} name="from" label="Dal numero" defaultValue={String(nextNumber)} inputMode="numeric" required />
-        <Field key={`to-${nextNumber}`} name="to" label="Al numero" defaultValue={String(nextNumber + 9)} inputMode="numeric" required />
-        <SelectField
-          name="layout"
-          label="Disposizione"
-          defaultValue="alternati"
-          options={[
-            { value: "alternati", label: "Sui due lati, alternati" },
-            { value: "sx", label: "Solo lato sinistro" },
-            { value: "dx", label: "Solo lato destro" },
-          ]}
-        />
-        <SelectField name="categoryId" label="Categoria" options={categories.map((c) => ({ value: c.id, label: c.label }))} placeholder="Scegli…" required />
-        <Field name="draftCm" label="Fondale (m)" inputMode="decimal" placeholder="Es. 3,00" />
-      </div>
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <CheckboxField name="hasWater" label="Acqua" defaultChecked />
-        <CheckboxField name="hasPower" label="Corrente" defaultChecked />
-      </div>
-      <div className="flex items-center gap-3">
-        <Submit variant="secondary">Crea i posti</Submit>
-        <FormMessage />
-      </div>
-      <p className="hint">I posti prendono le misure della categoria scelta: potrai modificarli uno per uno. I codici già esistenti vengono saltati. Se il pontile è già disegnato sulla pianta, i posti nuovi ci si dispongono da soli, dopo gli altri.</p>
-    </Form>
   );
 }
 
