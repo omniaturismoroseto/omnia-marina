@@ -15,6 +15,9 @@ import { Maximize } from "@/components/icons";
 
 // Ingrandimento massimo rispetto alla foto intera adattata allo schermo.
 const MAX_ZOOM = 8;
+// Ingrandimento massimo assoluto (pixel dello schermo per pixel della pianta): sul telefono la vista intera è piccola
+// e «8 volte» non basterebbe a vedere bene i posti, quindi vale il più grande dei due limiti.
+const MAX_SCALE = 6;
 // Spostamento (in pixel dello schermo) oltre il quale un tocco diventa un trascinamento e non apre il posto.
 const DRAG_THRESHOLD = 6;
 
@@ -87,7 +90,7 @@ export function PlanZoom({
   const bound = useCallback(
     (v: View, size: Size): View => {
       const min = Math.min(size.w / width, size.h / height);
-      const s = clamp(v.s, min, min * MAX_ZOOM);
+      const s = clamp(v.s, min, Math.max(min * MAX_ZOOM, MAX_SCALE));
       const cw = width * s;
       const ch = height * s;
       const x = cw <= size.w ? (size.w - cw) / 2 : clamp(v.x, size.w - cw, 0);
