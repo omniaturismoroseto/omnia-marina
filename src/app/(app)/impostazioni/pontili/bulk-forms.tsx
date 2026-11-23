@@ -62,7 +62,7 @@ export function BulkCodesForm({ pierId, berths, prefix }: { pierId: string; bert
     <Form action={renameBerths} className="space-y-4">
       <Hidden pierId={pierId} berths={berths} />
       <p className="text-sm text-muted">
-        Nuova sigla per i posti scelti, per esempio da CN01 a {prefix || "G"}01. Se hanno sigle diverse con gli stessi numeri (CN01 e CS01), scegli
+        Nuova sigla per i posti scelti, per esempio da CN1 a {prefix || "G"}1. Se hanno sigle diverse con gli stessi numeri (CN1 e CS1), scegli
         «Rinumera in fila»: in ordine di codice prendono i numeri dal primo in poi. Contratti e pianta restano collegati.
       </p>
       <div className="grid grid-cols-2 gap-3">

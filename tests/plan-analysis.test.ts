@@ -126,10 +126,10 @@ describe("posti di una struttura confermata", () => {
       ],
       10,
     );
-    expect(berths.map((b) => `${b.code}:${b.side}${b.position}`)).toEqual(["C01:sx0", "C02:sx1", "C03:sx2", "C04:dx0", "C05:dx1"]);
+    expect(berths.map((b) => `${b.code}:${b.side}${b.position}`)).toEqual(["C1:sx0", "C2:sx1", "C3:sx2", "C4:dx0", "C5:dx1"]);
     // pontile largo 2 m: centro dei posti a (1 + 5) m = 60 px dall'asse
-    expect(berths[0].placement).toEqual({ id: "C01", x: 50, y: 440, angle: 0 });
-    expect(berths[3].placement).toEqual({ id: "C04", x: 50, y: 560, angle: 0 });
+    expect(berths[0].placement).toEqual({ id: "C1", x: 50, y: 440, angle: 0 });
+    expect(berths[3].placement).toEqual({ id: "C4", x: 50, y: 560, angle: 0 });
   });
   it("una banchina mette le poppe sulla linea", () => {
     const [b] = planBerths("Q", "banchina", { x: 0, y: 500 }, { x: 100, y: 500 }, [{ side: "sx", count: 1, lengthCm: 800, beamCm: 300 }], 10);

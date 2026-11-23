@@ -131,3 +131,13 @@ describe("linea lunga quanto serve", () => {
     expect(longer.b.x).toBeCloseTo(176, 0);
   });
 });
+
+describe("linea accorciata ai posti rimasti", () => {
+  it("tiene direzione e traverso, va dal primo all'ultimo posto", async () => {
+    const { clipTrace } = await import("@/lib/plan-extend");
+    const line = { a: { x: 0, y: 100 }, b: { x: 300, y: 100 }, widthM: 2 };
+    const out = clipTrace(line, [{ x: 60, y: 40, beamCm: 400 }, { x: 140, y: 160, beamCm: 400 }], M);
+    expect(out).toEqual({ a: { x: 40, y: 100 }, b: { x: 160, y: 100 }, widthM: 2 });
+    expect(clipTrace(line, [], M)).toBe(line);
+  });
+});

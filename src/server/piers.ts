@@ -5,7 +5,7 @@ import { berths, marinas, pierSections, piers, rates } from "@/db/schema";
 import { compareCodes } from "@/lib/berth-codes";
 import { appendPositions } from "@/lib/pier-merge";
 import { berthSlots, layoutPier } from "@/lib/plan";
-import { estimateTrace, fitTrace, renumberPier, type Trace } from "@/lib/plan-extend";
+import { clipTrace, estimateTrace, fitTrace, renumberPier, type Trace } from "@/lib/plan-extend";
 import { traceFromColumns, unitPositions } from "@/lib/plan-units";
 import { DomainError } from "./errors";
 
@@ -151,7 +151,40 @@ export async function sectionFromBerths(tx: Tx, marinaId: string, pierId: string
     const [still] = await tx.select({ id: berths.id }).from(berths).where(eq(berths.sectionId, id)).limit(1);
     if (!still) await tx.delete(pierSections).where(and(eq(pierSections.id, id), eq(pierSections.marinaId, marinaId)));
   }
+  await fitLines(tx, marinaId, pierId, section.id, left, picked.some((b) => b.sectionId === null));
   return picked.length;
+}
+
+/**
+ * Linee della pianta dopo aver fatto un tratto: il tratto nuovo prende la linea ricavata dai suoi posti; le linee dei pezzi
+ * da cui venivano (tratti o il pontile) si accorciano ai posti rimasti, così sulla mappa non coprono il tratto nuovo.
+ * Il pontile senza più posti fuori dai tratti perde la sua linea.
+ */
+async function fitLines(tx: Tx, marinaId: string, pierId: string, newSectionId: string, fromSections: string[], fromPier: boolean) {
+  const [marina] = await tx.select({ m: marinas.planPxPerMeter }).from(marinas).where(eq(marinas.id, marinaId));
+  const m = marina?.m;
+  const rows = await tx
+    .select({ sectionId: berths.sectionId, side: berths.side, position: berths.position, x: berths.planX, y: berths.planY, angle: berths.planAngle, lengthCm: berths.lengthCm, beamCm: berths.beamCm })
+    .from(berths)
+    .where(and(eq(berths.marinaId, marinaId), eq(berths.pierId, pierId)));
+  const placedIn = (sectionId: string | null) =>
+    rows.flatMap((b) => (b.sectionId === sectionId && b.x !== null && b.y !== null ? [{ ...b, x: b.x, y: b.y, angle: b.angle ?? 0 }] : []));
+  if (m) {
+    const own = estimateTrace(placedIn(newSectionId), m);
+    if (own) await tx.update(pierSections).set(lineColumns(own)).where(eq(pierSections.id, newSectionId));
+  }
+  for (const id of fromSections) {
+    const [sec] = await tx.select().from(pierSections).where(eq(pierSections.id, id));
+    const line = sec ? traceFromColumns(sec) : null;
+    if (line && m) await tx.update(pierSections).set(lineColumns(clipTrace(line, placedIn(id), m))).where(eq(pierSections.id, id));
+  }
+  if (fromPier) {
+    const [pier] = await tx.select().from(piers).where(eq(piers.id, pierId));
+    const line = pier ? traceFromColumns(pier) : null;
+    const loose = rows.filter((b) => b.sectionId === null);
+    if (line && loose.length === 0) await tx.update(piers).set(lineColumns(null)).where(eq(piers.id, pierId));
+    else if (line && m) await tx.update(piers).set(lineColumns(clipTrace(line, placedIn(null), m))).where(eq(piers.id, pierId));
+  }
 }
 
 // ───────────────────────── Tratti di un pontile ─────────────────────────
@@ -302,4 +335,36 @@ export async function splitSection(tx: Tx, marinaId: string, sectionId: string, 
   const loose = rows.filter((b) => b.sectionId !== sectionId && (!b.sectionId || !left.some((s) => s.id === b.sectionId)));
   if (left.length === 1 && loose.length === 0) await dissolveSection(tx, marinaId, left[0].id);
   return { pierId: created.id, moved: moving.length };
+}
+
+/**
+ * Divide un pontile (o un suo tratto) in due tratti dello stesso pontile, in ordine di codice: fino al posto prima di `fromBerthId`
+ * il primo, da lì in poi il secondo. Il pontile resta uno solo (sigla, prezzi, categorie e codici dei posti non cambiano); sulla
+ * pianta i due tratti si spostano e si tracciano da soli, come quelli di un'unione.
+ */
+export async function splitUnitAt(
+  tx: Tx,
+  marinaId: string,
+  pierId: string,
+  sectionId: string | null,
+  fromBerthId: string,
+  labels: { first: string; second: string },
+): Promise<{ first: number; second: number }> {
+  const { sections, rows } = await loadPier(tx, marinaId, pierId);
+  if (sectionId && !sections.some((s) => s.id === sectionId)) throw new DomainError("Tratto non trovato.");
+  const known = new Set(sections.map((s) => s.id));
+  const unit = rows
+    .filter((b) => (sectionId ? b.sectionId === sectionId : !b.sectionId || !known.has(b.sectionId)))
+    .sort((p, q) => compareCodes(p.code, q.code));
+  const at = unit.findIndex((b) => b.id === fromBerthId);
+  if (at < 1) throw new DomainError("Scegli il posto da cui parte il secondo tratto (non il primo).", "fromBerthId");
+  const first = unit.slice(0, at).map((b) => b.id);
+  const second = unit.slice(at).map((b) => b.id);
+  if (sectionId) {
+    await tx.update(pierSections).set({ label: labels.first }).where(eq(pierSections.id, sectionId));
+  } else {
+    await sectionFromBerths(tx, marinaId, pierId, first, labels.first);
+  }
+  await sectionFromBerths(tx, marinaId, pierId, second, labels.second);
+  return { first: first.length, second: second.length };
 }

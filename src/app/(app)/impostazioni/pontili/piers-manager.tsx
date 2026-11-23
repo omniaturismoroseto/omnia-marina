@@ -128,7 +128,7 @@ export function PiersManager({
           <Search size={18} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-faint" aria-hidden="true" />
           <input
             className="input pl-10"
-            placeholder="Trova un posto (es. CN07)"
+            placeholder="Trova un posto (es. CN7)"
             aria-label="Trova un posto"
             value={query}
             onChange={(e) => search(e.target.value)}
@@ -158,7 +158,8 @@ export function PiersManager({
                   <b className="text-ink">Totale porto</b> · {total.total} posti
                 </span>
                 <span>
-                  <b className="text-ink tabular-nums">{total.busy}</b> occupati · <b className="text-ink tabular-nums">{total.free}</b> liberi
+                  <b className="text-ink tabular-nums">{total.busy}</b> {total.busy === 1 ? "occupato" : "occupati"} · <b className="text-ink tabular-nums">{total.free}</b>{" "}
+                  {total.free === 1 ? "libero" : "liberi"}
                 </span>
               </p>
               <OccupancyBar c={total} />

@@ -1,7 +1,7 @@
 "use client";
 
 import { ActionButton, Field, Form, FormMessage, SelectField, Submit } from "@/components/form";
-import { arrangeBerths, dissolveSectionAction, renameSectionAction, splitSectionAction } from "@/server/settings-actions";
+import { arrangeBerths, dissolveSectionAction, renameSectionAction, splitPierAt, splitSectionAction } from "@/server/settings-actions";
 
 // Comandi di una struttura della pianta: un tratto di un pontile unito o, con sectionId vuoto, il pontile intero.
 
@@ -73,5 +73,47 @@ export function DissolveSectionButton({ sectionId, label }: { sectionId: string;
     >
       Togli tratto
     </ActionButton>
+  );
+}
+
+/** Divide il pontile (o il tratto) in due tratti dello stesso pontile, dal posto scelto in poi. */
+export function SplitAtForm({
+  pierId,
+  sectionId,
+  berths,
+  first,
+  second,
+}: {
+  pierId: string;
+  sectionId: string | null;
+  /** Posti in ordine di codice. */
+  berths: { id: string; code: string }[];
+  first: string;
+  second: string;
+}) {
+  const middle = berths[Math.floor(berths.length / 2)];
+  return (
+    <Form action={splitPierAt} className="space-y-3">
+      <input type="hidden" name="pierId" value={pierId} />
+      {sectionId && <input type="hidden" name="sectionId" value={sectionId} />}
+      <p className="text-sm text-muted">
+        Il pontile resta uno solo: stessa sigla, stessa categoria e stessi prezzi, e i posti tengono i loro numeri. Diventa due tratti che sulla
+        mappa del porto si spostano, ruotano e tracciano da soli.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <SelectField
+          name="fromBerthId"
+          label="Il secondo tratto parte da"
+          defaultValue={middle?.id}
+          options={berths.slice(1).map((b) => ({ value: b.id, label: b.code }))}
+        />
+        <Field name="first" label="Nome del primo tratto" defaultValue={first} maxLength={20} required />
+        <Field name="second" label="Nome del secondo tratto" defaultValue={second} maxLength={20} required />
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Submit variant="secondary">Dividi</Submit>
+        <FormMessage />
+      </div>
+    </Form>
   );
 }

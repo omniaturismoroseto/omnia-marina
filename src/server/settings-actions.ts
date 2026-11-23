@@ -21,7 +21,7 @@ import { pierGroupKey } from "@/lib/pricing";
 import { parseCoordinates } from "@/lib/weather";
 import { checkPassword, createAccount, setPassword } from "./credentials";
 import { DomainError, toFormState } from "./errors";
-import { arrangeUnit, dissolveSection, mergePiers, renameSection, sectionFromBerths, splitSection, type MergeResult } from "./piers";
+import { arrangeUnit, dissolveSection, mergePiers, renameSection, sectionFromBerths, splitSection, splitUnitAt, type MergeResult } from "./piers";
 
 const ACCOUNT_SERVICE_DOWN = "Il servizio di accesso non risponde: riprova tra qualche minuto.";
 
@@ -335,7 +335,7 @@ const generateSchema = z.object({
   sectionId: f.optId(),
 });
 
-// Crea in blocco i posti di un pontile (es. da A01 ad A20), con le misure della categoria scelta.
+// Crea in blocco i posti di un pontile (es. da A1 ad A20; i numeri non hanno zeri davanti), con le misure della categoria scelta.
 export async function generateBerths(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
   const parsed = parseForm(generateSchema, formData);
@@ -399,7 +399,7 @@ export async function generateBerths(_prev: FormState, formData: FormData): Prom
     pierId: pier.id,
     sectionId: section?.id ?? null,
     categoryId: category.id,
-    code: `${prefix}${String(d.from + i).padStart(2, "0")}`,
+    code: `${prefix}${d.from + i}`,
     side: slot.side,
     position: slot.position,
     lengthCm: category.maxLengthCm,
@@ -612,7 +612,7 @@ const renameSchema = z.object({
   from: f.int(0, 999, "Numero non valido"),
 });
 
-// Cambia sigla (e, se serve, numeri) ai posti scelti: CN01…CS35 → G01…G65. I contratti restano collegati ai posti.
+// Cambia sigla (e, se serve, numeri) ai posti scelti: CN1…CS35 → G1…G65. I contratti restano collegati ai posti.
 export async function renameBerths(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
   const parsed = parseForm(renameSchema, formData);
@@ -774,6 +774,34 @@ export async function splitSectionAction(_prev: FormState, formData: FormData): 
   }
   revalidatePath("/", "layout");
   redirect(`/impostazioni/pontili?pontile=${pierId}`);
+}
+
+const splitAtSchema = z.object({
+  pierId: f.id(),
+  sectionId: f.optId(),
+  fromBerthId: f.id("Scegli il posto da cui parte il secondo tratto"),
+  first: z.preprocess((v) => (typeof v === "string" ? v.trim() : ""), z.string().min(1, "Dai un nome al tratto").max(20, "Al massimo 20 caratteri")),
+  second: z.preprocess((v) => (typeof v === "string" ? v.trim() : ""), z.string().min(1, "Dai un nome al tratto").max(20, "Al massimo 20 caratteri")),
+});
+
+// Divide un pontile (o un tratto) in due tratti dello stesso pontile.
+export async function splitPierAt(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = parseForm(splitAtSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const d = parsed.data;
+  if (d.first.toLocaleLowerCase("it") === d.second.toLocaleLowerCase("it")) return fail("Controlla i campi evidenziati.", { second: "Usa un nome diverso dal primo tratto." });
+  try {
+    const r = await db.transaction(async (tx) => {
+      const result = await splitUnitAt(tx, ctx.marinaId, d.pierId, d.sectionId, d.fromBerthId, { first: d.first, second: d.second });
+      await audit(ctx, "modifica", "pontile", d.pierId, `Diviso in «${d.first}» (${result.first} posti) e «${d.second}» (${result.second} posti)`, tx);
+      return result;
+    });
+    revalidatePath("/", "layout");
+    return { ok: true, message: `Diviso: tratto «${d.first}» con ${r.first} posti e tratto «${d.second}» con ${r.second}.` };
+  } catch (err) {
+    return toFormState(err);
+  }
 }
 
 // Elimina i posti scelti; quelli con contratti (anche vecchi) restano: vanno messi fuori servizio.

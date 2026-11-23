@@ -220,7 +220,7 @@ async function main() {
         for (const side of sides) {
           // Gli ultimi posti del pontile C sono più grandi.
           const cat = categories[code === "C" && pos >= 4 ? catIndex + 1 : catIndex];
-          const berthCode = `${code}${String(n++).padStart(2, "0")}`;
+          const berthCode = `${code}${n++}`;
           const [b] = await tx
             .insert(berths)
             .values({

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { berthCategories, berths, boats, contracts, owners, pierSections, piers, type BerthStatus, type ContractType, type Presence } from "@/db/schema";
 import type { BoatType } from "@/lib/labels";
 import { traceFromColumns, type UnitSection } from "@/lib/plan-units";
+import { byBerthCode } from "@/server/berth-order";
 
 /*
  * Stato di un posto barca in una data:
@@ -85,7 +86,7 @@ export async function getBoard(marinaId: string, date: string, today: string): P
       .from(berths)
       .leftJoin(berthCategories, eq(berthCategories.id, berths.categoryId))
       .where(eq(berths.marinaId, marinaId))
-      .orderBy(asc(berths.position), asc(berths.code)),
+      .orderBy(asc(berths.position), ...byBerthCode),
     db
       .select({
         berthId: contracts.berthId,

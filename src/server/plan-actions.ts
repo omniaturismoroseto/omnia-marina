@@ -221,7 +221,7 @@ export async function createFromProposals(input: ProposalsInput): Promise<Result
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   if (items.some((i) => i.sides.some((s) => !categoryById.has(s.categoryId)))) return { ok: false, message: "Categoria non trovata." };
 
-  // I codici dei posti (es. C01) non devono scontrarsi con posti già esistenti.
+  // I codici dei posti (es. C1) non devono scontrarsi con posti già esistenti.
   const planned = items.map((item) => ({
     item,
     berths: planBerths(

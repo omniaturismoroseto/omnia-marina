@@ -26,6 +26,7 @@ import { categoryForBoat, grossQuote, occupiedUntil, pierRate, quoteStay, ratePi
 import { activateContract, addContractItem, cancelContract, createContract, removeContractItem, revertToDraft, updateDraftContract } from "./contracts";
 import { toFormState } from "./errors";
 import { extrasOfList, type ListExtra } from "./list-extras";
+import { byBerthCode } from "@/server/berth-order";
 
 export interface BerthOption {
   id: string;
@@ -88,7 +89,7 @@ export async function loadContractOptions(input: {
       .from(berths)
       .innerJoin(piers, eq(piers.id, berths.pierId))
       .where(eq(berths.marinaId, ctx.marinaId))
-      .orderBy(asc(piers.sortOrder), asc(berths.code)),
+      .orderBy(asc(piers.sortOrder), ...byBerthCode),
     db
       .select({ berthId: contracts.berthId })
       .from(contracts)

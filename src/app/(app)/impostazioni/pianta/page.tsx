@@ -25,12 +25,15 @@ import { AutoDetect } from "./auto-detect";
 import { BaseUploader } from "./base-uploader";
 import { PhotoUploader } from "./photo-uploader";
 import { PlanEditor } from "./plan-editor";
+import { PlanSection, PlanSections } from "./plan-sections";
 import { one, uuidOrNull, type SearchParams } from "@/lib/params";
 import { SurroundingsEditor, type BerthRect } from "./surroundings-editor";
+import { byBerthCode } from "@/server/berth-order";
 
 export const metadata: Metadata = { title: "Mappa del porto" };
 
 export default page(async function PlanSettingsPage({ searchParams }: { searchParams: SearchParams }) {
+  const params = await searchParams;
   const ctx = await requireMarina(["admin"]);
   const [[marina], pierRows, berthRows, sectionRows] = await Promise.all([
     db
@@ -72,7 +75,7 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
       })
       .from(berths)
       .where(eq(berths.marinaId, ctx.marinaId))
-      .orderBy(asc(berths.code)),
+      .orderBy(...byBerthCode),
     db
       .select()
       .from(pierSections)
@@ -103,7 +106,7 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
   }));
   const editorBerths = units.flatMap((unit) => {
     const positions = unitPositions(unit.berths);
-    return unit.berths.map(({ sectionId: _section, ...b }) => ({ ...b, pierId: unit.id, position: positions.get(b.id) ?? b.position }));
+    return unit.berths.map(({ sectionId: _section, ...b }) => ({ ...b, pierId: unit.id, realPierId: b.pierId, position: positions.get(b.id) ?? b.position }));
   });
   const [[plan], categories, featureRows, [base]] = await Promise.all([
     db
@@ -224,7 +227,55 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
       />
       <SettingsTabs current="pianta" />
 
-      <div className="space-y-5">
+      <PlanSections initial={one(params.parte) || (hasPhoto ? "posti" : "foto")}>
+        {hasPhoto && (
+          <PlanSection id="posti" label="Posti sulla foto">
+          <div id="editor" className="scroll-mt-4">
+          <Card title="Disponi i posti sulla foto">
+            <ol className="mb-4 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
+              <li>
+                <strong className="font-medium text-ink">1.</strong> Imposta la
+                scala
+              </li>
+              <li>
+                <strong className="font-medium text-ink">2.</strong> Traccia
+                ogni pontile: i suoi posti si dispongono da soli
+              </li>
+              <li>
+                <strong className="font-medium text-ink">3.</strong> Ritocca
+                dove serve e salva
+              </li>
+            </ol>
+            {berthRows.length === 0 && (
+              <div className="mb-4">
+                <Notice>
+                  Il porto non ha ancora posti barca: puoi già impostare la
+                  scala e salvarla. Per disporre i posti, creali prima in{" "}
+                  <Link href="/impostazioni/pontili" className="link">
+                    Pontili e posti
+                  </Link>
+                  .
+                </Notice>
+              </div>
+            )}
+            {/* key: una nuova foto, posti nuovi (per esempio creati dalle proposte, che fissano anche la scala) o un tratto nuovo fanno ripartire
+                l'editor dai dati aggiornati; i salvataggi fatti dall'editor stesso no, così il suo messaggio resta visibile. */}
+            <PlanEditor
+              key={`${marina.version}:${berthRows.length}:${sectionRows.map((sec) => sec.id).join(",")}`}
+              imageUrl={`/pianta/immagine?v=${marina.version}`}
+              baseUrl={baseUrl}
+              width={marina.width!}
+              height={marina.height!}
+              initialPxPerMeter={marina.pxPerMeter}
+              piers={editorPiers}
+              initialBerths={editorBerths}
+              initialPierId={uuidOrNull(one(params.struttura)) ?? undefined}
+            />
+          </Card>
+          </div>
+          </PlanSection>
+        )}
+        <PlanSection id="foto" label="Foto aerea">
         <Card title="Foto aerea del porto">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div className="max-w-2xl space-y-2 text-sm text-muted">
@@ -254,8 +305,9 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
             <PhotoUploader hasPhoto={hasPhoto} placedCount={placedCount} />
           </div>
         </Card>
-
+        </PlanSection>
         {hasPhoto && (
+          <PlanSection id="riconoscimento" label="Riconoscimento automatico">
           <Card
             title={
               analysis ? "Proposte dalla foto" : "Riconoscimento automatico"
@@ -273,9 +325,35 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
               placed={placedBerths}
             />
           </Card>
+          </PlanSection>
         )}
-
         {hasPhoto && (
+          <PlanSection id="sfondo" label="Sfondo e servizi">
+          <Card title="Sfondo e servizi della mappa">
+            <p className="mb-4 max-w-3xl text-sm text-muted">
+              Lo schema della mappa disegna il porto come una mappa illustrata:
+              terra, moli ed edifici in grigio, aree verdi e i servizi (bar,
+              ristorante, parcheggio, cantiere, carburante…). Ricava terra e
+              acqua dai colori della foto, chiedi a Claude edifici e servizi,
+              poi ritocca a mano e salva.
+            </p>
+            <SurroundingsEditor
+              key={`${marina.version}:${baseUrl ?? ""}`}
+              imageUrl={`/pianta/immagine?v=${marina.version}`}
+              width={marina.width!}
+              height={marina.height!}
+              pxPerMeter={marina.pxPerMeter}
+              initialFeatures={featureRows}
+              berthRects={berthRects}
+              waterSeeds={waterSeeds}
+              aiAvailable={planAnalysisAvailable()}
+              baseUrl={baseUrl}
+            />
+          </Card>
+          </PlanSection>
+        )}
+        {hasPhoto && (
+          <PlanSection id="base" label="Base disegnata">
           <Card title="Base disegnata della mappa">
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
               <div className="max-w-2xl space-y-2 text-sm text-muted">
@@ -308,78 +386,9 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
               />
             )}
           </Card>
+          </PlanSection>
         )}
-
-        {hasPhoto && (
-          <Card title="Sfondo e servizi della mappa">
-            <p className="mb-4 max-w-3xl text-sm text-muted">
-              Lo schema della mappa disegna il porto come una mappa illustrata:
-              terra, moli ed edifici in grigio, aree verdi e i servizi (bar,
-              ristorante, parcheggio, cantiere, carburante…). Ricava terra e
-              acqua dai colori della foto, chiedi a Claude edifici e servizi,
-              poi ritocca a mano e salva.
-            </p>
-            <SurroundingsEditor
-              key={`${marina.version}:${baseUrl ?? ""}`}
-              imageUrl={`/pianta/immagine?v=${marina.version}`}
-              width={marina.width!}
-              height={marina.height!}
-              pxPerMeter={marina.pxPerMeter}
-              initialFeatures={featureRows}
-              berthRects={berthRects}
-              waterSeeds={waterSeeds}
-              aiAvailable={planAnalysisAvailable()}
-              baseUrl={baseUrl}
-            />
-          </Card>
-        )}
-
-        {hasPhoto && (
-          <div id="editor" className="scroll-mt-4">
-          <Card title="Disponi i posti sulla foto">
-            <ol className="mb-4 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
-              <li>
-                <strong className="font-medium text-ink">1.</strong> Imposta la
-                scala
-              </li>
-              <li>
-                <strong className="font-medium text-ink">2.</strong> Traccia
-                ogni pontile: i suoi posti si dispongono da soli
-              </li>
-              <li>
-                <strong className="font-medium text-ink">3.</strong> Ritocca
-                dove serve e salva
-              </li>
-            </ol>
-            {berthRows.length === 0 && (
-              <div className="mb-4">
-                <Notice>
-                  Il porto non ha ancora posti barca: puoi già impostare la
-                  scala e salvarla. Per disporre i posti, creali prima in{" "}
-                  <Link href="/impostazioni/pontili" className="link">
-                    Pontili e posti
-                  </Link>
-                  .
-                </Notice>
-              </div>
-            )}
-            {/* key: una nuova foto o posti nuovi (per esempio creati dalle proposte, che fissano anche la scala) fanno ripartire
-                l'editor dai dati aggiornati; i salvataggi fatti dall'editor stesso no, così il suo messaggio resta visibile. */}
-            <PlanEditor
-              key={`${marina.version}:${berthRows.length}`}
-              imageUrl={`/pianta/immagine?v=${marina.version}`}
-              baseUrl={baseUrl}
-              width={marina.width!}
-              height={marina.height!}
-              initialPxPerMeter={marina.pxPerMeter}
-              piers={editorPiers}
-              initialBerths={editorBerths}
-              initialPierId={uuidOrNull(one((await searchParams).struttura)) ?? undefined}
-            />
-          </Card>
-          </div>
-        )}
-      </div>
+      </PlanSections>
     </>
   );
 });

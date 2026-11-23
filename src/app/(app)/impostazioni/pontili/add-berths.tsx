@@ -140,7 +140,7 @@ function Preview({
     return <p className={`${box} text-muted`}>Scrivi sigla e numeri: qui vedrai i posti che verranno creati.</p>;
   }
   if (to - from >= 200) return <p className={`${box} text-bad`}>Al massimo 200 posti per volta.</p>;
-  const codes = Array.from({ length: to - from + 1 }, (_, i) => `${prefix}${String(from + i).padStart(2, "0")}`);
+  const codes = Array.from({ length: to - from + 1 }, (_, i) => `${prefix}${from + i}`);
   const fresh = codes.filter((c) => !existingCodes.has(c.toUpperCase()));
   const skipped = codes.length - fresh.length;
   const sides =

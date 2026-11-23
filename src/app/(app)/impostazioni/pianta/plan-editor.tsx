@@ -12,12 +12,17 @@ import {
   normalizeAngle,
   type Point,
 } from "@/lib/plan";
+import { Field, Form, FormMessage, Submit } from "@/components/form";
 import { savePlanLayout } from "@/server/plan-actions";
+import { makeBerthSection } from "@/server/settings-actions";
 
 export interface EditorBerth {
   id: string;
   code: string;
+  /** Struttura dell'editor: il pontile o, nei pontili uniti, il tratto (vedi planUnits). */
   pierId: string;
+  /** Il pontile vero (per «Fai un tratto con questi posti»). */
+  realPierId?: string;
   side: "sx" | "dx";
   position: number;
   lengthCm: number;
@@ -88,11 +93,17 @@ export function PlanEditor({
     orig: Map<string, Point>;
     pierId: string | null;
     trace: { a: Point; b: Point; widthM: number } | null;
+    /** Con «scelti»: posto già scelto toccato senza trascinarlo, che al rilascio si toglie dalla scelta. */
+    toggleOff?: string | null;
+    moved?: boolean;
   } | null>(null);
   // Cosa si sposta e si ruota con «Seleziona»: il singolo posto o tutto il pontile (o banchina) a cui appartiene.
   // Qui un «pontile» è una struttura della pianta (planUnits): nei pontili uniti ogni tratto si sposta da solo.
   // «modulo»: una parte staccata del pontile (posti vicini tra loro), riconosciuta da sola.
-  const [moveMode, setMoveMode] = useState<"pontile" | "modulo" | "posto">(
+  // «scelti»: i posti toccati uno per uno, per spostare insieme parti vicine che la vicinanza non sa distinguere.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [sectionLabel, setSectionLabel] = useState("");
+  const [moveMode, setMoveMode] = useState<"pontile" | "modulo" | "scelti" | "posto">(
     "pontile",
   );
   const lastAngle = useRef(0);
@@ -141,6 +152,10 @@ export function PlanEditor({
   // Posti che si muovono insieme al posto scelto.
   const groupOf = (b: EditorBerth) => {
     if (moveMode === "posto") return [b];
+    if (moveMode === "scelti")
+      return picked.has(b.id)
+        ? berths.filter((x) => picked.has(x.id) && x.x !== null && x.y !== null)
+        : [b];
     const unit = berths.filter(
       (x) => x.pierId === b.pierId && x.x !== null && x.y !== null,
     );
@@ -169,6 +184,8 @@ export function PlanEditor({
     return unit.filter((x) => found.has(x.id));
   };
   const group = selected && selected.x !== null ? groupOf(selected) : [];
+  const pickedBerths = berths.filter((b) => picked.has(b.id));
+  const pickedPiers = new Set(pickedBerths.map((b) => b.realPierId ?? b.pierId));
   const groupIds = new Set(group.map((b) => b.id));
   const selectedPier = selected
     ? piers.find((p) => p.id === selected.pierId)
@@ -303,13 +320,24 @@ export function PlanEditor({
     if (tool !== "select" || b.x === null || b.y === null) return;
     e.stopPropagation();
     setSelectedId(b.id);
-    const moving = groupOf(b);
+    let moving = groupOf(b);
+    let toggleOff: string | null = null;
+    if (moveMode === "scelti") {
+      if (picked.has(b.id)) toggleOff = b.id;
+      else {
+        const next = new Set(picked).add(b.id);
+        setPicked(next);
+        moving = berths.filter((x) => next.has(x.id) && x.x !== null && x.y !== null);
+      }
+    }
     const whole = moveMode === "pontile";
     drag.current = {
       start: toImage(e),
       orig: new Map(moving.map((x) => [x.id, { x: x.x!, y: x.y! }])),
       pierId: whole ? b.pierId : null,
       trace: whole ? currentTrace(b.pierId) : null,
+      toggleOff,
+      moved: false,
     };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
@@ -354,12 +382,27 @@ export function PlanEditor({
     const d = drag.current;
     if (!d) return;
     const p = toImage(e);
+    if (Math.abs(p.x - d.start.x) + Math.abs(p.y - d.start.y) > u) d.moved = true;
     translate(
       d.orig,
       p.x - d.start.x,
       p.y - d.start.y,
       d.pierId ? { id: d.pierId, trace: d.trace } : null,
     );
+  }
+
+  // Rilascio: con «scelti» un tocco (senza trascinare) su un posto già scelto lo toglie dalla scelta.
+  function onBerthUp() {
+    const d = drag.current;
+    drag.current = null;
+    if (d?.toggleOff && !d.moved) {
+      const off = d.toggleOff;
+      setPicked((prev) => {
+        const next = new Set(prev);
+        next.delete(off);
+        return next;
+      });
+    }
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
@@ -543,6 +586,8 @@ export function PlanEditor({
             ? "Trascina un posto per spostare tutto il suo pontile o tratto; trascina la foto per muoverti, rotellina o due dita per ingrandire."
             : moveMode === "modulo"
               ? "Trascina un posto per spostare solo la parte di pontile a cui appartiene; trascina la foto per muoverti, rotellina o due dita per ingrandire."
+              : moveMode === "scelti"
+                ? "Tocca i posti da spostare insieme (toccane uno già scelto per toglierlo), poi trascinane uno: si muovono solo quelli scelti, anche se sono vicini ad altri."
               : "Trascina un posto per spostare solo quello; trascina la foto per muoverti, rotellina o due dita per ingrandire.";
 
   return (
@@ -563,19 +608,24 @@ export function PlanEditor({
             aria-label="Cosa spostare"
           >
             <span className="px-1.5 text-muted">Sposta:</span>
-            {(["pontile", "modulo", "posto"] as const).map((m) => (
+            {(["pontile", "modulo", "scelti", "posto"] as const).map((m) => (
               <button
                 key={m}
                 type="button"
                 aria-pressed={moveMode === m}
-                onClick={() => setMoveMode(m)}
+                onClick={() => {
+                  setMoveMode(m);
+                  if (m !== "scelti") setPicked(new Set());
+                }}
                 className={`rounded px-2 py-1 font-medium ${moveMode === m ? "bg-ink text-white" : "text-ink hover:bg-line-soft"}`}
               >
                 {m === "pontile"
                   ? "pontile o tratto"
                   : m === "modulo"
                     ? "modulo"
-                    : "posto singolo"}
+                    : m === "scelti"
+                      ? "posti scelti"
+                      : "posto singolo"}
               </button>
             ))}
           </span>
@@ -618,7 +668,10 @@ export function PlanEditor({
               {berths.map((b) => {
                 if (b.x === null || b.y === null) return null;
                 const { w, l } = sizeOf(b);
-                const active = b.id === selectedId || groupIds.has(b.id);
+                const active =
+                  b.id === selectedId ||
+                  groupIds.has(b.id) ||
+                  (moveMode === "scelti" && picked.has(b.id));
                 return (
                   <g
                     key={b.id}
@@ -629,7 +682,7 @@ export function PlanEditor({
                     }}
                     onPointerDown={(e) => onBerthDown(e, b)}
                     onPointerMove={onBerthMove}
-                    onPointerUp={() => (drag.current = null)}
+                    onPointerUp={onBerthUp}
                     onPointerCancel={() => (drag.current = null)}
                     onClick={(e) => tool === "select" && e.stopPropagation()}
                   >
@@ -788,11 +841,106 @@ export function PlanEditor({
           </div>
         </section>
 
+        {moveMode === "scelti" && (
+          <section className="card space-y-3 p-4">
+            <h3 className="text-[15px] font-semibold text-ink">
+              Posti scelti{" "}
+              <span className="font-normal text-muted">({pickedBerths.length})</span>
+            </h3>
+            {pickedBerths.length === 0 ? (
+              <p className="text-sm text-muted">
+                Tocca sulla foto i posti da spostare insieme. Servono quando due parti sono così vicine che «modulo» le
+                prende insieme.
+              </p>
+            ) : (
+              <p className="text-sm text-muted">
+                {pickedBerths
+                  .map((b) => b.code)
+                  .slice(0, 14)
+                  .join(", ")}
+                {pickedBerths.length > 14 ? "…" : ""}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={!selected || selected.x === null}
+                onClick={() => {
+                  if (!selected || selected.x === null) return;
+                  const unit = berths.filter((x) => x.pierId === selected.pierId && x.x !== null && x.y !== null);
+                  setPicked((prev) => new Set([...prev, ...moduleOf(selected, unit).map((x) => x.id)]));
+                }}
+              >
+                + il suo modulo
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={!selected}
+                onClick={() =>
+                  selected &&
+                  setPicked(
+                    (prev) =>
+                      new Set([
+                        ...prev,
+                        ...berths.filter((x) => x.pierId === selected.pierId && x.x !== null).map((x) => x.id),
+                      ]),
+                  )
+                }
+              >
+                + tutto il pontile o tratto
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={pickedBerths.length === 0} onClick={() => setPicked(new Set())}>
+                Nessuno
+              </button>
+            </div>
+            {pickedBerths.length > 0 && (
+              <div className="border-t border-line-soft pt-3">
+                <p className="label">Separali per sempre</p>
+                {pickedPiers.size > 1 ? (
+                  <p className="text-sm text-muted">
+                    I posti scelti sono su pontili diversi: un tratto si fa con posti di un solo pontile.
+                  </p>
+                ) : dirty ? (
+                  <p className="text-sm text-muted">
+                    Salva prima la pianta, poi crea il tratto: da quel momento quei posti si spostano da soli anche con «pontile o
+                    tratto».
+                  </p>
+                ) : (
+                  <Form action={makeBerthSection} className="space-y-2">
+                    <input type="hidden" name="pierId" value={[...pickedPiers][0] ?? ""} />
+                    <input type="hidden" name="berthIds" value={pickedBerths.map((b) => b.id).join(",")} />
+                    <Field
+                      name="label"
+                      label="Nome del tratto"
+                      value={sectionLabel || commonLetters(pickedBerths)}
+                      onChange={(e) => setSectionLabel(e.target.value)}
+                      maxLength={20}
+                      required
+                    />
+                    <Submit variant="secondary" size="sm">
+                      Fai un tratto con questi posti
+                    </Submit>
+                    <FormMessage />
+                    <p className="hint">
+                      Da quel momento si spostano, ruotano e tracciano da soli, anche con «pontile o tratto»; nella scheda del
+                      pontile compaiono come tratto a sé.
+                    </p>
+                  </Form>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
         {selected && (
           <section className="card p-4">
             <h3 className="text-[15px] font-semibold text-ink">
               {moveMode !== "posto" && group.length > 1
-                ? `${moveMode === "modulo" ? "Modulo di " : ""}${selectedPier?.name ?? "Pontile"} (${group.length} posti)`
+                ? moveMode === "scelti"
+                  ? "Ruota e allunga i posti scelti"
+                  : `${moveMode === "modulo" ? "Modulo di " : ""}${selectedPier?.name ?? "Pontile"} (${group.length} posti)`
                 : `Posto ${selected.code}`}
             </h3>
             {selected.x === null ? (
@@ -806,7 +954,9 @@ export function PlanEditor({
                     <p className="label">
                       {moveMode === "modulo"
                         ? "Ruota il modulo"
-                        : "Ruota tutto il pontile"}
+                        : moveMode === "scelti"
+                          ? "Ruota i posti scelti"
+                          : "Ruota tutto il pontile"}
                     </p>
                   ) : (
                     <>
@@ -964,4 +1114,10 @@ export function PlanEditor({
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+// Lettere comuni ai codici (CN1, CN2 → CN): nome proposto per il tratto.
+function commonLetters(list: { code: string }[]): string {
+  const letters = list.map((b) => b.code.replace(/\d+$/, ""));
+  return letters.every((l) => l === letters[0]) ? (letters[0] ?? "") : "";
 }

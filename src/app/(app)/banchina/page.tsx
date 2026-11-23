@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { asc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Phone } from "@/components/icons";
 import { MovementButtons } from "@/components/movement-buttons";
 import { page } from "@/components/page";
@@ -15,6 +15,7 @@ import { formatDimensions, formatMeters, formatMoney } from "@/lib/format";
 import { CONTRACT_TYPE_LABEL, MOVEMENT_LABEL, TASK_KIND_LABEL, TASK_PRIORITY_LABEL } from "@/lib/labels";
 import { getDockRows, getOpenTasks, getRecentMovements, type DockRow } from "@/server/dock";
 import { NewTaskForm, TaskActions } from "./task-forms";
+import { byBerthCode } from "@/server/berth-order";
 
 export const metadata: Metadata = { title: "Banchina" };
 
@@ -68,7 +69,7 @@ export default page(async function DockPage() {
     getDockRows(ctx.marinaId, today),
     getOpenTasks(ctx.marinaId),
     getRecentMovements(ctx.marinaId, startOfDay),
-    db.select({ id: berths.id, code: berths.code }).from(berths).where(eq(berths.marinaId, ctx.marinaId)).orderBy(asc(berths.code)),
+    db.select({ id: berths.id, code: berths.code }).from(berths).where(eq(berths.marinaId, ctx.marinaId)).orderBy(...byBerthCode),
     db.select({ vhf: marinas.vhfChannel }).from(marinas).where(eq(marinas.id, ctx.marinaId)),
   ]);
 
