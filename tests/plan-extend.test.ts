@@ -92,3 +92,42 @@ describe("tratto dei posti nuovi", () => {
     expect(targetSection([], list, "CN")).toBeNull();
   });
 });
+
+describe("tratti: linea stimata e posizioni del pontile", () => {
+  it("la linea mai tracciata si ricava dai posti, a metà tra i lati e lunga quanto i posti", async () => {
+    const { estimateTrace } = await import("@/lib/plan-extend");
+    const t = estimateTrace(existing, M)!;
+    expect(t.a.y).toBe(100);
+    expect(t.b.y).toBe(100);
+    expect(t.a.x).toBeCloseTo(20 - 17.5, 0);
+    expect(t.b.x).toBeCloseTo(60 + 17.5, 0);
+    expect(estimateTrace([], M)).toBeNull();
+  });
+
+  it("i tratti si rinumerano uno dopo l'altro, senza sovrapporsi", async () => {
+    const { renumberPier } = await import("@/lib/plan-extend");
+    const out = renumberPier([
+      [
+        { id: "a1", side: "sx", position: 0 },
+        { id: "a2", side: "dx", position: 0 },
+        { id: "a3", side: "sx", position: 1 },
+      ],
+      [
+        { id: "b1", side: "sx", position: 5 },
+        { id: "b2", side: "dx", position: 5 },
+      ],
+    ]);
+    expect(Object.fromEntries(out)).toEqual({ a1: 0, a2: 0, a3: 1, b1: 2, b2: 2 });
+  });
+});
+
+describe("linea lunga quanto serve", () => {
+  it("si allunga dalla testata se i posti non ci stanno, altrimenti resta", async () => {
+    const { fitTrace } = await import("@/lib/plan-extend");
+    const line = { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, widthM: 2 };
+    expect(fitTrace(line, 2, 40)).toBe(line);
+    const longer = fitTrace(line, 4, 40);
+    expect(longer.a).toEqual({ x: 0, y: 0 });
+    expect(longer.b.x).toBeCloseTo(176, 0);
+  });
+});

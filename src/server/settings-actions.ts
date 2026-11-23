@@ -21,7 +21,7 @@ import { pierGroupKey } from "@/lib/pricing";
 import { parseCoordinates } from "@/lib/weather";
 import { checkPassword, createAccount, setPassword } from "./credentials";
 import { DomainError, toFormState } from "./errors";
-import { mergePiers, sectionFromBerths, type MergeResult } from "./piers";
+import { arrangeUnit, dissolveSection, mergePiers, renameSection, sectionFromBerths, splitSection, type MergeResult } from "./piers";
 
 const ACCOUNT_SERVICE_DOWN = "Il servizio di accesso non risponde: riprova tra qualche minuto.";
 
@@ -293,6 +293,8 @@ const generateSchema = z.object({
   draftCm: f.optMeters(),
   hasWater: f.checkbox(),
   hasPower: f.checkbox(),
+  // Tratto scelto (pontili uniti): vuoto = quello della sigla, vedi targetSection.
+  sectionId: f.optId(),
 });
 
 // Crea in blocco i posti di un pontile (es. da A01 ad A20), con le misure della categoria scelta.
@@ -340,7 +342,9 @@ export async function generateBerths(_prev: FormState, formData: FormData): Prom
       .from(berths)
       .where(and(eq(berths.pierId, pier.id), eq(berths.marinaId, ctx.marinaId))),
   ]);
-  const section = targetSection(sections, pierBerths, prefix);
+  const chosen = d.sectionId ? sections.find((x) => x.id === d.sectionId) : undefined;
+  if (d.sectionId && !chosen) return fail("Tratto non trovato.");
+  const section = chosen ?? targetSection(sections, pierBerths, prefix);
 
   // I nuovi posti proseguono dopo quelli già presenti sullo stesso lato (vedi berthSlots).
   const [{ nextSx, nextDx }] = await db
@@ -637,6 +641,98 @@ export async function makeBerthSection(_prev: FormState, formData: FormData): Pr
   } catch (err) {
     return toFormState(err);
   }
+}
+
+const arrangeSchema = z.object({
+  pierId: f.id(),
+  sectionId: f.optId(),
+  layout: f.choice(["alternati", "sx", "dx"]),
+});
+
+// Ridispone i posti di un tratto (o del pontile): ordine di codice dalla radice, lati scelti; sulla pianta lungo la sua linea.
+export async function arrangeBerths(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = parseForm(arrangeSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const d = parsed.data;
+  try {
+    const result = await db.transaction(async (tx) => {
+      const r = await arrangeUnit(tx, ctx.marinaId, d.pierId, d.sectionId, d.layout);
+      await audit(ctx, "modifica", "posti barca", d.pierId, `Disposizione di ${r.count} posti (${d.layout})`, tx);
+      return r;
+    });
+    revalidatePath("/", "layout");
+    return {
+      ok: true,
+      message: `${result.count} posti ridisposti in ordine di codice.${result.onPlan ? " Sulla pianta sono stati rimessi lungo la linea: se serve ritoccali in Pianta dal vero." : ""}`,
+    };
+  } catch (err) {
+    return toFormState(err);
+  }
+}
+
+const sectionLabelSchema = z.object({
+  sectionId: f.id(),
+  label: z.preprocess((v) => (typeof v === "string" ? v.trim() : ""), z.string().min(1, "Dai un nome al tratto").max(20, "Al massimo 20 caratteri")),
+});
+
+export async function renameSectionAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = parseForm(sectionLabelSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  try {
+    await db.transaction(async (tx) => {
+      await renameSection(tx, ctx.marinaId, parsed.data.sectionId, parsed.data.label);
+      await audit(ctx, "modifica", "tratto", parsed.data.sectionId, `Tratto «${parsed.data.label}»`, tx);
+    });
+  } catch (err) {
+    return toFormState(err);
+  }
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Tratto rinominato." };
+}
+
+export async function dissolveSectionAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const sectionId = String(formData.get("sectionId") ?? "");
+  if (!z.uuid().safeParse(sectionId).success) return fail("Tratto non trovato.");
+  try {
+    await db.transaction(async (tx) => {
+      const r = await dissolveSection(tx, ctx.marinaId, sectionId);
+      await audit(ctx, "modifica", "pontile", r.pierId, `Tolto il tratto «${r.label}»`, tx);
+    });
+  } catch (err) {
+    return toFormState(err);
+  }
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+const splitSchema = z.object({
+  sectionId: f.id(),
+  code: f.text("Indica una sigla"),
+  name: f.text("Indica il nome"),
+});
+
+// Separa un tratto in un pontile a sé.
+export async function splitSectionAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = parseForm(splitSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const code = parsed.data.code.toUpperCase();
+  let pierId: string;
+  try {
+    pierId = await db.transaction(async (tx) => {
+      const r = await splitSection(tx, ctx.marinaId, parsed.data.sectionId, { code, name: parsed.data.name });
+      await audit(ctx, "creazione", "pontile", r.pierId, `${parsed.data.name} (${code}) separato da un pontile unito, ${r.moved} posti`, tx);
+      return r.pierId;
+    });
+  } catch (err) {
+    const state = toFormState(err);
+    return err instanceof DomainError ? state : { ...state, message: "Esiste già un pontile con questa sigla.", errors: { code: "Sigla già usata" } };
+  }
+  revalidatePath("/", "layout");
+  redirect(`/impostazioni/pontili#pontile-${pierId}`);
 }
 
 // Elimina i posti scelti; quelli con contratti (anche vecchi) restano: vanno messi fuori servizio.

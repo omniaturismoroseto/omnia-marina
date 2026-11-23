@@ -25,11 +25,12 @@ import { AutoDetect } from "./auto-detect";
 import { BaseUploader } from "./base-uploader";
 import { PhotoUploader } from "./photo-uploader";
 import { PlanEditor } from "./plan-editor";
+import { one, uuidOrNull, type SearchParams } from "@/lib/params";
 import { SurroundingsEditor, type BerthRect } from "./surroundings-editor";
 
 export const metadata: Metadata = { title: "Mappa del porto" };
 
-export default page(async function PlanSettingsPage() {
+export default page(async function PlanSettingsPage({ searchParams }: { searchParams: SearchParams }) {
   const ctx = await requireMarina(["admin"]);
   const [[marina], pierRows, berthRows, sectionRows] = await Promise.all([
     db
@@ -334,6 +335,7 @@ export default page(async function PlanSettingsPage() {
         )}
 
         {hasPhoto && (
+          <div id="editor" className="scroll-mt-4">
           <Card title="Disponi i posti sulla foto">
             <ol className="mb-4 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
               <li>
@@ -372,8 +374,10 @@ export default page(async function PlanSettingsPage() {
               initialPxPerMeter={marina.pxPerMeter}
               piers={editorPiers}
               initialBerths={editorBerths}
+              initialPierId={uuidOrNull(one((await searchParams).struttura)) ?? undefined}
             />
           </Card>
+          </div>
         )}
       </div>
     </>

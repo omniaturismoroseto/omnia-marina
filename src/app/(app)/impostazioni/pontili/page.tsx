@@ -4,7 +4,7 @@ import { and, asc, count, eq, gte } from "drizzle-orm";
 import { page } from "@/components/page";
 import { Badge, Card, Notice, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { berthCategories, berths, contracts, piers } from "@/db/schema";
+import { berthCategories, berths, contracts, marinas, pierSections, piers } from "@/db/schema";
 import { requireMarina } from "@/lib/context";
 import { todayRome } from "@/lib/dates";
 import { formatDimensions } from "@/lib/format";
@@ -14,9 +14,20 @@ import { groupPiersByName } from "@/lib/pricing";
 import { countStates, getBoard } from "@/server/board";
 import { DeletePierButton, GenerateBerthsForm, MergePiersButton, MovePierButtons, PierForm } from "../settings-forms";
 import { BerthList } from "./berth-list";
+import { ArrangeForm, DissolveSectionButton, RenameSectionForm, SplitSectionForm } from "./unit-tools";
 import { SettingsTabs } from "../tabs";
 
 export const metadata: Metadata = { title: "Pontili e posti barca" };
+
+// Sigla più usata nei codici di un gruppo di posti (CN01, CN02 → CN): proposta per aggiungerne altri.
+function commonPrefix(list: { code: string }[], fallback: string): string {
+  const counts = new Map<string, number>();
+  for (const b of list) {
+    const p = b.code.replace(/\d+$/, "");
+    counts.set(p, (counts.get(p) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || fallback;
+}
 
 // Numero successivo all'ultimo posto con la sigla del pontile (es. C25 → 26).
 function nextNumber(prefix: string, list: { code: string }[]): number {
@@ -30,7 +41,7 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
   const welcome = one(params.benvenuto) === "1";
   const today = todayRome();
 
-  const [pierRows, berthRows, categories, board, contractRows] = await Promise.all([
+  const [pierRows, berthRows, categories, board, contractRows, sectionRows, [plan]] = await Promise.all([
     db.select().from(piers).where(eq(piers.marinaId, ctx.marinaId)).orderBy(asc(piers.sortOrder), asc(piers.code)),
     db.select().from(berths).where(eq(berths.marinaId, ctx.marinaId)).orderBy(asc(berths.code)),
     db.select().from(berthCategories).where(eq(berthCategories.marinaId, ctx.marinaId)).orderBy(asc(berthCategories.sortOrder), asc(berthCategories.maxLengthCm)),
@@ -42,7 +53,10 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
       .innerJoin(berths, eq(berths.id, contracts.berthId))
       .where(and(eq(contracts.marinaId, ctx.marinaId), eq(contracts.status, "attivo"), gte(contracts.endDate, today)))
       .groupBy(berths.pierId),
+    db.select().from(pierSections).where(eq(pierSections.marinaId, ctx.marinaId)).orderBy(asc(pierSections.sortOrder)),
+    db.select({ pxPerMeter: marinas.planPxPerMeter }).from(marinas).where(eq(marinas.id, ctx.marinaId)),
   ]);
+  const hasPlan = Boolean(plan?.pxPerMeter);
   const categoryOptions = categories.map((c) => ({ id: c.id, label: `${c.name} (${formatDimensions(c.maxLengthCm, c.maxBeamCm)})` }));
   const categoryName = new Map(categories.map((c) => [c.id, c.name]));
   const pierRefs = pierRows.map((p) => ({ id: p.id, code: p.code, name: p.name }));
@@ -229,43 +243,129 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
                     ))}
                   </p>
                 )}
-                <BerthList
-                  pierId={pier.id}
-                  pierCode={pier.code}
-                  categories={categoryOptions}
-                  berths={list.map((b) => ({
+                {(() => {
+                  const chip = (b: (typeof list)[number]) => ({
                     id: b.id,
                     code: b.code,
                     title: `${formatDimensions(b.lengthCm, b.beamCm)}${b.categoryId ? ` · ${categoryName.get(b.categoryId) ?? ""}` : ""} · ${BERTH_STATUS_LABEL[b.status]}`,
                     inactive: b.status !== "attivo",
-                  }))}
-                />
-                {list.some((b) => b.status !== "attivo") && (
-                  <p className="mb-4 text-sm text-muted">
-                    <Badge>In grigio</Badge> i posti in manutenzione o fuori servizio.
-                  </p>
-                )}
-                {list.length > 0 && (
-                  <p className="mb-3 text-sm text-muted">Tocca un posto per modificarne misure, categoria e stato, o «Scegli più posti» per cambiarli insieme.</p>
-                )}
-
-                {/* Sempre aperto: un pontile con numeri diversi di posti per lato si crea in due passaggi. */}
-                <section className="border-t border-line-soft pt-3" aria-label={`Aggiungi posti a ${pier.name}`}>
-                  <h3 className="text-sm font-semibold text-ink">Aggiungi posti</h3>
-                  <p className="mt-0.5 text-xs text-muted">
-                    Se i due lati hanno un numero diverso di posti, crea prima quelli di sinistra («Solo lato sinistro»), poi quelli di destra
-                    proseguendo con la numerazione: si dispongono comunque uno di fronte all&apos;altro a partire dalla radice.
-                  </p>
-                  <div className="mt-3">
-                    {categoryOptions.length === 0 ? (
+                  });
+                  const sections = sectionRows.filter((sec) => sec.pierId === pier.id);
+                  const known = new Set(sections.map((sec) => sec.id));
+                  const loose = list.filter((b) => !b.sectionId || !known.has(b.sectionId));
+                  const addForm = (group: typeof list, sectionId?: string) =>
+                    categoryOptions.length === 0 ? (
                       <p className="text-sm text-warn">
                         Servono prima le <Link href="/impostazioni/categorie" className="link">categorie</Link>.
                       </p>
                     ) : (
-                      <GenerateBerthsForm pierId={pier.id} prefix={pier.code} nextNumber={nextNumber(pier.code, list)} categories={categoryOptions} />
-                    )}
-                  </div>
-                </section>
+                      <GenerateBerthsForm
+                        pierId={pier.id}
+                        sectionId={sectionId}
+                        prefix={commonPrefix(group, pier.code)}
+                        nextNumber={nextNumber(commonPrefix(group, pier.code), list)}
+                        categories={categoryOptions}
+                      />
+                    );
+
+                  // Pontile senza tratti: come sempre, più la disposizione dei posti.
+                  if (sections.length === 0) {
+                    return (
+                      <>
+                        <BerthList pierId={pier.id} pierCode={pier.code} categories={categoryOptions} berths={list.map(chip)} />
+                        {list.some((b) => b.status !== "attivo") && (
+                          <p className="mb-4 text-sm text-muted">
+                            <Badge>In grigio</Badge> i posti in manutenzione o fuori servizio.
+                          </p>
+                        )}
+                        {list.length > 0 && (
+                          <p className="mb-3 text-sm text-muted">Tocca un posto per modificarne misure, categoria e stato, o «Scegli più posti» per cambiarli insieme.</p>
+                        )}
+                        {/* Sempre aperto: un pontile con numeri diversi di posti per lato si crea in due passaggi. */}
+                        <section className="border-t border-line-soft pt-3" aria-label={`Aggiungi posti a ${pier.name}`}>
+                          <h3 className="text-sm font-semibold text-ink">Aggiungi posti</h3>
+                          <p className="mt-0.5 text-xs text-muted">
+                            Se i due lati hanno un numero diverso di posti, crea prima quelli di sinistra («Solo lato sinistro»), poi quelli di destra
+                            proseguendo con la numerazione: si dispongono comunque uno di fronte all&apos;altro a partire dalla radice.
+                          </p>
+                          <div className="mt-3">{addForm(list)}</div>
+                        </section>
+                        {list.length > 0 && (
+                          <details className="mt-3 border-t border-line-soft pt-3">
+                            <summary className="link cursor-pointer text-sm">Disposizione dei posti</summary>
+                            <div className="mt-3 space-y-2">
+                              <ArrangeForm pierId={pier.id} sectionId={null} hasPlan={hasPlan} />
+                              {hasPlan && (
+                                <Link href={`/impostazioni/pianta?struttura=${pier.id}#editor`} className="link text-sm">
+                                  Apri nella pianta
+                                </Link>
+                              )}
+                            </div>
+                          </details>
+                        )}
+                      </>
+                    );
+                  }
+
+                  // Pontile unito: un riquadro per tratto, ognuno con i suoi posti e i suoi comandi.
+                  const groups = [
+                    ...sections.map((sec) => ({ id: sec.id as string | null, label: sec.label, berths: list.filter((b) => b.sectionId === sec.id) })),
+                    ...(loose.length ? [{ id: null, label: "", berths: loose }] : []),
+                  ];
+                  return (
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted">
+                        Pontile unito: per elenchi, codici e tariffe è uno solo, ma ogni tratto si gestisce anche da sé (posti, numeri, disposizione)
+                        e sulla pianta si sposta da solo.
+                      </p>
+                      {groups.map((g) => (
+                        <section key={g.id ?? "loose"} className="rounded-md border border-line-soft bg-white/60 p-3" aria-label={g.id ? `Tratto ${g.label}` : "Posti fuori dai tratti"}>
+                          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <h3 className="text-sm font-semibold text-ink">{g.id ? `Tratto ${g.label}` : "Posti fuori dai tratti"}</h3>
+                            <span className="text-sm text-muted">{g.berths.length} posti</span>
+                            {hasPlan && (
+                              <Link href={`/impostazioni/pianta?struttura=${g.id ?? pier.id}#editor`} className="link ml-auto text-sm">
+                                Apri nella pianta
+                              </Link>
+                            )}
+                          </div>
+                          <BerthList pierId={pier.id} pierCode={g.label || pier.code} categories={categoryOptions} berths={g.berths.map(chip)} />
+                          <div className="space-y-2 border-t border-line-soft pt-2">
+                            <details>
+                              <summary className="link cursor-pointer text-sm">Aggiungi posti {g.id ? "a questo tratto" : ""}</summary>
+                              <div className="mt-3">{addForm(g.berths.length ? g.berths : list, g.id ?? undefined)}</div>
+                            </details>
+                            {g.berths.length > 0 && (
+                              <details>
+                                <summary className="link cursor-pointer text-sm">Disposizione dei posti</summary>
+                                <div className="mt-3">
+                                  <ArrangeForm pierId={pier.id} sectionId={g.id} hasPlan={hasPlan} />
+                                </div>
+                              </details>
+                            )}
+                            {g.id && (
+                              <>
+                                <details>
+                                  <summary className="link cursor-pointer text-sm">Rinomina il tratto</summary>
+                                  <div className="mt-3">
+                                    <RenameSectionForm sectionId={g.id} label={g.label} />
+                                  </div>
+                                </details>
+                                <details>
+                                  <summary className="link cursor-pointer text-sm">Separa in un pontile a sé</summary>
+                                  <div className="mt-3">
+                                    <SplitSectionForm sectionId={g.id} code={g.label.slice(0, 4).toUpperCase()} name={`${pier.name} ${g.label}`} />
+                                  </div>
+                                </details>
+                                <DissolveSectionButton sectionId={g.id} label={g.label} />
+                              </>
+                            )}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  );
+                })()}
                 <details className="mt-3 border-t border-line-soft pt-3">
                   <summary className="link cursor-pointer text-sm">Rinomina il pontile</summary>
                   <div className="mt-3">

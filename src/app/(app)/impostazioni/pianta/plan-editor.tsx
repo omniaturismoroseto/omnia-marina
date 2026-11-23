@@ -38,6 +38,7 @@ export function PlanEditor({
   initialPxPerMeter,
   piers,
   initialBerths,
+  initialPierId,
 }: {
   imageUrl: string;
   // Base disegnata (stessa inquadratura della foto): si può mettere sotto i posti al posto della foto.
@@ -55,6 +56,8 @@ export function PlanEditor({
     widthM?: number | null;
   }[];
   initialBerths: EditorBerth[];
+  /** Pontile o tratto da proporre subito (da «Apri nella pianta» in Pontili e posti). */
+  initialPierId?: string;
 }) {
   const [berths, setBerths] = useState(initialBerths);
   const [under, setUnder] = useState<"foto" | "base">("foto");
@@ -66,7 +69,8 @@ export function PlanEditor({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Si propone il primo pontile che ha dei posti.
   const [pierId, setPierId] = useState(
-    piers.find((p) => initialBerths.some((b) => b.pierId === p.id))?.id ??
+    piers.find((p) => p.id === initialPierId)?.id ??
+      piers.find((p) => initialBerths.some((b) => b.pierId === p.id))?.id ??
       piers[0]?.id ??
       "",
   );
