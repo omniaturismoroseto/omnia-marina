@@ -36,6 +36,9 @@ export async function ownerBoats(scope: OwnerScope) {
     .select({
       id: boats.id,
       name: boats.name,
+      type: boats.type,
+      hasPhoto: boats.hasPhoto,
+      photoVersion: boats.photoVersion,
       lengthCm: boats.lengthCm,
       beamCm: boats.beamCm,
       insuranceCompany: boats.insuranceCompany,

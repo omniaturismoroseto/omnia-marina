@@ -3,12 +3,12 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { boatPhotos, boats } from "@/db/schema";
 import { audit } from "@/lib/audit";
-import { requireMarina } from "@/lib/context";
+import { requireMarina, requireOwner, requireUser } from "@/lib/context";
 import { BOAT_PHOTO_MAX_BYTES, checkBoatPhoto } from "@/lib/boat-photo";
 import { uuidOrNull } from "@/lib/params";
 import { sameOrigin } from "@/lib/same-origin";
 
-// Foto della barca: la vedono, la caricano (anche scattandola col telefono in banchina) e la tolgono tutti i ruoli del porto.
+// Foto della barca: la vede anche il diportista proprietario (solo le sue barche); la vedono, la caricano (anche scattandola col telefono in banchina) e la tolgono tutti i ruoli del porto.
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -34,13 +34,17 @@ async function boatOf(marinaId: string, params: Params["params"]) {
 }
 
 export async function GET(_request: Request, { params }: Params) {
-  const ctx = await requireMarina();
   const id = uuidOrNull((await params).id);
   if (!id) return new Response("Foto non trovata", { status: 404 });
+  // Il diportista vede solo le foto delle barche del cliente di cui ha l'accesso; il personale quelle del suo porto.
+  const user = await requireUser();
+  const owner = user.activeOwnerAccessId || user.previewOwnerId ? await requireOwner() : null;
+  const marinaId = owner ? owner.marinaId : (await requireMarina()).marinaId;
   const [photo] = await db
     .select({ mime: boatPhotos.mime, data: boatPhotos.data })
     .from(boatPhotos)
-    .where(and(eq(boatPhotos.boatId, id), eq(boatPhotos.marinaId, ctx.marinaId)))
+    .innerJoin(boats, eq(boats.id, boatPhotos.boatId))
+    .where(and(eq(boatPhotos.boatId, id), eq(boatPhotos.marinaId, marinaId), owner ? eq(boats.ownerId, owner.ownerId) : undefined))
     .limit(1);
   if (!photo) return new Response("Foto non trovata", { status: 404 });
   return new Response(new Uint8Array(photo.data), {

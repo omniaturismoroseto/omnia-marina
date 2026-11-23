@@ -2,7 +2,8 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { ownerAccess, ownerInvites, owners, sessions, users } from "@/db/schema";
+import { marinas, ownerAccess, ownerInvites, owners, privacyConsents, sessions, users } from "@/db/schema";
+import { appPrivacyVersion } from "@/lib/app-privacy";
 import { audit } from "@/lib/audit";
 import { INVITE_DAYS, INVITE_MAX_FAILED, canInvite, inviteCodeFromBytes, normalizeInviteCode, taxIdMatches } from "@/lib/owner-access";
 import { createAccount, isEmailVerified, sendVerificationEmail, verifyLogin } from "./credentials";
@@ -177,4 +178,32 @@ export async function activateInvite(input: { code: string; taxId: string; email
 /** Segna l'ultimo ingresso nell'area diportista (accesso o scelta dell'area). */
 export async function touchAccess(accessId: string): Promise<void> {
   await db.update(ownerAccess).set({ lastSeenAt: new Date() }).where(eq(ownerAccess.id, accessId));
+}
+
+/**
+ * Il diportista accetta l'informativa dell'app. Si segna sull'accesso (versione accettata) e si registra nel registro
+ * dei consensi del cliente come presa visione dell'informativa, in forma digitale: così la scheda cliente la mostra.
+ */
+export async function acceptAppPrivacy(ctx: { accessId: string; marinaId: string; ownerId: string; user: { id: string; name: string } }): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [marina] = await tx.select({ version: marinas.privacyPolicyVersion }).from(marinas).where(eq(marinas.id, ctx.marinaId));
+    if (!marina) throw new DomainError("Porto non trovato.");
+    const updated = await tx
+      .update(ownerAccess)
+      .set({ privacyAcceptedAt: new Date(), privacyVersion: appPrivacyVersion(marina.version) })
+      .where(and(eq(ownerAccess.id, ctx.accessId), eq(ownerAccess.marinaId, ctx.marinaId), eq(ownerAccess.ownerId, ctx.ownerId), isNull(ownerAccess.revokedAt)))
+      .returning({ id: ownerAccess.id });
+    if (updated.length === 0) throw new DomainError("Il tuo accesso non è più attivo: contatta l'ufficio del porto.");
+    await tx.insert(privacyConsents).values({
+      marinaId: ctx.marinaId,
+      ownerId: ctx.ownerId,
+      kind: "informativa",
+      granted: true,
+      policyVersion: marina.version,
+      method: "digitale",
+      note: `Accettata nell'app da ${ctx.user.name}`,
+      recordedBy: ctx.user.id,
+    });
+    await audit(ctx, "accettazione", "informativa app", ctx.ownerId, `Versione ${appPrivacyVersion(marina.version)}`, tx);
+  });
 }

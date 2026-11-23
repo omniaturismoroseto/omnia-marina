@@ -376,6 +376,10 @@ export const ownerAccess = pgTable(
     createdAt: createdAt(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    // Informativa privacy dell'app accettata al primo accesso: quando e quale versione (informativa del porto + parte
+    // sull'app, vedi appPrivacyVersion). Se il porto cambia versione, all'accesso successivo si chiede di nuovo.
+    privacyAcceptedAt: timestamp("privacy_accepted_at", { withTimezone: true }),
+    privacyVersion: text("privacy_version"),
   },
   (t) => [uniqueIndex("owner_access_owner_user_uq").on(t.ownerId, t.userId), index("owner_access_user_idx").on(t.userId)],
 );

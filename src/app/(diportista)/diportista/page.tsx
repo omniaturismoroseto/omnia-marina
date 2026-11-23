@@ -1,3 +1,4 @@
+import { BoatPicture } from "@/components/boat-picture";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { eq } from "drizzle-orm";
@@ -127,6 +128,8 @@ export default page(async function OwnerHomePage() {
               <ul className="space-y-3">
                 {boatRows.map((b) => (
                   <li key={b.id}>
+                    {/* La foto la carica il porto; senza foto, la sagoma del tipo di barca. */}
+                    <BoatPicture boat={b} className="mb-2 rounded-md" />
                     <div className="flex items-baseline justify-between gap-3">
                       <span className="font-medium text-ink">{b.name}</span>
                       <span className="text-sm text-muted tabular-nums">{formatDimensions(b.lengthCm, b.beamCm)}</span>
