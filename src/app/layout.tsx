@@ -11,6 +11,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#101e35",
+  // L'app ha solo il tema chiaro: «only light» dice a Chrome, Samsung Internet e alle WebView di Android di non
+  // scurirla da sole quando il telefono è in tema scuro (lo scurimento automatico rovina colori, mappa e foto).
+  colorScheme: "only light",
   width: "device-width",
   initialScale: 1,
 };
