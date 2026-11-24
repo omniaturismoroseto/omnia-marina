@@ -3,11 +3,11 @@ import { and, asc, eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { db } from "@/db";
-import { berthCategories, berths, boats, contracts, marinas, owners, pierSections, piers, priceLists, rates, users } from "@/db/schema";
+import { berthCategories, berthModules, berths, boats, contracts, marinas, owners, pierSections, piers, priceLists, rates, users } from "@/db/schema";
 import { appendPositions, movedOrder, parseIdList } from "@/lib/pier-merge";
 import { planUnits, unitPositions } from "@/lib/plan-units";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
-import { arrangeUnit, dissolveSection, mergePiers, sectionFromBerths, splitSection, splitUnitAt } from "@/server/piers";
+import { arrangeUnit, dissolveSection, flipNumbering, mergePiers, renameModule, sectionFromBerths, splitSection, splitUnitAt } from "@/server/piers";
 import { byBerthCode } from "@/server/berth-order";
 
 describe("unione dei pontili: regole pure", () => {
@@ -97,6 +97,51 @@ describe.skipIf(!hasDb)("unione dei pontili (database)", () => {
 
   afterAll(async () => {
     await db.$client.end();
+  });
+
+  it("gira la numerazione (estremi e lati) anche sulla pianta e dà un nome al modulo", async () => {
+    const [p] = await db
+      .insert(piers)
+      .values({ marinaId, code: "NR", name: "Numeri", sortOrder: 9, planAx: 0, planAy: 500, planBx: 300, planBy: 500, planWidthM: 2 })
+      .returning({ id: piers.id });
+    const rows = await db
+      .insert(berths)
+      .values(
+        [0, 1, 2].flatMap((i) => [
+          { marinaId, pierId: p.id, categoryId, code: `NR${i * 2 + 1}`, side: "sx" as const, position: i, lengthCm: 1000, beamCm: 400, planX: 50 + i * 100, planY: 440, planAngle: 0 },
+          { marinaId, pierId: p.id, categoryId, code: `NR${i * 2 + 2}`, side: "dx" as const, position: i, lengthCm: 1000, beamCm: 400, planX: 50 + i * 100, planY: 560, planAngle: 0 },
+        ]),
+      )
+      .returning({ id: berths.id, code: berths.code });
+    const ids = rows.map((r) => r.id);
+    const read = async () =>
+      Object.fromEntries((await db.select().from(berths).where(eq(berths.pierId, p.id))).map((b) => [b.code, b]));
+
+    await db.transaction((tx) => flipNumbering(tx, marinaId, p.id, ids, "estremi"));
+    let now = await read();
+    expect([now.NR1.side, now.NR1.position, now.NR5.position]).toEqual(["sx", 2, 0]);
+    expect(now.NR1.planX).toBeCloseTo(250, 5);
+    expect(now.NR1.planY).toBeCloseTo(440, 5);
+    // La radice della linea va dove ora c'è il primo posto.
+    const [line] = await db.select().from(piers).where(eq(piers.id, p.id));
+    expect([line.planAx, line.planBx]).toEqual([300, 0]);
+
+    await db.transaction((tx) => flipNumbering(tx, marinaId, p.id, ids, "lati"));
+    now = await read();
+    expect([now.NR1.side, now.NR2.side]).toEqual(["dx", "sx"]);
+    expect(now.NR1.planY).toBeCloseTo(560, 5);
+
+    // Posti di un altro porto: rifiutati.
+    const [foreign] = await db.insert(piers).values({ marinaId: otherMarinaId, code: "X", name: "X", sortOrder: 0 }).returning({ id: piers.id });
+    await expect(db.transaction((tx) => flipNumbering(tx, otherMarinaId, foreign.id, ids, "lati"))).rejects.toThrow();
+
+    await db.transaction((tx) => renameModule(tx, marinaId, p.id, ids.slice(0, 2), 1, "Testata"));
+    const names = await db.select().from(berthModules).where(eq(berthModules.pierId, p.id));
+    expect(names.map((n) => [n.module, n.name, n.sectionId])).toEqual([[1, "Testata", null]]);
+    now = await read();
+    expect(now.NR1.planModule).toBe(1);
+    await db.transaction((tx) => renameModule(tx, marinaId, p.id, ids.slice(0, 2), 1, ""));
+    expect(await db.select().from(berthModules).where(eq(berthModules.pierId, p.id))).toEqual([]);
   });
 
   it("sposta i posti con i contratti, tiene ogni pontile come tratto con la sua linea ed elimina quello unito", async () => {

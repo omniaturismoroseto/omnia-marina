@@ -67,3 +67,8 @@ export interface ManagerUnit {
   label: string;
   berths: ManagerBerth[];
 }
+
+/** Chiave del nome di un modulo della pianta: pontile, tratto (vuoto = fuori dai tratti) e numero del modulo. */
+export function moduleKey(pierId: string, sectionId: string | null, module: number): string {
+  return `${pierId}:${sectionId ?? ""}:${module}`;
+}

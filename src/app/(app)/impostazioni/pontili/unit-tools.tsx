@@ -1,7 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { ActionButton, Field, Form, FormMessage, SelectField, Submit } from "@/components/form";
-import { arrangeBerths, dissolveSectionAction, renameSectionAction, splitPierAt, splitSectionAction } from "@/server/settings-actions";
+import {
+  arrangeBerths,
+  dissolveSectionAction,
+  flipBerthNumbering,
+  renameModuleAction,
+  renameSectionAction,
+  splitPierAt,
+  splitSectionAction,
+} from "@/server/settings-actions";
 
 // Comandi di una struttura della pianta: un tratto di un pontile unito o, con sectionId vuoto, il pontile intero.
 
@@ -114,6 +123,67 @@ export function SplitAtForm({
         <Submit variant="secondary">Dividi</Submit>
         <FormMessage />
       </div>
+    </Form>
+  );
+}
+
+/**
+ * Numerazione del tratto (o di un suo modulo) girata: dall'altra estremità o con i lati scambiati. I posti tengono codici,
+ * misure e contratti; cambia dove stanno, anche sulla pianta.
+ */
+export function NumberingForm({ pierId, scopes, hasPlan }: { pierId: string; scopes: { label: string; berthIds: string[] }[]; hasPlan: boolean }) {
+  const [scope, setScope] = useState(0);
+  const chosen = scopes[Math.min(scope, scopes.length - 1)];
+  const fields = (mode: "estremi" | "lati") => ({ pierId, mode, berthIds: chosen.berthIds.join(",") });
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted">
+        Per far partire i numeri dall&apos;altra testata o dall&apos;altro lato. Ogni posto tiene codice, misure e contratti: cambia
+        solo dove sta{hasPlan ? ", anche sulla mappa" : ""}.
+      </p>
+      <div className="flex flex-wrap items-end gap-3">
+        {scopes.length > 1 && (
+          <label className="min-w-56">
+            <span className="label">Quali posti</span>
+            <select className="input" value={scope} onChange={(e) => setScope(Number(e.target.value))}>
+              {scopes.map((sc, i) => (
+                <option key={sc.label} value={i}>
+                  {sc.label} ({sc.berthIds.length} posti)
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <ActionButton action={flipBerthNumbering} fields={fields("estremi")}>
+          Parti dall&apos;altra estremità
+        </ActionButton>
+        <ActionButton action={flipBerthNumbering} fields={fields("lati")}>
+          Scambia i lati
+        </ActionButton>
+      </div>
+      <p className="hint">
+        «Parti dall&apos;altra estremità»: il primo posto va dove c&apos;era l&apos;ultimo. «Scambia i lati»: i posti di sinistra passano a
+        destra e viceversa.
+      </p>
+    </div>
+  );
+}
+
+/** Nome di un modulo (vuoto = torna «Modulo N»). */
+export function ModuleNameForm({ pierId, module, berthIds, name, onDone }: { pierId: string; module: number; berthIds: string[]; name: string; onDone: () => void }) {
+  return (
+    <Form action={renameModuleAction} className="flex flex-wrap items-end gap-2">
+      <input type="hidden" name="pierId" value={pierId} />
+      <input type="hidden" name="module" value={module} />
+      <input type="hidden" name="berthIds" value={berthIds.join(",")} />
+      <Field name="name" label="Nome del modulo" defaultValue={name} maxLength={30} placeholder="Es. Testata, Lato bar" autoFocus />
+      <Submit variant="secondary" size="sm">
+        Salva
+      </Submit>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>
+        Chiudi
+      </button>
+      <FormMessage />
     </Form>
   );
 }

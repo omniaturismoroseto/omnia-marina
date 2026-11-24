@@ -1,11 +1,12 @@
 import "server-only";
 import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import type { Tx } from "@/db";
-import { berths, marinas, pierSections, piers, rates } from "@/db/schema";
+import { berthModules, berths, marinas, pierSections, piers, rates } from "@/db/schema";
 import { compareCodes } from "@/lib/berth-codes";
 import { appendPositions } from "@/lib/pier-merge";
 import { berthSlots, layoutPier, mooringAlong } from "@/lib/plan";
 import { clipTrace, estimateTrace, fitTrace, renumberPier, type Trace } from "@/lib/plan-extend";
+import { mirrorBerths } from "@/lib/plan-mirror";
 import { traceFromColumns, unitPositions } from "@/lib/plan-units";
 import { DomainError } from "./errors";
 
@@ -293,6 +294,73 @@ export async function arrangeUnit(tx: Tx, marinaId: string, pierId: string, sect
     else await tx.update(piers).set(lineColumns(trace)).where(eq(piers.id, pier.id));
   }
   return { count: unit.length, onPlan: placements.length > 0 };
+}
+
+/** Posti scelti di un pontile, tutti dello stesso tratto (o tutti fuori dai tratti): restituisce posti, tratto e pontile. */
+async function unitBerths(tx: Tx, marinaId: string, pierId: string, berthIds: string[]) {
+  const { pier, sections, rows } = await loadPier(tx, marinaId, pierId);
+  const known = new Set(sections.map((sec) => sec.id));
+  const groupOf = (b: { sectionId: string | null }) => (b.sectionId && known.has(b.sectionId) ? b.sectionId : null);
+  const ids = new Set(berthIds);
+  const list = rows.filter((b) => ids.has(b.id));
+  if (list.length === 0 || list.length !== ids.size) throw new DomainError("Posti non trovati in questo pontile.");
+  const units = new Set(list.map(groupOf));
+  if (units.size > 1) throw new DomainError("I posti devono essere dello stesso tratto.");
+  const sectionId = [...units][0];
+  const section = sectionId ? sections.find((sec) => sec.id === sectionId)! : null;
+  const whole = rows.filter((b) => groupOf(b) === sectionId).length === list.length;
+  return { pier, section, list, whole };
+}
+
+/**
+ * Gira la numerazione di un gruppo di posti dello stesso tratto (il tratto intero o un suo modulo):
+ * «estremi» = il primo posto passa all'altra estremità (posizioni rovesciate), «lati» = sinistra e destra si scambiano.
+ * Sulla pianta i posti si specchiano rispetto al pontile, così ogni codice va dove ora dice la numerazione.
+ */
+export async function flipNumbering(tx: Tx, marinaId: string, pierId: string, berthIds: string[], mode: "estremi" | "lati"): Promise<number> {
+  const { pier, section, list, whole } = await unitBerths(tx, marinaId, pierId, berthIds);
+  if (list.length < 2) throw new DomainError("Servono almeno due posti.");
+  const lo = Math.min(...list.map((b) => b.position));
+  const hi = Math.max(...list.map((b) => b.position));
+  for (const b of list) {
+    const set = mode === "estremi" ? { position: lo + hi - b.position } : { side: b.side === "sx" ? ("dx" as const) : ("sx" as const) };
+    await tx.update(berths).set(set).where(eq(berths.id, b.id));
+  }
+
+  const [marina] = await tx.select({ pxPerMeter: marinas.planPxPerMeter }).from(marinas).where(eq(marinas.id, marinaId));
+  const m = marina?.pxPerMeter;
+  const placed = list.flatMap((b) => (b.x !== null && b.y !== null ? [{ ...b, x: b.x, y: b.y, angle: b.angle ?? 0 }] : []));
+  if (placed.length < 2) return list.length;
+  // La linea tracciata del tratto intero; per un modulo (o senza linea) quella ricavata dai posti, che richiede la scala.
+  const saved = whole ? traceFromColumns(section ?? pier) : null;
+  const line = saved ?? (m ? estimateTrace(placed, m) : null);
+  if (!line) return list.length;
+  for (const p of mirrorBerths(placed, line, mode)) {
+    await tx.update(berths).set({ planX: p.x, planY: p.y, planAngle: p.angle }).where(eq(berths.id, p.id));
+  }
+  // La radice della linea resta dove ora c'è il primo posto.
+  if (saved && mode === "estremi") {
+    const reversed = { ...saved, a: saved.b, b: saved.a };
+    if (section) await tx.update(pierSections).set(lineColumns(reversed)).where(eq(pierSections.id, section.id));
+    else await tx.update(piers).set(lineColumns(reversed)).where(eq(piers.id, pier.id));
+  }
+  return list.length;
+}
+
+/**
+ * Nome di un modulo della pianta (vuoto = torna «Modulo N»). I posti del modulo ricevono il suo numero, così il nome resta
+ * legato a loro anche se i moduli non erano ancora stati salvati dall'editor.
+ */
+export async function renameModule(tx: Tx, marinaId: string, pierId: string, berthIds: string[], module: number, name: string): Promise<void> {
+  const { pier, section, list } = await unitBerths(tx, marinaId, pierId, berthIds);
+  for (const b of list) await tx.update(berths).set({ planModule: module }).where(eq(berths.id, b.id));
+  const where = and(
+    eq(berthModules.pierId, pier.id),
+    section ? eq(berthModules.sectionId, section.id) : isNull(berthModules.sectionId),
+    eq(berthModules.module, module),
+  );
+  await tx.delete(berthModules).where(where);
+  if (name) await tx.insert(berthModules).values({ marinaId, pierId: pier.id, sectionId: section?.id ?? null, module, name });
 }
 
 export async function renameSection(tx: Tx, marinaId: string, sectionId: string, label: string): Promise<void> {

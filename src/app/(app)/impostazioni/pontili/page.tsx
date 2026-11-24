@@ -4,7 +4,7 @@ import { and, asc, count, eq, gte } from "drizzle-orm";
 import { page } from "@/components/page";
 import { Notice, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { berthCategories, berths, contracts, marinas, pierSections, piers, rates } from "@/db/schema";
+import { berthCategories, berthModules, berths, contracts, marinas, pierSections, piers, rates } from "@/db/schema";
 import { requireMarina } from "@/lib/context";
 import { todayRome } from "@/lib/dates";
 import { formatDimensions } from "@/lib/format";
@@ -18,6 +18,8 @@ import type { ManagerBerth, ManagerPier } from "./types";
 import { byBerthCode } from "@/server/berth-order";
 import { assignModules } from "@/lib/plan-modules";
 import { berthSizePx } from "@/lib/plan";
+import { loadPlanEditor } from "@/server/plan-editor";
+import { moduleKey } from "./types";
 
 export const metadata: Metadata = { title: "Pontili e posti barca" };
 
@@ -27,7 +29,7 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
   const welcome = one(params.benvenuto) === "1";
   const today = todayRome();
 
-  const [pierRows, berthRows, categories, board, contractRows, sectionRows, [marina], [rateCount]] = await Promise.all([
+  const [pierRows, berthRows, categories, board, contractRows, sectionRows, [marina], [rateCount], moduleRows, editor] = await Promise.all([
     db.select().from(piers).where(eq(piers.marinaId, ctx.marinaId)).orderBy(asc(piers.sortOrder), asc(piers.code)),
     db.select().from(berths).where(eq(berths.marinaId, ctx.marinaId)).orderBy(...byBerthCode),
     db.select().from(berthCategories).where(eq(berthCategories.marinaId, ctx.marinaId)).orderBy(asc(berthCategories.sortOrder), asc(berthCategories.maxLengthCm)),
@@ -42,7 +44,11 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
     db.select().from(pierSections).where(eq(pierSections.marinaId, ctx.marinaId)).orderBy(asc(pierSections.sortOrder)),
     db.select({ width: marinas.planWidth, pxPerMeter: marinas.planPxPerMeter }).from(marinas).where(eq(marinas.id, ctx.marinaId)),
     db.select({ n: count() }).from(rates).where(eq(rates.marinaId, ctx.marinaId)),
+    db.select().from(berthModules).where(eq(berthModules.marinaId, ctx.marinaId)),
+    // L'editor della pianta si apre sotto la scheda del pontile («Mostra sulla mappa»).
+    loadPlanEditor(ctx.marinaId),
   ]);
+  const moduleNames = Object.fromEntries(moduleRows.map((r) => [moduleKey(r.pierId, r.sectionId, r.module), r.name]));
   const hasPlan = Boolean(marina?.pxPerMeter);
   const contractsByPier = new Map(contractRows.map((r) => [r.pierId, r.n]));
   const boardBerths = new Map(board.flatMap((p) => p.berths).map((b) => [b.id, b]));
@@ -223,7 +229,15 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
         </div>
       )}
 
-      <PiersManager piers={managerPiers} berths={managerBerths} categories={managerCategories} hasPlan={hasPlan} initialPierId={initialPierId} />
+      <PiersManager
+        piers={managerPiers}
+        berths={managerBerths}
+        categories={managerCategories}
+        hasPlan={hasPlan}
+        initialPierId={initialPierId}
+        moduleNames={moduleNames}
+        editor={hasPlan ? editor : null}
+      />
     </>
   );
 });
