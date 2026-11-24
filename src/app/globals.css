@@ -44,8 +44,13 @@
 @custom-variant shorter (@media (max-height: 760px));
 
 @layer base {
+  /* Solo tema chiaro, anche con il telefono in tema scuro: vedi colorScheme in src/app/layout.tsx. */
+  :root {
+    color-scheme: only light;
+  }
   html {
-    color-scheme: light;
+    color-scheme: only light;
+    background: var(--color-paper);
     -webkit-text-size-adjust: 100%;
   }
   body {
