@@ -52,6 +52,8 @@ export function PiersManager({
   // Mappa aperta sotto la scheda: tutto il pontile (null) o una sua struttura (tratto).
   const [map, setMap] = useState<{ open: boolean; unitId: string | null }>({ open: false, unitId: null });
   const mapRef = useRef<HTMLDivElement>(null);
+  // Posti scelti nella scheda: sulla mappa sono evidenziati.
+  const [pickedIds, setPickedIds] = useState<string[]>([]);
 
   // Quando la pagina si aggiorna (pontili aggiunti, uniti, eliminati) l'ordine riparte da quello salvato.
   const serverOrder = initialPiers.map((p) => p.id).join(",");
@@ -132,6 +134,13 @@ export function PiersManager({
 
   // Strutture dell'editor da inquadrare: il tratto scelto o tutte quelle del pontile (i suoi tratti e il pontile stesso).
   const zoomTo = current ? (map.unitId ? [map.unitId] : [current.id, ...current.sections.map((sec) => sec.id)]) : [];
+  // Sulla mappa in giallo: i posti scelti o, senza scelta, il tratto aperto con «Sulla mappa».
+  const highlightIds =
+    pickedIds.length > 0
+      ? pickedIds
+      : current && map.unitId && current.sections.length > 0
+        ? berths.filter((b) => b.pierId === current.id && (map.unitId === current.id ? !current.sections.some((sec) => sec.id === b.sectionId) : b.sectionId === map.unitId)).map((b) => b.id)
+        : [];
   function showMap(unitId: string | null) {
     setMap((m) => (m.open && m.unitId === unitId ? { open: false, unitId: null } : { open: true, unitId }));
   }
@@ -261,6 +270,7 @@ export function PiersManager({
               mapOpen={map.open && Boolean(editor)}
               mapUnitId={map.unitId}
               onShowMap={editor ? showMap : undefined}
+              onPickedChange={setPickedIds}
               found={found && berths.find((b) => b.id === found)?.pierId === current.id ? found : null}
               isFirst={piers[0]?.id === current.id}
               isLast={piers[piers.length - 1]?.id === current.id}
@@ -283,12 +293,21 @@ export function PiersManager({
                 <span className="font-normal text-muted"> · tratto {current.sections.find((sec) => sec.id === map.unitId)?.label}</span>
               )}
             </h2>
-            <span className="text-sm text-muted">Sposta, ruota e disponi i posti qui; poi «Salva la pianta».</span>
+            <span className="text-sm text-muted">
+              Sposta, ruota e disponi i posti qui; poi «Salva la pianta».
+              {highlightIds.length > 0 && (
+                <>
+                  {" "}
+                  <i className="inline-block h-2.5 w-3 rounded-sm bg-[#e8a317] align-middle" aria-hidden="true" /> In giallo{" "}
+                  {pickedIds.length > 0 ? "i posti scelti" : "il tratto"}.
+                </>
+              )}
+            </span>
             <button type="button" className="btn btn-secondary btn-sm ml-auto" onClick={() => setMap({ open: false, unitId: null })}>
               Chiudi la mappa
             </button>
           </div>
-          <PlanEditor {...editor} key={editor.key} initialPierId={map.unitId ?? zoomTo.find((id) => editor.initialBerths.some((b) => b.pierId === id)) ?? current.id} zoomTo={zoomTo} />
+          <PlanEditor {...editor} key={editor.key} initialPierId={map.unitId ?? zoomTo.find((id) => editor.initialBerths.some((b) => b.pierId === id)) ?? current.id} zoomTo={zoomTo} highlightIds={highlightIds} />
         </section>
       )}
 

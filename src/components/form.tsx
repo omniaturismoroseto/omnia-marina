@@ -19,6 +19,7 @@ export function Form({
   className,
   resetOnSuccess = false,
   confirm,
+  onSuccess,
 }: {
   action: FormAction;
   children: ReactNode;
@@ -26,12 +27,19 @@ export function Form({
   resetOnSuccess?: boolean;
   /** Domanda di conferma prima dell'invio. */
   confirm?: string;
+  /** Chiamata quando l'azione riesce (es. per chiudere il riquadro del modulo). */
+  onSuccess?: () => void;
 }) {
   const [state, dispatch, pending] = useActionState(action, undefined);
   const ref = useRef<HTMLFormElement>(null);
+  const onSuccessRef = useRef(onSuccess);
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+  });
 
   useEffect(() => {
     if (resetOnSuccess && state?.ok) ref.current?.reset();
+    if (state?.ok) onSuccessRef.current?.();
   }, [state, resetOnSuccess]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {

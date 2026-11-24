@@ -66,6 +66,7 @@ export function PlanEditor({
   usedCodes = [],
   features = [],
   zoomTo,
+  highlightIds,
 }: {
   imageUrl: string;
   // Base disegnata (stessa inquadratura della foto): si può mettere sotto i posti al posto della foto.
@@ -93,6 +94,8 @@ export function PlanEditor({
   features?: PlanFeature[];
   /** Strutture (pontili o tratti) da inquadrare all'apertura, es. il pontile aperto in Pontili e posti; vuoto = tutta la pianta. */
   zoomTo?: string[];
+  /** Posti da evidenziare in giallo (es. i posti scelti o il tratto aperto in Pontili e posti). */
+  highlightIds?: string[];
 }) {
   // I moduli mancanti si riconoscono all'apertura dalle posizioni salvate, poi restano fissi (si salvano con la pianta).
   const [berths, setBerths] = useState(() => withModules(initialBerths, initialPxPerMeter, width));
@@ -198,6 +201,9 @@ export function PlanEditor({
 
   // Unità di disegno: spessori e testi restano proporzionati qualunque sia la dimensione della foto.
   const u = width / 1000;
+  // Bordo dei posti: sottile, in proporzione ai metri (0,08 m) e non alla foto, così non copre il posto quando si ingrandisce.
+  const line = initialPxPerMeter || pxPerMeter ? 0.08 * (pxPerMeter ?? initialPxPerMeter ?? 1) : 0.6 * u;
+  const lit = new Set(highlightIds ?? []);
   const selected = berths.find((b) => b.id === selectedId) ?? null;
   const unplaced = berths.filter((b) => b.x === null);
   const placedCount = berths.length - unplaced.length;
@@ -980,11 +986,11 @@ export function PlanEditor({
                       y={-l / 2}
                       width={w}
                       height={l}
-                      rx={u}
-                      fill={active ? "#d4502a" : "#24497a"}
-                      fillOpacity={active ? 0.75 : 0.6}
+                      rx={line * 2}
+                      fill={active ? "#d4502a" : lit.has(b.id) ? "#e8a317" : "#24497a"}
+                      fillOpacity={active || lit.has(b.id) ? 0.85 : 0.6}
                       stroke="#fff"
-                      strokeWidth={(active ? 2.4 : 1.2) * u}
+                      strokeWidth={(active ? 2 : 1) * line}
                     />
                   </g>
                 );
