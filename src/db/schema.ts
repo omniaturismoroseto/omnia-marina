@@ -516,6 +516,25 @@ export const pierSections = pgTable(
   (t) => [index("pier_sections_pier_idx").on(t.pierId)],
 );
 
+// Nome dato a un modulo della pianta (berths.plan_module) di un pontile o di un suo tratto, per riconoscerlo meglio
+// (es. «Testata», «Lato bar»). Senza nome il modulo si chiama «Modulo 1», «Modulo 2»…
+export const berthModules = pgTable(
+  "berth_modules",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    pierId: uuid("pier_id")
+      .notNull()
+      .references(() => piers.id, { onDelete: "cascade" }),
+    sectionId: uuid("section_id").references(() => pierSections.id, { onDelete: "cascade" }),
+    module: integer("module").notNull(),
+    name: text("name").notNull(),
+  },
+  (t) => [unique("berth_modules_unit_module_uq").on(t.pierId, t.sectionId, t.module).nullsNotDistinct()],
+);
+
 export const berthCategories = pgTable(
   "berth_categories",
   {

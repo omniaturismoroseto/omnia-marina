@@ -21,7 +21,7 @@ import { pierGroupKey } from "@/lib/pricing";
 import { parseCoordinates } from "@/lib/weather";
 import { checkPassword, createAccount, setPassword } from "./credentials";
 import { DomainError, toFormState } from "./errors";
-import { arrangeUnit, dissolveSection, mergePiers, renameSection, sectionFromBerths, splitSection, splitUnitAt, type MergeResult } from "./piers";
+import { arrangeUnit, dissolveSection, flipNumbering, renameModule, mergePiers, renameSection, sectionFromBerths, splitSection, splitUnitAt, type MergeResult } from "./piers";
 
 const ACCOUNT_SERVICE_DOWN = "Il servizio di accesso non risponde: riprova tra qualche minuto.";
 
@@ -710,6 +710,54 @@ export async function arrangeBerths(_prev: FormState, formData: FormData): Promi
   } catch (err) {
     return toFormState(err);
   }
+}
+
+const flipSchema = z.object({
+  pierId: f.id(),
+  mode: f.choice(["estremi", "lati"]),
+});
+
+// Gira la numerazione di un tratto o di un modulo: dall'altra estremità o con i lati scambiati.
+export async function flipBerthNumbering(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = parseForm(flipSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const ids = parseIdList(formData.get("berthIds"));
+  const { pierId, mode } = parsed.data;
+  try {
+    const n = await db.transaction(async (tx) => {
+      const count = await flipNumbering(tx, ctx.marinaId, pierId, ids, mode);
+      await audit(ctx, "modifica", "posti barca", pierId, `Numerazione girata (${mode === "estremi" ? "dall'altra estremità" : "lati scambiati"}) di ${count} posti`, tx);
+      return count;
+    });
+    revalidatePath("/", "layout");
+    return { ok: true, message: mode === "estremi" ? `Numerazione girata: ${n} posti, ora dall'altra estremità.` : `Lati scambiati per ${n} posti.` };
+  } catch (err) {
+    return toFormState(err);
+  }
+}
+
+const moduleNameSchema = z.object({
+  pierId: f.id(),
+  module: f.int(1, 10000),
+  name: z.preprocess((v) => (typeof v === "string" ? v.trim() : ""), z.string().max(30, "Al massimo 30 caratteri")),
+});
+
+export async function renameModuleAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = parseForm(moduleNameSchema, formData);
+  if (!parsed.ok) return parsed.state;
+  const { pierId, module, name } = parsed.data;
+  try {
+    await db.transaction(async (tx) => {
+      await renameModule(tx, ctx.marinaId, pierId, parseIdList(formData.get("berthIds")), module, name);
+      await audit(ctx, "modifica", "pontile", pierId, name ? `Modulo ${module} chiamato «${name}»` : `Modulo ${module} senza nome`, tx);
+    });
+  } catch (err) {
+    return toFormState(err);
+  }
+  revalidatePath("/", "layout");
+  return { ok: true, message: name ? "Modulo rinominato." : "Nome del modulo tolto." };
 }
 
 const sectionLabelSchema = z.object({

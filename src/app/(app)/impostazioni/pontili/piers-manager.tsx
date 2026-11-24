@@ -1,11 +1,13 @@
 "use client";
 
-import { startTransition, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import { GripVertical, Plus, Search } from "@/components/icons";
 import { STATE_LABEL } from "@/lib/berth-states";
 import { reorderPiers } from "@/server/settings-actions";
+import type { PlanEditorData } from "@/server/plan-editor";
 import { PierForm } from "../settings-forms";
+import { PlanEditor } from "../pianta/plan-editor";
 import { BerthPanel } from "./berth-panel";
 import { Drawer } from "./drawer";
 import { PierDetail } from "./pier-detail";
@@ -14,7 +16,8 @@ import type { ManagerBerth, ManagerCategory, ManagerPier, ManagerUnit } from "./
 
 /**
  * Pontili e posti: a sinistra l'elenco dei pontili (con occupazione di oggi e ordine da trascinare), a destra la scheda del pontile
- * scelto; sul telefono una cosa per volta. In alto «Trova un posto» e «Nuovo pontile».
+ * scelto; sul telefono una cosa per volta. In alto «Trova un posto» e «Nuovo pontile». Con «Mostra sulla mappa» sotto si apre
+ * l'editor della pianta, inquadrato sul pontile (o sul tratto) e già pronto per le modifiche.
  */
 export function PiersManager({
   piers: initialPiers,
@@ -22,12 +25,18 @@ export function PiersManager({
   categories,
   hasPlan,
   initialPierId,
+  moduleNames,
+  editor,
 }: {
   piers: ManagerPier[];
   berths: ManagerBerth[];
   categories: ManagerCategory[];
   hasPlan: boolean;
   initialPierId: string | null;
+  /** Nomi dei moduli, per moduleKey(pontile, tratto, modulo). */
+  moduleNames: Record<string, string>;
+  /** Dati dell'editor della pianta; null senza pianta. */
+  editor: PlanEditorData | null;
 }) {
   const [order, setOrder] = useState(() => initialPiers.map((p) => p.id));
   const [currentId, setCurrentId] = useState(initialPierId ?? initialPiers[0]?.id ?? null);
@@ -40,6 +49,9 @@ export function PiersManager({
   const [orderError, setOrderError] = useState<string | null>(null);
   const drag = useRef<{ id: string } | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
+  // Mappa aperta sotto la scheda: tutto il pontile (null) o una sua struttura (tratto).
+  const [map, setMap] = useState<{ open: boolean; unitId: string | null }>({ open: false, unitId: null });
+  const mapRef = useRef<HTMLDivElement>(null);
 
   // Quando la pagina si aggiorna (pontili aggiunti, uniti, eliminati) l'ordine riparte da quello salvato.
   const serverOrder = initialPiers.map((p) => p.id).join(",");
@@ -57,6 +69,7 @@ export function PiersManager({
 
   function open(id: string) {
     setCurrentId(id);
+    setMap((m) => ({ ...m, unitId: null }));
     setShowDetail(true);
     setFound(null);
     window.history.replaceState(null, "", `?pontile=${id}`);
@@ -116,6 +129,16 @@ export function PiersManager({
       ...(loose.length ? [{ sectionId: null, title: "Posti fuori dai tratti", label: "", berths: loose }] : []),
     ];
   };
+
+  // Strutture dell'editor da inquadrare: il tratto scelto o tutte quelle del pontile (i suoi tratti e il pontile stesso).
+  const zoomTo = current ? (map.unitId ? [map.unitId] : [current.id, ...current.sections.map((sec) => sec.id)]) : [];
+  function showMap(unitId: string | null) {
+    setMap((m) => (m.open && m.unitId === unitId ? { open: false, unitId: null } : { open: true, unitId }));
+  }
+  // Aprendo la mappa la si porta in vista.
+  useEffect(() => {
+    if (map.open) mapRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [map.open, map.unitId]);
 
   const openBerth = berthId ? berths.find((b) => b.id === berthId) : undefined;
   const openBerthPier = openBerth ? byId.get(openBerth.pierId) : undefined;
@@ -234,6 +257,10 @@ export function PiersManager({
               piers={piers}
               existingCodes={existingCodes}
               hasPlan={hasPlan}
+              moduleNames={moduleNames}
+              mapOpen={map.open && Boolean(editor)}
+              mapUnitId={map.unitId}
+              onShowMap={editor ? showMap : undefined}
               found={found && berths.find((b) => b.id === found)?.pierId === current.id ? found : null}
               isFirst={piers[0]?.id === current.id}
               isLast={piers[piers.length - 1]?.id === current.id}
@@ -245,6 +272,25 @@ export function PiersManager({
           )}
         </div>
       </div>
+
+      {editor && current && map.open && (
+        // data-wide: come in Mappa del porto, l'editor usa tutta la larghezza dello schermo (vedi il layout).
+        <section ref={mapRef} data-wide className="card mt-4 scroll-mt-4 p-4" aria-label={`Mappa di ${current.name}`}>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <h2 className="text-[15px] font-semibold text-ink">
+              {current.name} sulla mappa
+              {map.unitId && map.unitId !== current.id && (
+                <span className="font-normal text-muted"> · tratto {current.sections.find((sec) => sec.id === map.unitId)?.label}</span>
+              )}
+            </h2>
+            <span className="text-sm text-muted">Sposta, ruota e disponi i posti qui; poi «Salva la pianta».</span>
+            <button type="button" className="btn btn-secondary btn-sm ml-auto" onClick={() => setMap({ open: false, unitId: null })}>
+              Chiudi la mappa
+            </button>
+          </div>
+          <PlanEditor {...editor} key={editor.key} initialPierId={map.unitId ?? zoomTo.find((id) => editor.initialBerths.some((b) => b.pierId === id)) ?? current.id} zoomTo={zoomTo} />
+        </section>
+      )}
 
       {openBerth && (
         <BerthPanel

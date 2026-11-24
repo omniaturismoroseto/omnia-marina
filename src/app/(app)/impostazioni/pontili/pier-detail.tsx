@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { ActionButton, Form, FormMessage, SelectField, Submit } from "@/components/form";
-import { ChevronLeft, Ellipsis, Plus } from "@/components/icons";
+import { Check, ChevronLeft, Ellipsis, Map as MapIcon, Pencil, Plus } from "@/components/icons";
 import { STATE_LABEL } from "@/lib/berth-states";
 import { compareCodes } from "@/lib/berth-codes";
 import { moduleCodes, stripModules } from "@/lib/pier-strip";
@@ -14,11 +14,11 @@ import { AddBerthsPanel } from "./add-berths";
 import { BulkCodesForm, BulkDeleteForm, BulkEditForm, BulkSectionForm, pickedSummary } from "./bulk-forms";
 import { Drawer } from "./drawer";
 import { STATE_CELL, STATE_ORDER, stateCounts } from "./states";
-import type { ManagerBerth, ManagerCategory, ManagerPier, ManagerUnit } from "./types";
-import { ArrangeForm, DissolveSectionButton, RenameSectionForm, SplitAtForm, SplitSectionForm } from "./unit-tools";
+import { moduleKey, type ManagerBerth, type ManagerCategory, type ManagerPier, type ManagerUnit } from "./types";
+import { ArrangeForm, DissolveSectionButton, ModuleNameForm, NumberingForm, RenameSectionForm, SplitAtForm, SplitSectionForm } from "./unit-tools";
 
 type Bulk = "edit" | "codes" | "section" | "delete";
-type UnitAction = "arrange" | "divide" | "rename" | "split";
+type UnitAction = "arrange" | "numbers" | "divide" | "rename" | "split";
 
 const unitKey = (u: ManagerUnit) => u.sectionId ?? "pontile";
 
@@ -45,6 +45,10 @@ export function PierDetail({
   piers,
   existingCodes,
   hasPlan,
+  moduleNames,
+  mapOpen,
+  mapUnitId,
+  onShowMap,
   found,
   isFirst,
   isLast,
@@ -57,6 +61,13 @@ export function PierDetail({
   piers: ManagerPier[];
   existingCodes: Set<string>;
   hasPlan: boolean;
+  /** Nomi dei moduli, per moduleKey(pontile, tratto, modulo). */
+  moduleNames: Record<string, string>;
+  /** Mappa aperta sotto la scheda, sul pontile intero (mapUnitId null) o su un tratto. */
+  mapOpen: boolean;
+  mapUnitId: string | null;
+  /** Apre o chiude la mappa sotto la scheda; manca senza pianta. */
+  onShowMap?: (unitId: string | null) => void;
   /** Posto trovato con «Trova un posto»: si evidenzia. */
   found: string | null;
   isFirst: boolean;
@@ -82,7 +93,6 @@ export function PierDetail({
   const multi = units.some((u) => u.sectionId);
   const byCategory = categories.map((cat) => ({ cat, n: all.filter((b) => b.categoryId === cat.id).length })).filter((x) => x.n > 0);
   const without = all.filter((b) => !b.categoryId || !categories.some((cat) => cat.id === b.categoryId)).length;
-  const firstUnitId = units[0]?.sectionId ?? pier.id;
   const codes = useMemo(() => [...existingCodes], [existingCodes]);
 
   // Chiude il menu toccando fuori.
@@ -150,12 +160,14 @@ export function PierDetail({
           </Link>
         </h2>
         <div className="relative ml-auto flex flex-wrap items-center gap-2" ref={menuRef}>
-          <Link href="/mappa" className={linkBtn}>
-            Vedi sulla mappa
-          </Link>
-          {hasPlan && (
-            <Link href={`/impostazioni/pianta?parte=posti&struttura=${firstUnitId}#editor`} className={linkBtn}>
-              Apri nella pianta
+          {onShowMap ? (
+            // Sotto la scheda si apre la mappa inquadrata sul pontile, dove si modificano i posti.
+            <button type="button" className={linkBtn} aria-pressed={mapOpen && mapUnitId === null} onClick={() => onShowMap(null)}>
+              <MapIcon size={16} aria-hidden="true" /> {mapOpen && mapUnitId === null ? "Chiudi la mappa" : "Mostra sulla mappa"}
+            </button>
+          ) : (
+            <Link href="/mappa" className={linkBtn}>
+              <MapIcon size={16} aria-hidden="true" /> Vedi sulla mappa
             </Link>
           )}
           <button type="button" className={linkBtn} aria-haspopup="menu" aria-expanded={menu} aria-label="Altre azioni del pontile" onClick={() => setMenu((v) => !v)}>
@@ -250,12 +262,13 @@ export function PierDetail({
         <div className="flex flex-wrap items-center gap-2">
           {all.length > 0 &&
             (selecting ? (
-              <button type="button" className="btn btn-secondary btn-sm" onClick={endSelection}>
-                Fine selezione
+              <button type="button" className="btn btn-primary" onClick={endSelection}>
+                <Check size={16} aria-hidden="true" /> Fine selezione
               </button>
             ) : (
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSelecting(true)}>
-                Scegli più posti
+              // Ben visibile: è il modo per modificare, rinominare o eliminare più posti insieme.
+              <button type="button" className="btn border-sea bg-sea-soft text-sea-dark hover:bg-white" onClick={() => setSelecting(true)}>
+                <Check size={16} aria-hidden="true" /> Scegli più posti
               </button>
             ))}
           <span className="flex-1" />
@@ -345,6 +358,11 @@ export function PierDetail({
                     </UnitLink>
                   )}
                   {u.berths.length > 1 && (
+                    <UnitLink active={open === "numbers"} onClick={() => toggle("numbers")}>
+                      Numerazione
+                    </UnitLink>
+                  )}
+                  {u.berths.length > 1 && (
                     <UnitLink active={open === "divide"} onClick={() => toggle("divide")}>
                       Dividi
                     </UnitLink>
@@ -364,10 +382,10 @@ export function PierDetail({
                       </UnitLink>
                     </>
                   )}
-                  {hasPlan && (
-                    <Link href={`/impostazioni/pianta?parte=posti&struttura=${u.sectionId ?? pier.id}#editor`} className="link">
-                      Apri nella pianta
-                    </Link>
+                  {onShowMap && multi && (
+                    <UnitLink active={mapOpen && mapUnitId === (u.sectionId ?? pier.id)} onClick={() => onShowMap(u.sectionId ?? pier.id)}>
+                      Sulla mappa
+                    </UnitLink>
                   )}
                   {u.sectionId && <DissolveSectionButton sectionId={u.sectionId} label={u.label} />}
                 </span>
@@ -375,6 +393,23 @@ export function PierDetail({
               {open && (
                 <div className="mb-3 rounded-md border border-line-soft bg-paper p-3">
                   {open === "arrange" && <ArrangeForm pierId={pier.id} sectionId={u.sectionId} hasPlan={hasPlan} />}
+                  {open === "numbers" && (
+                    <NumberingForm
+                      pierId={pier.id}
+                      hasPlan={hasPlan}
+                      scopes={[
+                        { label: u.sectionId ? `Tutto il ${u.title.toLowerCase()}` : "Tutti i posti", berthIds: u.berths.map((b) => b.id) },
+                        // Stessi nomi della striscia qui sotto: «Modulo N» conta i moduli sulla pianta nell'ordine dei codici.
+                        ...stripModules(u.berths)
+                          .filter((g) => g.module !== null)
+                          .map((g, i) => ({
+                            label: moduleNames[moduleKey(pier.id, u.sectionId, g.module!)] || `Modulo ${i + 1}`,
+                            berthIds: g.berths.map((b) => b.id),
+                          }))
+                          .filter((sc) => sc.berthIds.length > 1 && sc.berthIds.length < u.berths.length),
+                      ]}
+                    />
+                  )}
                   {open === "divide" && (
                     <SplitAtForm
                       pierId={pier.id}
@@ -388,7 +423,16 @@ export function PierDetail({
                   {open === "split" && u.sectionId && <SplitSectionForm sectionId={u.sectionId} code={u.label.slice(0, 4).toUpperCase()} name={`${pier.name} ${u.label}`} />}
                 </div>
               )}
-              <BerthStrip berths={u.berths} picked={picked} selecting={selecting} found={found} onBerth={onBerth} />
+              <BerthStrip
+                berths={u.berths}
+                picked={picked}
+                selecting={selecting}
+                found={found}
+                onBerth={onBerth}
+                pierId={pier.id}
+                sectionId={u.sectionId}
+                moduleNames={moduleNames}
+              />
             </section>
           );
         })}
@@ -528,14 +572,21 @@ function BerthStrip({
   selecting,
   found,
   onBerth,
+  pierId,
+  sectionId,
+  moduleNames,
 }: {
   berths: ManagerBerth[];
   picked: Set<string>;
   selecting: boolean;
   found: string | null;
   onBerth: (e: MouseEvent, b: ManagerBerth) => void;
+  pierId: string;
+  sectionId: string | null;
+  moduleNames: Record<string, string>;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
+  const [renaming, setRenaming] = useState<number | null>(null);
   if (berths.length === 0) return <p className="text-sm text-muted">Nessun posto in questo tratto.</p>;
   const groups = stripModules(berths);
   const many = groups.length > 1;
@@ -550,14 +601,28 @@ function BerthStrip({
         const cell = width ? Math.min(CELL_MAX, Math.floor((width + GAP) / cols) - GAP) : CELL_MIN;
         const blocks = Array.from({ length: Math.ceil(g.span / cols) }, (_, i) => i);
         const sides = new Set(g.berths.map((b) => b.side));
-        const label = g.module === null ? "Non ancora sulla pianta" : `Modulo ${++n}`;
+        const index = g.module === null ? 0 : ++n;
+        const named = g.module === null ? "" : (moduleNames[moduleKey(pierId, sectionId, g.module)] ?? "");
+        const label = g.module === null ? "Non ancora sulla pianta" : named || `Modulo ${index}`;
         return (
           <div key={g.module ?? "fuori"} className={many ? "rounded-md border border-line-soft bg-paper/60 p-2" : undefined}>
             {many && (
-              <p className="mb-1.5 text-xs font-medium text-muted">
-                <span className="font-semibold text-ink">{label}</span> · {g.berths.length} {g.berths.length === 1 ? "posto" : "posti"} ·{" "}
-                {moduleCodes(g.berths)}
-              </p>
+              <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted">
+                <span>
+                  <span className="font-semibold text-ink">{label}</span> · {g.berths.length} {g.berths.length === 1 ? "posto" : "posti"} ·{" "}
+                  {moduleCodes(g.berths)}
+                </span>
+                {g.module !== null && renaming !== g.module && (
+                  <button type="button" className="link inline-flex items-center gap-1" onClick={() => setRenaming(g.module)}>
+                    <Pencil size={12} aria-hidden="true" /> {named ? "Rinomina" : "Dai un nome"}
+                  </button>
+                )}
+              </div>
+            )}
+            {many && g.module !== null && renaming === g.module && (
+              <div className="mb-2 rounded-md border border-line-soft bg-card p-2">
+                <ModuleNameForm pierId={pierId} module={g.module} berthIds={g.berths.map((b) => b.id)} name={named} onDone={() => setRenaming(null)} />
+              </div>
             )}
             <div className="space-y-2">
               {blocks.map((block) => (

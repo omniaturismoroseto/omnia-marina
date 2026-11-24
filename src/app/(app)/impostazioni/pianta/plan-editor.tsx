@@ -22,7 +22,6 @@ import { Field, Form, FormMessage, Submit } from "@/components/form";
 import { compareCodes } from "@/lib/berth-codes";
 import { alignRows } from "@/lib/plan-align";
 import { estimateTrace, fitTrace } from "@/lib/plan-extend";
-import { mirrorBerths } from "@/lib/plan-mirror";
 import { assignModules } from "@/lib/plan-modules";
 import { MAX_BERTHS_PER_SIDE, planBerths } from "@/lib/plan-analysis";
 import { createFromProposals, savePlanLayout } from "@/server/plan-actions";
@@ -50,6 +49,10 @@ export interface EditorBerth {
 // line: ridisegna i posti scelti lungo una linea (due clic) · newpier: disegna un pontile nuovo (due clic, poi i dati)
 type Tool = "select" | "scale" | "pier" | "place" | "line" | "newpier";
 
+// Messaggio dell'ultimo salvataggio: dopo un salvataggio i dati del server cambiano e l'editor riparte da quelli (cambia la sua
+// `key`), quindi il messaggio passa da qui per restare visibile.
+let carriedNotice: { ok: boolean; message: string } | null = null;
+
 export function PlanEditor({
   imageUrl,
   baseUrl = null,
@@ -62,6 +65,7 @@ export function PlanEditor({
   categories = [],
   usedCodes = [],
   features = [],
+  zoomTo,
 }: {
   imageUrl: string;
   // Base disegnata (stessa inquadratura della foto): si può mettere sotto i posti al posto della foto.
@@ -87,6 +91,8 @@ export function PlanEditor({
   usedCodes?: string[];
   /** Sfondo dello schema (terra, acqua, edifici, verde), già nell'ordine di disegno: serve senza base disegnata. */
   features?: PlanFeature[];
+  /** Strutture (pontili o tratti) da inquadrare all'apertura, es. il pontile aperto in Pontili e posti; vuoto = tutta la pianta. */
+  zoomTo?: string[];
 }) {
   // I moduli mancanti si riconoscono all'apertura dalle posizioni salvate, poi restano fissi (si salvano con la pianta).
   const [berths, setBerths] = useState(() => withModules(initialBerths, initialPxPerMeter, width));
@@ -112,9 +118,10 @@ export function PlanEditor({
   const [pierWidth, setPierWidth] = useState("2,00");
   const [meters, setMeters] = useState("");
   const [dirty, setDirty] = useState(false);
-  const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(
-    null,
-  );
+  const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(() => carriedNotice);
+  useEffect(() => {
+    carriedNotice = null;
+  }, []);
   const [saving, startSaving] = useTransition();
   const svgRef = useRef<SVGSVGElement>(null);
   // Trascinamento: punto di partenza e posizioni iniziali di ciò che si sposta (un posto o tutto il suo pontile).
@@ -243,6 +250,27 @@ export function PlanEditor({
   }, [baseUrl, pxPerMeter, piers, berths, traces]);
   const schemaAvailable = Boolean(baseUrl || liveDrawing);
 
+  // Zona da inquadrare: i posti delle strutture scelte (e le loro linee), con un margine di 15 m o di un quarto della zona.
+  const zoomKey = zoomTo?.join(",") ?? "";
+  const focus = useMemo(() => {
+    if (!zoomKey) return null;
+    const ids = new Set(zoomKey.split(","));
+    const pts: Point[] = [];
+    for (const b of initialBerths) {
+      if (!ids.has(b.pierId) || b.x === null || b.y === null) continue;
+      const r = initialPxPerMeter ? (Math.max(b.lengthCm, b.beamCm) / 200) * initialPxPerMeter : 0;
+      pts.push({ x: b.x - r, y: b.y - r }, { x: b.x + r, y: b.y + r });
+    }
+    for (const p of piers) if (ids.has(p.id) && p.ax != null && p.ay != null && p.bx != null && p.by != null) pts.push({ x: p.ax, y: p.ay }, { x: p.bx, y: p.by });
+    if (pts.length === 0) return null;
+    const minX = Math.min(...pts.map((p) => p.x));
+    const maxX = Math.max(...pts.map((p) => p.x));
+    const minY = Math.min(...pts.map((p) => p.y));
+    const maxY = Math.max(...pts.map((p) => p.y));
+    const pad = Math.max((initialPxPerMeter ?? 0) * 15, (maxX - minX + maxY - minY) / 8, width / 40);
+    return { x: minX - pad, y: minY - pad, width: maxX - minX + 2 * pad, height: maxY - minY + 2 * pad };
+  }, [zoomKey, initialBerths, initialPxPerMeter, piers, width]);
+
   // Avviso se si chiude la pagina con modifiche non salvate.
   useEffect(() => {
     if (!dirty) return;
@@ -345,30 +373,6 @@ export function PlanEditor({
     if (unitId) {
       setTraces((all) => ({ ...all, [unitId]: { a: trace.a, b: trace.b, widthM: trace.widthM } }));
       setLastTrace({ pierId: unitId, a: trace.a, b: trace.b, widthM: trace.widthM, flip, mooring: next });
-    }
-  }
-
-  /**
-   * Numerazione girata di posti già disposti, senza ridisegnarli: «estremi» = il primo posto va all'altra estremità,
-   * «lati» = sinistra e destra si scambiano. I posti (con i loro codici) si specchiano rispetto al pontile.
-   */
-  function mirrorGroup(list: EditorBerth[], mode: "estremi" | "lati", unitId: string | null) {
-    if (!pxPerMeter) return;
-    const placed = list.filter((b) => b.x !== null && b.y !== null);
-    if (placed.length < 2) return;
-    const asPlaced = placed.map((b) => ({ side: b.side, position: b.position, x: b.x!, y: b.y!, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm }));
-    const line = (unitId ? currentTrace(unitId) : null) ?? estimateTrace(asPlaced, pxPerMeter);
-    if (!line) return;
-    placePicked(
-      mirrorBerths(asPlaced.map((b, i) => ({ ...b, id: placed[i].id })), line, mode),
-      mode === "estremi"
-        ? "Numerazione girata: ora parte dall'altra estremità. Se va bene salva la pianta."
-        : "Lati scambiati: i posti di sinistra sono passati a destra e viceversa. Se va bene salva la pianta.",
-    );
-    if (unitId) {
-      // La radice resta dove c'è il primo posto.
-      if (mode === "estremi") setTraces((all) => ({ ...all, [unitId]: { a: line.b, b: line.a, widthM: line.widthM } }));
-      setLastTrace((t) => (t?.pierId === unitId ? null : t));
     }
   }
 
@@ -761,7 +765,10 @@ export function PlanEditor({
         ],
       });
       setNotice(result);
-      if (result.ok) setDraft(null);
+      if (result.ok) {
+        carriedNotice = result;
+        setDraft(null);
+      }
     });
   }
 
@@ -770,6 +777,7 @@ export function PlanEditor({
       const result = await savePlanLayout(layoutPayload());
       setNotice(result);
       if (result.ok) {
+        carriedNotice = result;
         setDirty(false);
         setTraces({});
       }
@@ -909,7 +917,7 @@ export function PlanEditor({
 
         {/* Si trascina la foto per muoversi e si ingrandisce con rotellina o due dita (come nella Mappa); le frecce spostano i posti scelti. */}
         <div onKeyDown={onKeyDown} aria-label="Editor della pianta">
-          <PlanZoom width={width} height={height} arrowKeys={false} fillScreen>
+          <PlanZoom width={width} height={height} arrowKeys={false} fillScreen focus={focus}>
             <svg
               ref={svgRef}
               viewBox={`0 0 ${width} ${height}`}
@@ -1528,33 +1536,6 @@ export function PlanEditor({
                     )}
                     <p className="hint mt-1">
                       «All&apos;inglese» gira le barche di fianco al pontile, una dietro l&apos;altra, sulla stessa linea e dallo stesso lato.
-                    </p>
-                  </div>
-                )}
-                {moveMode !== "posto" && group.length > 1 && (
-                  <div>
-                    <span className="label">Numerazione</span>
-                    <div className="grid grid-cols-2 gap-1">
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        disabled={!pxPerMeter}
-                        onClick={() => mirrorGroup(group, "estremi", moveMode === "pontile" ? selected.pierId : null)}
-                      >
-                        Parti dall&apos;altra estremità
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        disabled={!pxPerMeter}
-                        onClick={() => mirrorGroup(group, "lati", moveMode === "pontile" ? selected.pierId : null)}
-                      >
-                        Scambia i lati
-                      </button>
-                    </div>
-                    <p className="hint mt-1">
-                      I codici si spostano con i posti: il primo va all&apos;altra testata, oppure i posti di sinistra passano a destra.
-                      Funziona anche su un solo tratto o modulo.
                     </p>
                   </div>
                 )}

@@ -79,8 +79,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   linea, `mooringAlong`, `rowAxis` senza linea) in schema, «Allinea in fila», allungamento, posti nuovi e ridisposizione dei tratti.
   Cambiare ormeggio a posti già disposti (`changeMooring` nell'editor, dal riquadro del gruppo o da «Disponi un pontile») li ridispone
   lungo la loro linea (`estimateTrace` se manca), stesso lato, allungata con `fitTrace`.
-  Numerazione girata senza ridisegnare: «Parti dall'altra estremità» / «Scambia i lati» (`mirrorGroup`, `mirrorBerths` in
-  `src/lib/plan-mirror.ts`) specchiano i posti rispetto al pontile; con «estremi» la linea salvata si inverte (radice dal primo posto).
+  Numerazione girata dalla scheda del pontile in Pontili e posti («Numerazione»: «Parti dall'altra estremità» / «Scambia i lati»,
+  tratto intero o un modulo): `flipNumbering` in `src/server/piers.ts` cambia `position`/`side` e specchia i posti sulla pianta
+  (`mirrorBerths`, `src/lib/plan-mirror.ts`); con «estremi» sul tratto intero la linea salvata si inverte. Non sta nell'editor.
+  Nomi dei moduli in `berth_modules` (pontile, tratto, numero del modulo; `renameModule` fissa anche `plan_module` dei posti).
+  «Mostra sulla mappa» nella scheda del pontile apre sotto l'editor (`loadPlanEditor` in `src/server/plan-editor.ts`, condiviso con
+  Mappa del porto) inquadrato sul pontile o tratto (`PlanEditor zoomTo`, `PlanZoom focus`).
   In Pontili e posti i moduli lunghi vanno a capo a blocchi (`BerthStrip`), mai barra di scorrimento.
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
 - Riquadro del posto sulla mappa (`src/app/(app)/mappa/berth-panel.tsx`): ufficio e direzione vedono la scheda con foto della barca,

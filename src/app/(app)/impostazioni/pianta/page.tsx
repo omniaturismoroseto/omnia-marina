@@ -16,8 +16,7 @@ import {
 } from "@/db/schema";
 import { berthSizePx } from "@/lib/plan";
 import { buildDrawing } from "@/lib/plan-drawing";
-import { drawingOrder } from "@/lib/plan-features";
-import { planUnits, traceFromColumns, unitPositions } from "@/lib/plan-units";
+import { planUnits, traceFromColumns } from "@/lib/plan-units";
 import { requireMarina } from "@/lib/context";
 import { SettingsTabs } from "../tabs";
 import type { StoredAnalysis } from "@/lib/plan-analysis";
@@ -30,12 +29,14 @@ import { PlanSection, PlanSections } from "./plan-sections";
 import { one, uuidOrNull, type SearchParams } from "@/lib/params";
 import { SurroundingsEditor, type BerthRect } from "./surroundings-editor";
 import { byBerthCode } from "@/server/berth-order";
+import { loadPlanEditor } from "@/server/plan-editor";
 
 export const metadata: Metadata = { title: "Mappa del porto" };
 
 export default page(async function PlanSettingsPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const ctx = await requireMarina(["admin"]);
+  const editorData = loadPlanEditor(ctx.marinaId);
   const [[marina], pierRows, berthRows, sectionRows] = await Promise.all([
     db
       .select({
@@ -96,20 +97,6 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
     })),
     berthRows,
   );
-  // Per l'editor ogni struttura è un «pontile»: posti con l'id della struttura e posizioni contate dalla sua radice.
-  const editorPiers = units.map((unit) => ({
-    id: unit.id,
-    name: unit.name,
-    ax: unit.trace?.a.x ?? null,
-    ay: unit.trace?.a.y ?? null,
-    bx: unit.trace?.b.x ?? null,
-    by: unit.trace?.b.y ?? null,
-    widthM: unit.trace?.widthM ?? null,
-  }));
-  const editorBerths = units.flatMap((unit) => {
-    const positions = unitPositions(unit.berths);
-    return unit.berths.map(({ sectionId: _section, ...b }) => ({ ...b, pierId: unit.id, realPierId: b.pierId, position: positions.get(b.id) ?? b.position }));
-  });
   const [[plan], categories, featureRows, [base]] = await Promise.all([
     db
       .select({ analysis: marinaPlans.analysis })
@@ -145,6 +132,7 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
       .from(marinaPlanBases)
       .where(eq(marinaPlanBases.marinaId, ctx.marinaId)),
   ]);
+  const editor = await editorData;
   const baseUrl = base ? `/pianta/base?v=${base.updatedAt.getTime()}` : null;
   const hasPhoto = marina.width !== null && marina.height !== null;
   // Le proposte valgono solo per la foto su cui sono state calcolate.
@@ -261,22 +249,8 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
                 </Notice>
               </div>
             )}
-            {/* key: una nuova foto, posti nuovi (per esempio creati dalle proposte, che fissano anche la scala) o un tratto nuovo fanno ripartire
-                l'editor dai dati aggiornati; i salvataggi fatti dall'editor stesso no, così il suo messaggio resta visibile. */}
-            <PlanEditor
-              key={`${marina.version}:${berthRows.length}:${sectionRows.map((sec) => sec.id).join(",")}`}
-              imageUrl={`/pianta/immagine?v=${marina.version}`}
-              baseUrl={baseUrl}
-              width={marina.width!}
-              height={marina.height!}
-              initialPxPerMeter={marina.pxPerMeter}
-              piers={editorPiers}
-              initialBerths={editorBerths}
-              initialPierId={uuidOrNull(one(params.struttura)) ?? undefined}
-              categories={categories}
-              usedCodes={pierRows.map((p) => p.code)}
-              features={drawingOrder(featureRows)}
-            />
+            {/* key: quando cambiano foto, posti, tratti o disposizione dei posti l'editor riparte dai dati aggiornati (vedi loadPlanEditor). */}
+            {editor && <PlanEditor {...editor} key={editor.key} initialPierId={uuidOrNull(one(params.struttura)) ?? undefined} />}
           </Card>
           </div>
           </PlanSection>

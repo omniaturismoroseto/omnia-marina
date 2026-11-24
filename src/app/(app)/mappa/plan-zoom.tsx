@@ -38,6 +38,7 @@ export function PlanZoom({
   children,
   fillScreen = false,
   arrowKeys = true,
+  focus = null,
 }: {
   width: number;
   height: number;
@@ -46,6 +47,8 @@ export function PlanZoom({
   fillScreen?: boolean;
   // false: le frecce della tastiera non spostano la vista (nell'editor spostano i posti scelti).
   arrowKeys?: boolean;
+  // Zona della pianta (in pixel della foto) da inquadrare all'apertura al posto della foto intera, es. un pontile.
+  focus?: { x: number; y: number; width: number; height: number } | null;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
@@ -100,10 +103,20 @@ export function PlanZoom({
     [width, height],
   );
 
+  const focusKey = focus ? `${focus.x},${focus.y},${focus.width},${focus.height}` : "";
   const fit = useCallback(
-    (size: Size) => bound({ x: 0, y: 0, s: 0 }, size),
-    [bound],
+    (size: Size) => {
+      if (!focus || focus.width <= 0 || focus.height <= 0) return bound({ x: 0, y: 0, s: 0 }, size);
+      const s = Math.min(size.w / focus.width, size.h / focus.height);
+      return bound({ s, x: size.w / 2 - (focus.x + focus.width / 2) * s, y: size.h / 2 - (focus.y + focus.height / 2) * s }, size);
+    },
+    // focusKey al posto di focus: un oggetto nuovo con la stessa zona non deve rifare l'inquadratura.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bound, focusKey],
   );
+
+  // Zona inquadrata l'ultima volta: cambiandola si torna a inquadrarla (vedi la misura qui sotto).
+  const lastFocus = useRef(focusKey);
 
   useLayoutEffect(() => {
     const el = boxRef.current;
@@ -112,6 +125,10 @@ export function PlanZoom({
       const size = { w: el.clientWidth, h: el.clientHeight };
       if (size.w === 0 || size.h === 0) return;
       setBox(size);
+      if (lastFocus.current !== focusKey) {
+        lastFocus.current = focusKey;
+        fitted.current = true;
+      }
       setView((v) =>
         v === null || fitted.current ? fit(size) : bound(v, size),
       );
@@ -120,7 +137,7 @@ export function PlanZoom({
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [bound, fit]);
+  }, [bound, fit, focusKey]);
 
   // Ingrandisce (factor > 1) o riduce mantenendo fermo il punto (px, py) del riquadro.
   const zoomAt = useCallback(
