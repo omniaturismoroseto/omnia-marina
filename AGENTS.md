@@ -77,6 +77,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   «Foto dal vero» si sceglie. Ormeggio: «di punta» o «all'inglese» (`Mooring`, `layoutPier(..., mooring)` in `src/lib/plan.ts`), scelto
   in «Disponi un pontile», «Nuovo pontile» e «Ridisegna con una linea»; non si salva, si riconosce dai posti (`isAlongside` rispetto alla
   linea, `mooringAlong`, `rowAxis` senza linea) in schema, «Allinea in fila», allungamento, posti nuovi e ridisposizione dei tratti.
+  Cambiare ormeggio a posti già disposti (`changeMooring` nell'editor, dal riquadro del gruppo o da «Disponi un pontile») li ridispone
+  lungo la loro linea (`estimateTrace` se manca), stesso lato, allungata con `fitTrace`.
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
 - Riquadro del posto sulla mappa (`src/app/(app)/mappa/berth-panel.tsx`): ufficio e direzione vedono la scheda con foto della barca,
   proprietario con pulsante per chiamare e barra del periodo; la banchina la fascia dello stato e righe grandi. Calcoli puri in
