@@ -29,7 +29,7 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
   const welcome = one(params.benvenuto) === "1";
   const today = todayRome();
 
-  const [pierRows, berthRows, categories, board, contractRows, sectionRows, [marina], [rateCount], moduleRows, editor] = await Promise.all([
+  const [pierRows, berthRows, categories, board, contractRows, sectionRows, [marina], [rateCount], moduleRows, editor, activeRows] = await Promise.all([
     db.select().from(piers).where(eq(piers.marinaId, ctx.marinaId)).orderBy(asc(piers.sortOrder), asc(piers.code)),
     db.select().from(berths).where(eq(berths.marinaId, ctx.marinaId)).orderBy(...byBerthCode),
     db.select().from(berthCategories).where(eq(berthCategories.marinaId, ctx.marinaId)).orderBy(asc(berthCategories.sortOrder), asc(berthCategories.maxLengthCm)),
@@ -47,7 +47,13 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
     db.select().from(berthModules).where(eq(berthModules.marinaId, ctx.marinaId)),
     // L'editor della pianta si apre sotto la scheda del pontile («Mostra sulla mappa»).
     loadPlanEditor(ctx.marinaId),
+    // Contratti attivi in corso o futuri, posto per posto: il loro codice non si può cambiare.
+    db
+      .select({ berthId: contracts.berthId, number: contracts.number })
+      .from(contracts)
+      .where(and(eq(contracts.marinaId, ctx.marinaId), eq(contracts.status, "attivo"), gte(contracts.endDate, today))),
   ]);
+  const activeByBerth = new Map(activeRows.map((r) => [r.berthId, r.number ?? "senza numero"]));
   const moduleNames = Object.fromEntries(moduleRows.map((r) => [moduleKey(r.pierId, r.sectionId, r.module), r.name]));
   const hasPlan = Boolean(marina?.pxPerMeter);
   const contractsByPier = new Map(contractRows.map((r) => [r.pierId, r.n]));
@@ -94,6 +100,7 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
       status: b.status,
       notes: b.notes,
       state: now?.state ?? (b.status === "attivo" ? "libero" : "fermo"),
+      activeContract: activeByBerth.get(b.id) ?? null,
       occupant: o
         ? {
             contractId: o.contractId,

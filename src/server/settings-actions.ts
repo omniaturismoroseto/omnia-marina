@@ -20,6 +20,7 @@ import { traceFromColumns } from "@/lib/plan-units";
 import { pierGroupKey } from "@/lib/pricing";
 import { parseCoordinates } from "@/lib/weather";
 import { checkPassword, createAccount, setPassword } from "./credentials";
+import { activeContractMessage, activeContractsOnBerths } from "./contracts";
 import { DomainError, toFormState } from "./errors";
 import { arrangeUnit, dissolveSection, flipNumbering, renameModule, mergePiers, renameSection, sectionFromBerths, splitSection, splitUnitAt, type MergeResult } from "./piers";
 
@@ -495,6 +496,17 @@ export async function saveBerth(_prev: FormState, formData: FormData): Promise<F
       .limit(1);
     if (!cat) return fail("Controlla i campi evidenziati.", { categoryId: "Categoria non trovata." });
   }
+  // Il codice di un posto con un contratto attivo non si cambia (il contratto lo legge dal posto).
+  const [current] = await db
+    .select({ code: berths.code })
+    .from(berths)
+    .where(and(eq(berths.id, id), eq(berths.marinaId, ctx.marinaId)))
+    .limit(1);
+  if (!current) return fail("Posto non trovato.");
+  if (current.code !== data.code) {
+    const active = await activeContractsOnBerths(db, ctx.marinaId, [id]);
+    if (active.length > 0) return fail(activeContractMessage(active), { code: "Posto con un contratto attivo" });
+  }
   try {
     const updated = await db
       .update(berths)
@@ -642,6 +654,14 @@ export async function renameBerths(_prev: FormState, formData: FormData): Promis
     )
     .limit(1);
   if (clash) return fail(`Il codice ${clash.code} è già di un altro posto: scegli un'altra sigla o un altro numero di partenza.`);
+
+  // Nessun codice cambia se uno dei posti da rinominare ha un contratto attivo.
+  const active = await activeContractsOnBerths(
+    db,
+    ctx.marinaId,
+    changes.map((c) => c.id),
+  );
+  if (active.length > 0) return fail(activeContractMessage(active));
 
   await db.transaction(async (tx) => {
     // Prima codici provvisori, poi quelli nuovi: così due posti scelti possono anche scambiarsi il codice.

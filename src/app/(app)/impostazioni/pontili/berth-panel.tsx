@@ -60,7 +60,15 @@ export function BerthPanel({
         <input type="hidden" name="stay" value="1" />
         <input type="hidden" name="position" value={berth.position} />
         <div className="grid grid-cols-2 gap-3">
-          <Field name="code" label="Codice" defaultValue={berth.code} required />
+          {/* Con un contratto attivo il codice resta: il contratto lo legge dal posto e i contratti attivi non si modificano. */}
+          {berth.activeContract ? (
+            <div>
+              <input type="hidden" name="code" value={berth.code} />
+              <Field name="codeShown" label="Codice" value={berth.code} readOnly disabled hint={`Contratto attivo n. ${berth.activeContract}: il codice non si può cambiare. Per un nuovo codice serve un nuovo contratto.`} />
+            </div>
+          ) : (
+            <Field name="code" label="Codice" defaultValue={berth.code} required />
+          )}
           <SelectField
             name="status"
             label="Stato"

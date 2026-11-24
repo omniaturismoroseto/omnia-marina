@@ -50,6 +50,8 @@ export interface ManagerBerth {
   /** Stato di oggi, come sulla mappa. */
   state: BerthState;
   occupant: ManagerOccupant | null;
+  /** Numero del contratto attivo sul posto (in corso o futuro), «bozza» se non ha numero; null senza. Con un contratto attivo il codice non cambia. */
+  activeContract: string | null;
 }
 
 export interface ManagerCategory {
