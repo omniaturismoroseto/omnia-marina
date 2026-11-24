@@ -21,6 +21,7 @@ import { PIER, SHAPE, WATER } from "@/lib/plan-style";
 import { Field, Form, FormMessage, Submit } from "@/components/form";
 import { compareCodes } from "@/lib/berth-codes";
 import { alignRows } from "@/lib/plan-align";
+import { estimateTrace, fitTrace } from "@/lib/plan-extend";
 import { assignModules } from "@/lib/plan-modules";
 import { MAX_BERTHS_PER_SIDE, planBerths } from "@/lib/plan-analysis";
 import { createFromProposals, savePlanLayout } from "@/server/plan-actions";
@@ -296,6 +297,54 @@ export function PlanEditor({
       ),
       `${list.length} posti rimessi in fila. Se serve, ritocca e salva la pianta.`,
     );
+  }
+
+  // Ormeggio di un gruppo di posti già disposti: «di punta» o «all'inglese» rispetto alla linea del pontile.
+  function mooringOf(list: EditorBerth[]): Mooring | null {
+    const placed = list.filter((b) => b.x !== null && b.y !== null);
+    if (!pxPerMeter || placed.length === 0) return null;
+    return rowAxis(placed.map((b) => ({ x: b.x!, y: b.y!, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm })), pxPerMeter).mooring;
+  }
+
+  /**
+   * Cambia l'ormeggio di posti già disposti senza ritracciare: si ridispongono lungo la loro linea (quella tracciata o, per un
+   * modulo o posti scelti, quella ricavata dai posti), dallo stesso lato e nello stesso ordine; all'inglese la linea si allunga
+   * verso la testata quanto serve perché le barche non si sovrappongano. `unitId`: tutto il pontile o tratto (la linea si aggiorna).
+   */
+  function changeMooring(list: EditorBerth[], next: Mooring, unitId: string | null) {
+    if (!pxPerMeter) return;
+    const placed = list.filter((b) => b.x !== null && b.y !== null);
+    if (placed.length === 0) return;
+    const asPlaced = placed.map((b) => ({ side: b.side, position: b.position, x: b.x!, y: b.y!, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm }));
+    const saved = unitId ? currentTrace(unitId) : null;
+    const base = saved ?? estimateTrace(asPlaced, pxPerMeter);
+    if (!base) return;
+    // Stesso lato di prima: «sx» è a sinistra di chi va dalla radice alla testata, se no la disposizione era invertita.
+    const len = Math.hypot(base.b.x - base.a.x, base.b.y - base.a.y) || 1;
+    const left = { x: (base.b.y - base.a.y) / len, y: -(base.b.x - base.a.x) / len };
+    const sideOf = (b: EditorBerth) => ((b.x! - base.a.x) * left.x + (b.y! - base.a.y) * left.y) * (b.side === "sx" ? 1 : -1);
+    const flip = placed.reduce((sum, b) => sum + Math.sign(sideOf(b)), 0) < 0;
+    // Posizioni di seguito, lato per lato, nell'ordine di prima.
+    const slots = (["sx", "dx"] as const).flatMap((side) =>
+      placed
+        .filter((b) => b.side === side)
+        .sort((p, q) => p.position - q.position || compareCodes(p.code, q.code))
+        .map((b, i) => ({ id: b.id, side, position: i, lengthCm: b.lengthCm, beamCm: b.beamCm })),
+    );
+    const count = Math.max(...slots.map((x) => x.position)) + 1;
+    const span = Math.max(...placed.map((b) => (next === "inglese" ? b.lengthCm : b.beamCm)));
+    const trace = fitTrace(base, count, (span / 100) * pxPerMeter);
+    const placements = layoutPier(slots, trace.a, trace.b, pxPerMeter, trace.widthM, flip, next);
+    placePicked(
+      placements,
+      next === "inglese"
+        ? `${placements.length} posti ormeggiati all'inglese, di fianco al pontile. Se sono dalla parte sbagliata premi «Inverti i lati»; poi salva la pianta.`
+        : `${placements.length} posti ormeggiati di punta. Se serve, ritocca e salva la pianta.`,
+    );
+    if (unitId) {
+      setTraces((all) => ({ ...all, [unitId]: { a: trace.a, b: trace.b, widthM: trace.widthM } }));
+      setLastTrace({ pierId: unitId, a: trace.a, b: trace.b, widthM: trace.widthM, flip, mooring: next });
+    }
   }
 
   // «Ridisegna con una linea»: i posti scelti, in ordine di codice, lungo la linea da a a b, tutti dallo stesso lato.
@@ -1148,7 +1197,13 @@ export function PlanEditor({
             </div>
             <div>
               <span className="label">Ormeggio</span>
-              {mooringPicker(mooring, setMooring, "plan-mooring")}
+              {mooringPicker(mooring, (v) => {
+                setMooring(v);
+                // Il pontile scelto, se è già disposto, cambia subito ormeggio (senza ritracciarlo).
+                const unit = berths.filter((b) => b.pierId === pierId);
+                const now = mooringOf(unit);
+                if (now && now !== v) changeMooring(unit, v, pierId);
+              }, "plan-mooring")}
             </div>
             <button
               type="button"
@@ -1178,8 +1233,8 @@ export function PlanEditor({
             <p className="hint">
               Per una banchina, traccia la linea lungo il bordo del molo e metti
               larghezza 0. «All&apos;inglese»: le barche si ormeggiano di fianco
-              al pontile, una dietro l&apos;altra; vale anche per «Ridisegna con
-              una linea».
+              al pontile, una dietro l&apos;altra. Se il pontile scelto è già
+              disposto cambia subito; vale anche per «Ridisegna con una linea».
             </p>
           </div>
         </section>
@@ -1434,6 +1489,23 @@ export function PlanEditor({
                       </p>
                     </div>
                   )}
+                {moveMode !== "posto" && group.length > 1 && (
+                  <div>
+                    <span className="label">Ormeggio</span>
+                    {mooringPicker(
+                      mooringOf(group) ?? "punta",
+                      (v) => {
+                        if (v === mooringOf(group)) return;
+                        setMooring(v);
+                        changeMooring(group, v, moveMode === "pontile" ? selected.pierId : null);
+                      },
+                      "group-mooring",
+                    )}
+                    <p className="hint mt-1">
+                      «All&apos;inglese» gira le barche di fianco al pontile, una dietro l&apos;altra, sulla stessa linea e dallo stesso lato.
+                    </p>
+                  </div>
+                )}
                 {(moveMode === "modulo" || moveMode === "pontile") && group.length > 1 && (
                   <div>
                     <button type="button" className="btn btn-secondary btn-sm" disabled={!pxPerMeter} onClick={() => alignBerths(group)}>
