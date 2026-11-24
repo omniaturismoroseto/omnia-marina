@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useState } from "react";
-import { Plus, X } from "@/components/icons";
+import { useRef, useState } from "react";
+import { Check, Plus, X } from "@/components/icons";
 import { Field } from "@/components/form";
 import { annualEnd, isValidISODate } from "@/lib/dates";
 import { formatMoney, moneyInput, parseMoney } from "@/lib/format";
@@ -35,6 +35,7 @@ export function ContractExtras({
   onSpacesTotal,
   prices,
   listExtras,
+  listName,
   listReady,
   annualDefault,
 }: {
@@ -47,8 +48,9 @@ export function ContractExtras({
   onSpacesTotal: (cents: number) => void;
   // Importi del listino per le voci, proposti quando si spunta la casella.
   prices: Partial<Record<SpaceKind, number>>;
-  // Servizi e cauzioni del listino in vigore alla data di inizio; listReady: barca e date scelte, listino letto.
+  // Servizi e cauzioni del listino in vigore alla data di inizio (listName; null se nessun listino la copre); listReady: data valida.
   listExtras: ListExtra[];
+  listName: string | null;
   listReady: boolean;
   // Contratto annuale: gli spazi aggiunti nascono già con «Annuale» spuntato.
   annualDefault: boolean;
@@ -57,8 +59,8 @@ export function ContractExtras({
     () => Object.fromEntries(SPACE_ITEM_KINDS.map((k) => [k, { on: false, annual: false, ref: "", from: "", to: "", amount: "" }])) as Record<SpaceKind, SpaceState>,
   );
   const [services, setServices] = useState<ServiceLine[]>([]);
-  const [picked, setPicked] = useState("");
-  const pickerId = useId();
+  // Chiave delle righe di servizio aggiunte (un contatore: basta che sia diversa per ogni riga).
+  const nextKey = useRef(0);
 
   function changed(nextSpaces: Record<SpaceKind, SpaceState>, nextServices: ServiceLine[]) {
     onSpacesTotal(spacesTotal(nextSpaces) + nextServices.reduce((sum, l) => sum + (parseMoney(l.amount) ?? 0), 0));
@@ -79,9 +81,8 @@ export function ContractExtras({
       const s = spaces[kind];
       update(kind, { ...turnOn(s), amount: moneyInput(extra.amountCents), fromList: extra.name });
     } else {
-      setServiceLines([...services, { key: Date.now(), desc: extra.name, amount: moneyInput(extra.amountCents), vatRate: extra.vatRate }]);
+      setServiceLines([...services, { key: ++nextKey.current, desc: extra.name, amount: moneyInput(extra.amountCents), vatRate: extra.vatRate }]);
     }
-    setPicked("");
   }
 
   // Accende uno spazio con il periodo del contratto, o fino al 31 dicembre se il contratto è annuale.
@@ -103,27 +104,35 @@ export function ContractExtras({
       <legend className="float-left mb-3 w-full text-[15px] font-semibold text-ink">Altri spazi e spese</legend>
       <div className="clear-both space-y-3">
         <div className="rounded-md bg-paper p-3">
-          <label htmlFor={pickerId} className="label">
-            Dal listino
-          </label>
+          <p className="label">Servizi e cauzioni{listName ? ` · ${listName}` : ""}</p>
           {!listReady ? (
-            <p className="text-sm text-muted">Scegli barca e date: qui compaiono servizi e cauzioni del listino in vigore.</p>
+            <p className="text-sm text-muted">Indica la data di inizio: qui compaiono servizi e cauzioni del listino in vigore.</p>
+          ) : !listName ? (
+            <p className="text-sm text-muted">Nessun listino copre la data di inizio: servizi e cauzioni si scelgono dal listino in vigore in Tariffe.</p>
           ) : listExtras.length === 0 ? (
             <p className="text-sm text-muted">Il listino non ha servizi né cauzioni: si aggiungono in Tariffe → Servizi e cauzioni.</p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              <select id={pickerId} className="input min-w-0 flex-1" value={picked} onChange={(e) => setPicked(e.target.value)}>
-                <option value="">Scegli un servizio o una cauzione…</option>
-                {listExtras.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name} · {formatMoney(e.amountCents)} ({vatLabel(e.vatRate)})
-                  </option>
-                ))}
-              </select>
-              <button type="button" className="btn btn-secondary" disabled={!picked} onClick={() => addFromList(picked)}>
-                <Plus size={16} aria-hidden="true" />
-                Aggiungi
-              </button>
+            // Un pulsante per voce: toccandolo si aggiunge al contratto (posti auto, carrello e spazio a terra accendono la loro casella).
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Aggiungi dal listino">
+              {listExtras.map((e) => {
+                const added = e.itemKind ? spaces[e.itemKind].on : services.some((l) => l.desc === e.name);
+                return (
+                  <button
+                    key={e.id}
+                    type="button"
+                    onClick={() => addFromList(e.id)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm ${
+                      added ? "border-sea bg-sea-soft text-sea-dark" : "border-line bg-card text-ink hover:border-sea"
+                    }`}
+                  >
+                    {added ? <Check size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
+                    <span className="font-medium">{e.name}</span>
+                    <span className="text-muted tabular-nums">
+                      {formatMoney(e.amountCents)} · {vatLabel(e.vatRate)}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

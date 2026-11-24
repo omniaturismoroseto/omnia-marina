@@ -207,7 +207,7 @@ export const GUIDE: GuideSection[] = [
           "L'app propone solo i posti liberi in cui la barca entra e calcola l'importo dal listino. L'importo resta modificabile.",
           "«Scegli dalla mappa» apre lo schema del porto: i posti liberi e adatti alla barca sono verdi, tocca quello che vuoi.",
           "Salvato, il contratto è una bozza: non ha numero e in stampa porta la scritta «BOZZA». Si modifica con «Modifica».",
-          "In «Altri spazi e spese» aggiungi spazio a terra, posti auto, carrello, spese fisse e i servizi o le cauzioni del listino. Accanto alle date, la casella «Annuale» copre fino al 31 dicembre.",
+          "In «Altri spazi e spese» aggiungi spazio a terra, posti auto, carrello, spese fisse e i servizi o le cauzioni del listino. Servizi e cauzioni del listino in vigore alla data di inizio compaiono subito come pulsanti (non serve scegliere prima la barca): toccane uno per aggiungerlo, con il suo prezzo, che puoi cambiare; quelli già aggiunti hanno la spunta. Se nessun listino copre la data di inizio, l'app lo dice. Accanto alle date, la casella «Annuale» copre fino al 31 dicembre.",
         ],
       },
       {

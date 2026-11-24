@@ -52,3 +52,22 @@ export async function extrasForDate(marinaId: string, date: string): Promise<Lis
     .limit(1);
   return list ? extrasOfList(marinaId, list.id) : [];
 }
+
+/** Listino con il suo periodo di validità e i suoi servizi e cauzioni (per scegliere quelli in vigore alla data del contratto). */
+export interface ListWithExtras {
+  id: string;
+  name: string;
+  validFrom: string;
+  validTo: string;
+  extras: ListExtra[];
+}
+
+/** Tutti i listini del porto con servizi e cauzioni: il modulo del contratto sceglie da sé quello in vigore all'inizio. */
+export async function listsWithExtras(marinaId: string): Promise<ListWithExtras[]> {
+  const lists = await db
+    .select({ id: priceLists.id, name: priceLists.name, validFrom: priceLists.validFrom, validTo: priceLists.validTo })
+    .from(priceLists)
+    .where(eq(priceLists.marinaId, marinaId))
+    .orderBy(desc(priceLists.validFrom));
+  return Promise.all(lists.map(async (l) => ({ ...l, extras: await extrasOfList(marinaId, l.id) })));
+}
