@@ -7,7 +7,7 @@ import { ActionButton, Form, FormMessage, SelectField, Submit } from "@/componen
 import { ChevronLeft, Ellipsis, Plus } from "@/components/icons";
 import { STATE_LABEL } from "@/lib/berth-states";
 import { compareCodes } from "@/lib/berth-codes";
-import { unitPositions } from "@/lib/plan-units";
+import { moduleCodes, stripModules } from "@/lib/pier-strip";
 import { deletePier, mergePierInto, movePier } from "@/server/settings-actions";
 import { PierForm } from "../settings-forms";
 import { AddBerthsPanel } from "./add-berths";
@@ -497,7 +497,7 @@ function UnitLink({ children, onClick, active }: { children: React.ReactNode; on
   );
 }
 
-// Larghezza delle celle dei posti (px): si allargano fino a CELL_MAX per riempire la riga; sotto CELL_MIN il pontile va a capo.
+// Larghezza delle celle dei posti (px): si allargano fino a CELL_MAX per riempire la riga; sotto CELL_MIN il modulo scorre di lato.
 const CELL_MIN = 46;
 const CELL_MAX = 64;
 const GAP = 4;
@@ -517,16 +517,10 @@ function useWidth<T extends HTMLElement>() {
 }
 
 // Primo e ultimo codice di un gruppo di posti (R23–R33), per riconoscere i pezzi di un pontile andato a capo.
-function codeRange(list: ManagerBerth[]): string {
-  if (list.length === 0) return "";
-  const sorted = [...list].sort((a, b) => compareCodes(a.code, b.code));
-  return sorted.length === 1 ? sorted[0].code : `${sorted[0].code}–${sorted[sorted.length - 1].code}`;
-}
-
 /**
- * Posti su due file come sul pontile: sopra il lato sinistro, sotto il destro, dalla radice alla testata. Le celle si adattano
- * alla larghezza dello schermo, senza barra di scorrimento; se non ci stanno il pontile (o il tratto) va a capo in più pezzi,
- * ognuno con i suoi codici scritti sopra.
+ * Posti come sono in porto, modulo per modulo (le parti staccate riconosciute sulla pianta): sopra il lato sinistro,
+ * sotto il destro, dalla radice alla testata. Un modulo non va mai a capo (sembrerebbe un altro pontile): le celle
+ * si allargano per riempire la riga e, se il modulo è più lungo dello schermo, si scorre di lato.
  */
 function BerthStrip({
   berths,
@@ -543,50 +537,54 @@ function BerthStrip({
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   if (berths.length === 0) return <p className="text-sm text-muted">Nessun posto in questo tratto.</p>;
-  const cols = unitPositions(berths);
-  const total = Math.max(...berths.map((b) => (cols.get(b.id) ?? 0) + 1));
-  // Quante colonne stanno in una riga; finché non si conosce la larghezza, tutte.
-  const perRow = width ? Math.max(1, Math.floor((width + GAP) / (CELL_MIN + GAP))) : total;
-  const rows = Math.ceil(total / perRow);
-  const inRow = Math.ceil(total / rows);
-  const cell = width ? Math.min(CELL_MAX, Math.floor((width + GAP) / inRow) - GAP) : CELL_MIN;
-  const chunks = Array.from({ length: rows }, (_, r) => {
-    const from = r * inRow;
-    return { from, list: berths.filter((b) => (cols.get(b.id) ?? 0) >= from && (cols.get(b.id) ?? 0) < from + inRow) };
-  });
+  const groups = stripModules(berths);
+  const many = groups.length > 1;
+  let n = 0;
 
   return (
-    <div ref={ref} className="space-y-3">
-      {chunks.map(({ from, list }) => {
-        const span = Math.max(...list.map((b) => (cols.get(b.id) ?? 0) - from + 1), 1);
-        const sx = list.filter((b) => b.side === "sx");
-        const dx = list.filter((b) => b.side === "dx");
+    <div ref={ref} className="space-y-4">
+      {groups.map((g) => {
+        // Le celle riempiono la riga, ma non più strette di CELL_MIN (allora si scorre) né più larghe di CELL_MAX.
+        const cell = width ? Math.max(CELL_MIN, Math.min(CELL_MAX, Math.floor((width + GAP) / g.span) - GAP)) : CELL_MIN;
+        const sides = new Set(g.berths.map((b) => b.side));
+        const label = g.module === null ? "Non ancora sulla pianta" : `Modulo ${++n}`;
         return (
-          <div key={from}>
-            {rows > 1 && (
-              <p className="mb-1 text-xs font-medium text-muted">{[codeRange(sx), codeRange(dx)].filter(Boolean).join(" · ")}</p>
+          <div key={g.module ?? "fuori"} className={many ? "rounded-md border border-line-soft bg-paper/60 p-2" : undefined}>
+            {many && (
+              <p className="mb-1.5 text-xs font-medium text-muted">
+                <span className="font-semibold text-ink">{label}</span> · {g.berths.length} {g.berths.length === 1 ? "posto" : "posti"} ·{" "}
+                {moduleCodes(g.berths)}
+              </p>
             )}
-            <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${span}, ${cell}px)`, gridTemplateRows: "auto 0.5rem auto" }}>
-              {list.map((b) => {
-                const on = picked.has(b.id);
-                return (
-                  <button
-                    key={b.id}
-                    type="button"
-                    data-berth={b.id}
-                    onClick={(e) => onBerth(e, b)}
-                    aria-pressed={selecting ? on : undefined}
-                    title={`${b.code} · ${STATE_LABEL[b.state]}${b.occupant ? ` · ${b.occupant.boatName}` : ""}`}
-                    style={{ gridColumn: (cols.get(b.id) ?? 0) - from + 1, gridRow: b.side === "sx" ? 1 : 3 }}
-                    className={`relative flex h-10 min-w-0 items-center justify-center overflow-hidden rounded-md border px-0.5 text-[13px] font-semibold tabular-nums transition hover:-translate-y-px hover:shadow ${STATE_CELL[b.state]} ${
-                      on ? "ring-2 ring-buoy ring-offset-1" : ""
-                    } ${found === b.id ? "animate-pulse ring-2 ring-buoy ring-offset-2" : ""}`}
-                  >
-                    {b.code}
-                  </button>
-                );
-              })}
-              <div className="rounded-sm bg-line" style={{ gridColumn: `1 / ${span + 1}`, gridRow: 2 }} aria-hidden="true" />
+            <div className="overflow-x-auto pb-1">
+              <div
+                className="grid w-max gap-1"
+                style={{
+                  gridTemplateColumns: `repeat(${g.span}, ${cell}px)`,
+                  gridTemplateRows: sides.size === 2 ? "auto auto" : "auto",
+                }}
+              >
+                {g.berths.map((b) => {
+                  const on = picked.has(b.id);
+                  const row = b.side === "dx" && sides.size === 2 ? 2 : 1;
+                  return (
+                    <button
+                      key={b.id}
+                      type="button"
+                      data-berth={b.id}
+                      onClick={(e) => onBerth(e, b)}
+                      aria-pressed={selecting ? on : undefined}
+                      title={`${b.code} · ${STATE_LABEL[b.state]}${b.occupant ? ` · ${b.occupant.boatName}` : ""}`}
+                      style={{ gridColumn: g.columns.get(b.id)! + 1, gridRow: row }}
+                      className={`relative flex h-10 min-w-0 items-center justify-center overflow-hidden rounded-md border px-0.5 text-[13px] font-semibold tabular-nums transition hover:-translate-y-px hover:shadow ${STATE_CELL[b.state]} ${
+                        on ? "ring-2 ring-buoy ring-offset-1" : ""
+                      } ${found === b.id ? "animate-pulse ring-2 ring-buoy ring-offset-2" : ""}`}
+                    >
+                      {b.code}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         );
