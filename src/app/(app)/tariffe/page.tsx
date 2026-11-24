@@ -196,48 +196,52 @@ export default page(async function TariffsPage({ searchParams }: { searchParams:
             )}
           </Card>
 
+          {/* Due colonne che crescono ognuna per conto suo: a sinistra stagioni e simulatore, a destra servizi e cauzioni (di solito
+              la più lunga), così il simulatore non resta sotto a un vuoto. Sul telefono una sola colonna, nello stesso ordine. */}
           <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
-            <Card title="Stagioni">
-              <p className="mb-3 text-sm text-muted">
-                Indica i periodi di media e alta stagione: i giorni che restano sono bassa stagione e compaiono qui da soli.
-              </p>
-              <ul className="divide-y divide-line-soft">
-                {seasonRows.map((p) => (
-                  <li key={p.key} className="flex items-center justify-between gap-3 py-2 text-sm">
-                    <span className="flex items-center gap-2">
-                      <Badge tone={p.season === "alta" ? "buoy" : p.season === "media" ? "warn" : "sea"}>{SEASON_LABEL[p.season]}</Badge>
-                      <span className="tabular-nums">
-                        {formatDate(p.startDate)} – {formatDate(p.endDate)}
+            <div className="space-y-5">
+              <Card title="Stagioni">
+                <p className="mb-3 text-sm text-muted">
+                  Indica i periodi di media e alta stagione: i giorni che restano sono bassa stagione e compaiono qui da soli.
+                </p>
+                <ul className="divide-y divide-line-soft">
+                  {seasonRows.map((p) => (
+                    <li key={p.key} className="flex items-center justify-between gap-3 py-2 text-sm">
+                      <span className="flex items-center gap-2">
+                        <Badge tone={p.season === "alta" ? "buoy" : p.season === "media" ? "warn" : "sea"}>{SEASON_LABEL[p.season]}</Badge>
+                        <span className="tabular-nums">
+                          {formatDate(p.startDate)} – {formatDate(p.endDate)}
+                        </span>
                       </span>
-                    </span>
-                    {p.id ? admin && <DeletePeriodButton periodId={p.id} /> : <span className="text-xs text-muted">il resto del listino</span>}
-                  </li>
-                ))}
-              </ul>
-              {admin && (
-                <div className="mt-4 border-t border-line-soft pt-4">
-                  <SeasonPeriodForm listId={list.id} validFrom={list.validFrom} />
-                </div>
-              )}
-            </Card>
+                      {p.id ? admin && <DeletePeriodButton periodId={p.id} /> : <span className="text-xs text-muted">il resto del listino</span>}
+                    </li>
+                  ))}
+                </ul>
+                {admin && (
+                  <div className="mt-4 border-t border-line-soft pt-4">
+                    <SeasonPeriodForm listId={list.id} validFrom={list.validFrom} />
+                  </div>
+                )}
+              </Card>
+
+              <Card title="Simulatore">
+                {categories.length > 0 ? (
+                  <Simulator
+                    key={list.id}
+                    listId={list.id}
+                    categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+                    piers={groups.map((g) => ({ id: g.ids[0], name: g.baseRate ? `${g.name} (tariffa base)` : g.name }))}
+                    today={today}
+                  />
+                ) : (
+                  <p className="text-sm text-muted">Servono le categorie.</p>
+                )}
+              </Card>
+            </div>
 
             <Card title="Servizi e cauzioni">
               <p className="mb-3 text-sm text-muted">Posti auto, carrelli, cauzioni e altri servizi a prezzo fisso: si scelgono quando si crea un addebito.</p>
               <PriceListExtras listId={list.id} extras={extras} editable={admin} vatIncluded={list.vatIncluded} />
-            </Card>
-
-            <Card title="Simulatore">
-              {categories.length > 0 ? (
-                <Simulator
-                  key={list.id}
-                  listId={list.id}
-                  categories={categories.map((c) => ({ id: c.id, name: c.name }))}
-                  piers={groups.map((g) => ({ id: g.ids[0], name: g.baseRate ? `${g.name} (tariffa base)` : g.name }))}
-                  today={today}
-                />
-              ) : (
-                <p className="text-sm text-muted">Servono le categorie.</p>
-              )}
             </Card>
           </div>
 

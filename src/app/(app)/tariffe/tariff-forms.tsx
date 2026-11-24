@@ -318,7 +318,8 @@ export function CopyPierRatesForm({ listId, pierId, sources }: { listId: string;
 
 export function SeasonPeriodForm({ listId, validFrom }: { listId: string; validFrom: string }) {
   return (
-    <Form action={addSeasonPeriod} resetOnSuccess className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+    // Tre campi su una riga e il pulsante sotto: il riquadro è largo mezza pagina e con quattro colonne il pulsante usciva dal bordo.
+    <Form action={addSeasonPeriod} resetOnSuccess className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       <input type="hidden" name="listId" value={listId} />
       <SelectField
         name="season"
@@ -331,10 +332,8 @@ export function SeasonPeriodForm({ listId, validFrom }: { listId: string; validF
       />
       <Field name="startDate" label="Dal" type="date" defaultValue={validFrom} required />
       <Field name="endDate" label="Al" type="date" defaultValue={validFrom} required />
-      <div className="flex items-end">
+      <div className="flex flex-wrap items-center gap-3 sm:col-span-3">
         <Submit variant="secondary">Aggiungi periodo</Submit>
-      </div>
-      <div className="sm:col-span-4">
         <FormMessage />
       </div>
     </Form>
