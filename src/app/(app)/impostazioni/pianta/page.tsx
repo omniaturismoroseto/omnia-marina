@@ -231,7 +231,8 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
       <PlanSections initial={one(params.parte) || (hasPhoto ? "posti" : "foto")}>
         {hasPhoto && (
           <PlanSection id="posti" label="Posti sulla foto">
-          <div id="editor" className="scroll-mt-4">
+          {/* data-wide: come la Mappa, l'editor usa tutta la larghezza dello schermo (vedi il layout). */}
+          <div id="editor" data-wide className="scroll-mt-4">
           <Card title="Disponi i posti sulla foto">
             <ol className="mb-4 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
               <li>

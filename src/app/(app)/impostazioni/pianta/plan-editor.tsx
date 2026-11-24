@@ -239,10 +239,13 @@ export function PlanEditor({
     setNotice({ ok: true, message });
   }
 
-  // «Allinea in fila»: dritti dove sono, in ordine di codice, a passo uguale.
+  // «Allinea in fila»: dritti dove sono, in ordine di codice, a passo uguale (posti scelti, modulo o pontile).
   function alignPicked() {
+    alignBerths(berths.filter((b) => picked.has(b.id)));
+  }
+  function alignBerths(chosen: EditorBerth[]) {
     if (!pxPerMeter) return;
-    const list = berths.filter((b) => picked.has(b.id) && b.x !== null && b.y !== null);
+    const list = chosen.filter((b) => b.x !== null && b.y !== null);
     placePicked(
       alignRows(
         list.map((b) => ({ id: b.id, code: b.code, x: b.x!, y: b.y!, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm })),
@@ -775,7 +778,7 @@ export function PlanEditor({
 
         {/* Si trascina la foto per muoversi e si ingrandisce con rotellina o due dita (come nella Mappa); le frecce spostano i posti scelti. */}
         <div onKeyDown={onKeyDown} aria-label="Editor della pianta">
-          <PlanZoom width={width} height={height} arrowKeys={false}>
+          <PlanZoom width={width} height={height} arrowKeys={false} fillScreen>
             <svg
               ref={svgRef}
               viewBox={`0 0 ${width} ${height}`}
@@ -1345,6 +1348,17 @@ export function PlanEditor({
                       </p>
                     </div>
                   )}
+                {(moveMode === "modulo" || moveMode === "pontile") && group.length > 1 && (
+                  <div>
+                    <button type="button" className="btn btn-secondary btn-sm" disabled={!pxPerMeter} onClick={() => alignBerths(group)}>
+                      Allinea in fila
+                    </button>
+                    <p className="hint mt-1">
+                      Raddrizza {moveMode === "modulo" ? "il modulo" : "il pontile"} dove si trova: stessa linea, stesso angolo, stessa
+                      distanza tra i posti, in ordine di codice.
+                    </p>
+                  </div>
+                )}
                 {moveMode === "modulo" && (
                   <div>
                     <button
