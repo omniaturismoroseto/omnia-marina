@@ -1,7 +1,7 @@
 // Dall'analisi automatica della foto alle proposte di pontili e banchine.
 // Funzioni pure: nessun accesso a database o rete, così si possono provare con i test.
 
-import { distance, layoutPier, type Placement, type Point } from "./plan";
+import { distance, layoutPier, type Mooring, type Placement, type Point } from "./plan";
 
 // ───────────────────────── Risposta del modello ─────────────────────────
 
@@ -176,9 +176,17 @@ export function structureWidthM(kind: StructureKind): number {
 
 /**
  * I posti di una struttura confermata: numerati di seguito (prima il lato sinistro, poi il destro),
- * con ogni lato che parte dalla radice, e già disposti sulla foto lungo la linea a → b.
+ * con ogni lato che parte dalla radice, e già disposti sulla foto lungo la linea a → b (di punta o all'inglese).
  */
-export function planBerths(code: string, kind: StructureKind, a: Point, b: Point, sides: PlannedSide[], pxPerMeter: number): PlannedBerth[] {
+export function planBerths(
+  code: string,
+  kind: StructureKind,
+  a: Point,
+  b: Point,
+  sides: PlannedSide[],
+  pxPerMeter: number,
+  mooring: Mooring = "punta",
+): PlannedBerth[] {
   const ordered = [...sides].sort((x, y) => (x.side === y.side ? 0 : x.side === "sx" ? -1 : 1));
   const rows: Omit<PlannedBerth, "placement">[] = [];
   let n = 1;
@@ -193,6 +201,8 @@ export function planBerths(code: string, kind: StructureKind, a: Point, b: Point
     b,
     pxPerMeter,
     structureWidthM(kind),
+    false,
+    mooring,
   );
   const byCode = new Map(placements.map((p) => [p.id, p]));
   return rows.map((r) => ({ ...r, placement: byCode.get(r.code)! }));

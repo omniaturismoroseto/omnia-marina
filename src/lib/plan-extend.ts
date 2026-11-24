@@ -1,6 +1,6 @@
 // Posti nuovi su un pontile già disegnato sulla pianta: si dispongono da soli in coda a quelli che ci sono,
 // senza ritracciare il pontile (generateBerths in src/server/settings-actions.ts).
-import { layoutPier, type Placement, type Point } from "./plan";
+import { isAlongside, layoutPier, mooringAlong, rowAxis, type Placement, type Point } from "./plan";
 
 export interface PlacedBerth {
   side: "sx" | "dx";
@@ -66,16 +66,9 @@ export function placeNewBerths(existing: PlacedBerth[], incoming: NewBerth[], tr
     d = { x: (line.b.x - line.a.x) / traceLen, y: (line.b.y - line.a.y) / traceLen };
     origin = line.a;
   } else {
-    // Direzione dall'orientamento dei posti, sempre perpendicolari al pontile (media sugli angoli doppi: 10° e 190° valgono uguale);
-    // i centri dei posti non bastano, perché le barche più lunghe sporgono di più. Dai posti solo il verso: dalla radice alla testata.
-    let cx = 0;
-    let cy = 0;
-    for (const b of existing) {
-      cx += Math.cos((2 * b.angle * Math.PI) / 180);
-      cy += Math.sin((2 * b.angle * Math.PI) / 180);
-    }
-    const a = Math.atan2(cy, cx) / 2;
-    d = { x: Math.cos(a), y: Math.sin(a) };
+    // Direzione dall'orientamento dei posti (di traverso al lato lungo, o lungo il lato lungo se sono all'inglese); i centri dei posti
+    // non bastano, perché le barche più lunghe sporgono di più. Dai posti solo il verso: dalla radice alla testata.
+    d = rowAxis(existing, m).d;
     const longest = sides.sx.length >= sides.dx.length ? sides.sx : sides.dx;
     const first = longest[0];
     const last = longest[longest.length - 1];
@@ -86,6 +79,9 @@ export function placeNewBerths(existing: PlacedBerth[], incoming: NewBerth[], tr
   const along = (p: Point) => (p.x - origin.x) * d.x + (p.y - origin.y) * d.y;
   const across = (p: Point) => (p.x - origin.x) * left.x + (p.y - origin.y) * left.y;
   const halfWidth = ((line?.widthM ?? 2) / 2) * m;
+  // All'inglese i posti sporgono dal pontile di metà larghezza e si susseguono a passo di lunghezza.
+  const alongside = mooringAlong(existing, d) === "inglese";
+  const reach = (b: { lengthCm: number; beamCm: number }) => ((alongside ? b.beamCm : b.lengthCm) / 200) * m;
   const convention = { sx: 1, dx: -1 } as const;
 
   // Dove passa la linea del pontile, di traverso.
@@ -95,7 +91,7 @@ export function placeNewBerths(existing: PlacedBerth[], incoming: NewBerth[], tr
   else {
     const side = sides.sx.length ? "sx" : "dx";
     const list = sides[side];
-    lineAt = mean(list.map(across)) - convention[side] * (halfWidth + (mean(list.map((b) => b.lengthCm)) / 200) * m);
+    lineAt = mean(list.map(across)) - convention[side] * (halfWidth + mean(list.map(reach)));
   }
   const sign = (side: "sx" | "dx"): number => {
     if (sides[side].length) return Math.sign(mean(sides[side].map(across)) - lineAt) || convention[side];
@@ -112,7 +108,7 @@ export function placeNewBerths(existing: PlacedBerth[], incoming: NewBerth[], tr
       return slots > 0 ? [Math.abs(along(b) - along(prev)) / slots] : [];
     }),
   );
-  const maxBeam = Math.max(...existing.map((b) => b.beamCm), ...incoming.map((b) => b.beamCm));
+  const maxBeam = Math.max(...[...existing, ...incoming].map((b) => (alongside ? b.lengthCm : b.beamCm)));
   const spacing = gaps.length ? median(gaps) : (maxBeam / 100) * 1.15 * m;
   const traceAngle = (Math.atan2(d.y, d.x) * 180) / Math.PI;
 
@@ -130,12 +126,12 @@ export function placeNewBerths(existing: PlacedBerth[], incoming: NewBerth[], tr
       if (here.length) {
         const last = here[here.length - 1];
         t = along(last) + spacing * (k + 1);
-        off = across(last) + s * ((b.lengthCm - last.lengthCm) / 200) * m;
+        off = across(last) + s * (reach(b) - reach(last));
         angle = last.angle;
       } else {
         const ref = other[Math.min(k, other.length - 1)];
         t = k < other.length ? along(other[k]) : along(other[other.length - 1]) + spacing * (k - other.length + 1);
-        off = lineAt + s * (halfWidth + (b.lengthCm / 200) * m);
+        off = lineAt + s * (halfWidth + reach(b));
         angle = ref ? ref.angle : traceAngle;
       }
       result.push({
@@ -171,14 +167,8 @@ export function targetSection<S extends { id: string }>(sections: S[], list: { c
 export function estimateTrace(existing: PlacedBerth[], pxPerMeter: number): Trace | null {
   const m = pxPerMeter;
   if (existing.length === 0 || m <= 0) return null;
-  let cx = 0;
-  let cy = 0;
-  for (const b of existing) {
-    cx += Math.cos((2 * b.angle * Math.PI) / 180);
-    cy += Math.sin((2 * b.angle * Math.PI) / 180);
-  }
-  const angle = Math.atan2(cy, cx) / 2;
-  let d = { x: Math.cos(angle), y: Math.sin(angle) };
+  const axis = rowAxis(existing, m);
+  let d = axis.d;
   const sides = { sx: bySlot(existing.filter((b) => b.side === "sx")), dx: bySlot(existing.filter((b) => b.side === "dx")) };
   const longest = sides.sx.length >= sides.dx.length ? sides.sx : sides.dx;
   const first = longest[0];
@@ -193,9 +183,10 @@ export function estimateTrace(existing: PlacedBerth[], pxPerMeter: number): Trac
   else {
     const side = sides.sx.length ? "sx" : "dx";
     const list = sides[side];
-    lineAt = mean(list.map(across)) - (side === "sx" ? 1 : -1) * (1 + (mean(list.map((b) => b.lengthCm)) / 200) * m);
+    lineAt = mean(list.map(across)) - (side === "sx" ? 1 : -1) * (1 + (mean(list.map((b) => (axis.mooring === "inglese" ? b.beamCm : b.lengthCm))) / 200) * m);
   }
-  const ends = existing.flatMap((b) => [along(b) - (b.beamCm / 200) * m, along(b) + (b.beamCm / 200) * m]);
+  const half = (b: PlacedBerth) => ((axis.mooring === "inglese" ? b.lengthCm : b.beamCm) / 200) * m;
+  const ends = existing.flatMap((b) => [along(b) - half(b), along(b) + half(b)]);
   const at = (t: number): Point => ({ x: round1(origin.x + d.x * t + left.x * lineAt), y: round1(origin.y + d.y * t + left.y * lineAt) });
   return { a: at(Math.min(...ends)), b: at(Math.max(...ends)), widthM: 2 };
 }
@@ -222,7 +213,7 @@ export function renumberPier(groups: { id: string; side: "sx" | "dx"; position: 
 }
 
 /**
- * Linea abbastanza lunga per `slots` posti larghi `beamPx` (con un piccolo margine tra l'uno e l'altro): se è più corta si allunga
+ * Linea abbastanza lunga per `slots` posti larghi `beamPx` (all'inglese: lunghi) (con un piccolo margine tra l'uno e l'altro): se è più corta si allunga
  * dalla parte della testata, così i posti messi tutti su un lato non si sovrappongono. Se basta, resta com'è.
  */
 export function fitTrace(trace: Trace, slots: number, beamPx: number): Trace {
@@ -237,13 +228,19 @@ export function fitTrace(trace: Trace, slots: number, beamPx: number): Trace {
  * Linea accorciata ai posti che le restano (per esempio dopo averne fatto un tratto a parte): stessa direzione e stessa
  * posizione di traverso, lunga dal primo all'ultimo posto con la loro larghezza. Senza posti resta com'è.
  */
-export function clipTrace(trace: Trace, berths: { x: number; y: number; beamCm: number }[], pxPerMeter: number): Trace {
+export function clipTrace(
+  trace: Trace,
+  berths: { x: number; y: number; beamCm: number; lengthCm?: number; angle?: number }[],
+  pxPerMeter: number,
+): Trace {
   const len = Math.hypot(trace.b.x - trace.a.x, trace.b.y - trace.a.y);
   if (berths.length === 0 || len < 1) return trace;
   const d = { x: (trace.b.x - trace.a.x) / len, y: (trace.b.y - trace.a.y) / len };
   const ends = berths.flatMap((b) => {
     const t = (b.x - trace.a.x) * d.x + (b.y - trace.a.y) * d.y;
-    const r = (b.beamCm / 200) * pxPerMeter;
+    // All'inglese il posto occupa la sua lunghezza lungo il pontile.
+    const span = b.angle !== undefined && b.lengthCm !== undefined && isAlongside(b.angle, d) ? b.lengthCm : b.beamCm;
+    const r = (span / 200) * pxPerMeter;
     return [t - r, t + r];
   });
   const at = (t: number) => ({ x: round1(trace.a.x + d.x * t), y: round1(trace.a.y + d.y * t) });
