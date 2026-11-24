@@ -519,8 +519,8 @@ function useWidth<T extends HTMLElement>() {
 // Primo e ultimo codice di un gruppo di posti (R23–R33), per riconoscere i pezzi di un pontile andato a capo.
 /**
  * Posti come sono in porto, modulo per modulo (le parti staccate riconosciute sulla pianta): sopra il lato sinistro,
- * sotto il destro, dalla radice alla testata. Un modulo non va mai a capo (sembrerebbe un altro pontile): le celle
- * si allargano per riempire la riga e, se il modulo è più lungo dello schermo, si scorre di lato.
+ * sotto il destro, dalla radice alla testata. Le celle si allargano per riempire la riga; se il modulo è più lungo dello
+ * schermo va a capo a blocchi (niente barra di scorrimento), e ogni blocco tiene insieme i due lati, uno di fronte all'altro.
  */
 function BerthStrip({
   berths,
@@ -544,8 +544,11 @@ function BerthStrip({
   return (
     <div ref={ref} className="space-y-4">
       {groups.map((g) => {
-        // Le celle riempiono la riga, ma non più strette di CELL_MIN (allora si scorre) né più larghe di CELL_MAX.
-        const cell = width ? Math.max(CELL_MIN, Math.min(CELL_MAX, Math.floor((width + GAP) / g.span) - GAP)) : CELL_MIN;
+        // Colonne per riga: quante ne stanno larghe almeno CELL_MIN; oltre si va a capo. Le celle riempiono la riga (al massimo CELL_MAX).
+        const perRow = width ? Math.max(1, Math.floor((width + GAP) / (CELL_MIN + GAP))) : g.span;
+        const cols = Math.min(g.span, perRow);
+        const cell = width ? Math.min(CELL_MAX, Math.floor((width + GAP) / cols) - GAP) : CELL_MIN;
+        const blocks = Array.from({ length: Math.ceil(g.span / cols) }, (_, i) => i);
         const sides = new Set(g.berths.map((b) => b.side));
         const label = g.module === null ? "Non ancora sulla pianta" : `Modulo ${++n}`;
         return (
@@ -556,15 +559,19 @@ function BerthStrip({
                 {moduleCodes(g.berths)}
               </p>
             )}
-            <div className="overflow-x-auto pb-1">
+            <div className="space-y-2">
+              {blocks.map((block) => (
               <div
-                className="grid w-max gap-1"
+                key={block}
+                className="grid gap-1"
                 style={{
-                  gridTemplateColumns: `repeat(${g.span}, ${cell}px)`,
+                  gridTemplateColumns: `repeat(${cols}, ${cell}px)`,
                   gridTemplateRows: sides.size === 2 ? "auto auto" : "auto",
                 }}
               >
                 {g.berths.map((b) => {
+                  const column = g.columns.get(b.id)!;
+                  if (Math.floor(column / cols) !== block) return null;
                   const on = picked.has(b.id);
                   const row = b.side === "dx" && sides.size === 2 ? 2 : 1;
                   return (
@@ -575,7 +582,7 @@ function BerthStrip({
                       onClick={(e) => onBerth(e, b)}
                       aria-pressed={selecting ? on : undefined}
                       title={`${b.code} · ${STATE_LABEL[b.state]}${b.occupant ? ` · ${b.occupant.boatName}` : ""}`}
-                      style={{ gridColumn: g.columns.get(b.id)! + 1, gridRow: row }}
+                      style={{ gridColumn: (column % cols) + 1, gridRow: row }}
                       className={`relative flex h-10 min-w-0 items-center justify-center overflow-hidden rounded-md border px-0.5 text-[13px] font-semibold tabular-nums transition hover:-translate-y-px hover:shadow ${STATE_CELL[b.state]} ${
                         on ? "ring-2 ring-buoy ring-offset-1" : ""
                       } ${found === b.id ? "animate-pulse ring-2 ring-buoy ring-offset-2" : ""}`}
@@ -585,6 +592,7 @@ function BerthStrip({
                   );
                 })}
               </div>
+              ))}
             </div>
           </div>
         );
