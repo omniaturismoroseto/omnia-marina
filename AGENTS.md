@@ -79,6 +79,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   linea, `mooringAlong`, `rowAxis` senza linea) in schema, «Allinea in fila», allungamento, posti nuovi e ridisposizione dei tratti.
   Cambiare ormeggio a posti già disposti (`changeMooring` nell'editor, dal riquadro del gruppo o da «Disponi un pontile») li ridispone
   lungo la loro linea (`estimateTrace` se manca), stesso lato, allungata con `fitTrace`.
+  Numerazione girata senza ridisegnare: «Parti dall'altra estremità» / «Scambia i lati» (`mirrorGroup`, `mirrorBerths` in
+  `src/lib/plan-mirror.ts`) specchiano i posti rispetto al pontile; con «estremi» la linea salvata si inverte (radice dal primo posto).
+  In Pontili e posti i moduli lunghi vanno a capo a blocchi (`BerthStrip`), mai barra di scorrimento.
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
 - Riquadro del posto sulla mappa (`src/app/(app)/mappa/berth-panel.tsx`): ufficio e direzione vedono la scheda con foto della barca,
   proprietario con pulsante per chiamare e barra del periodo; la banchina la fascia dello stato e righe grandi. Calcoli puri in

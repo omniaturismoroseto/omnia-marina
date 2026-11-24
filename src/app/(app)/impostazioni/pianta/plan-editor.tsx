@@ -22,6 +22,7 @@ import { Field, Form, FormMessage, Submit } from "@/components/form";
 import { compareCodes } from "@/lib/berth-codes";
 import { alignRows } from "@/lib/plan-align";
 import { estimateTrace, fitTrace } from "@/lib/plan-extend";
+import { mirrorBerths } from "@/lib/plan-mirror";
 import { assignModules } from "@/lib/plan-modules";
 import { MAX_BERTHS_PER_SIDE, planBerths } from "@/lib/plan-analysis";
 import { createFromProposals, savePlanLayout } from "@/server/plan-actions";
@@ -344,6 +345,30 @@ export function PlanEditor({
     if (unitId) {
       setTraces((all) => ({ ...all, [unitId]: { a: trace.a, b: trace.b, widthM: trace.widthM } }));
       setLastTrace({ pierId: unitId, a: trace.a, b: trace.b, widthM: trace.widthM, flip, mooring: next });
+    }
+  }
+
+  /**
+   * Numerazione girata di posti già disposti, senza ridisegnarli: «estremi» = il primo posto va all'altra estremità,
+   * «lati» = sinistra e destra si scambiano. I posti (con i loro codici) si specchiano rispetto al pontile.
+   */
+  function mirrorGroup(list: EditorBerth[], mode: "estremi" | "lati", unitId: string | null) {
+    if (!pxPerMeter) return;
+    const placed = list.filter((b) => b.x !== null && b.y !== null);
+    if (placed.length < 2) return;
+    const asPlaced = placed.map((b) => ({ side: b.side, position: b.position, x: b.x!, y: b.y!, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm }));
+    const line = (unitId ? currentTrace(unitId) : null) ?? estimateTrace(asPlaced, pxPerMeter);
+    if (!line) return;
+    placePicked(
+      mirrorBerths(asPlaced.map((b, i) => ({ ...b, id: placed[i].id })), line, mode),
+      mode === "estremi"
+        ? "Numerazione girata: ora parte dall'altra estremità. Se va bene salva la pianta."
+        : "Lati scambiati: i posti di sinistra sono passati a destra e viceversa. Se va bene salva la pianta.",
+    );
+    if (unitId) {
+      // La radice resta dove c'è il primo posto.
+      if (mode === "estremi") setTraces((all) => ({ ...all, [unitId]: { a: line.b, b: line.a, widthM: line.widthM } }));
+      setLastTrace((t) => (t?.pierId === unitId ? null : t));
     }
   }
 
@@ -1503,6 +1528,33 @@ export function PlanEditor({
                     )}
                     <p className="hint mt-1">
                       «All&apos;inglese» gira le barche di fianco al pontile, una dietro l&apos;altra, sulla stessa linea e dallo stesso lato.
+                    </p>
+                  </div>
+                )}
+                {moveMode !== "posto" && group.length > 1 && (
+                  <div>
+                    <span className="label">Numerazione</span>
+                    <div className="grid grid-cols-2 gap-1">
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        disabled={!pxPerMeter}
+                        onClick={() => mirrorGroup(group, "estremi", moveMode === "pontile" ? selected.pierId : null)}
+                      >
+                        Parti dall&apos;altra estremità
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        disabled={!pxPerMeter}
+                        onClick={() => mirrorGroup(group, "lati", moveMode === "pontile" ? selected.pierId : null)}
+                      >
+                        Scambia i lati
+                      </button>
+                    </div>
+                    <p className="hint mt-1">
+                      I codici si spostano con i posti: il primo va all&apos;altra testata, oppure i posti di sinistra passano a destra.
+                      Funziona anche su un solo tratto o modulo.
                     </p>
                   </div>
                 )}
