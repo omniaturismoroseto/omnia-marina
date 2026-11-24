@@ -42,9 +42,9 @@ export function ArrangeForm({ pierId, sectionId, hasPlan }: { pierId: string; se
   );
 }
 
-export function RenameSectionForm({ sectionId, label }: { sectionId: string; label: string }) {
+export function RenameSectionForm({ sectionId, label, onDone }: { sectionId: string; label: string; onDone?: () => void }) {
   return (
-    <Form action={renameSectionAction} className="flex flex-wrap items-end gap-3">
+    <Form action={renameSectionAction} className="flex flex-wrap items-end gap-3" onSuccess={onDone}>
       <input type="hidden" name="sectionId" value={sectionId} />
       <Field name="label" label="Nome del tratto" defaultValue={label} maxLength={20} required />
       <Submit variant="secondary">Salva</Submit>
@@ -169,10 +169,10 @@ export function NumberingForm({ pierId, scopes, hasPlan }: { pierId: string; sco
   );
 }
 
-/** Nome di un modulo (vuoto = torna «Modulo N»). */
+/** Nome di un modulo (vuoto = torna «Modulo N»). Salvato, il riquadro si chiude da solo. */
 export function ModuleNameForm({ pierId, module, berthIds, name, onDone }: { pierId: string; module: number; berthIds: string[]; name: string; onDone: () => void }) {
   return (
-    <Form action={renameModuleAction} className="flex flex-wrap items-end gap-2">
+    <Form action={renameModuleAction} className="flex flex-wrap items-end gap-2" onSuccess={onDone}>
       <input type="hidden" name="pierId" value={pierId} />
       <input type="hidden" name="module" value={module} />
       <input type="hidden" name="berthIds" value={berthIds.join(",")} />
@@ -181,7 +181,7 @@ export function ModuleNameForm({ pierId, module, berthIds, name, onDone }: { pie
         Salva
       </Submit>
       <button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>
-        Chiudi
+        Annulla
       </button>
       <FormMessage />
     </Form>

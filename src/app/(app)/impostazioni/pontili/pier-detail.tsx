@@ -18,7 +18,7 @@ import { moduleKey, type ManagerBerth, type ManagerCategory, type ManagerPier, t
 import { ArrangeForm, DissolveSectionButton, ModuleNameForm, NumberingForm, RenameSectionForm, SplitAtForm, SplitSectionForm } from "./unit-tools";
 
 type Bulk = "edit" | "codes" | "section" | "delete";
-type UnitAction = "arrange" | "numbers" | "divide" | "rename" | "split";
+type UnitAction = "arrange" | "numbers" | "divide" | "rename" | "split" | "dissolve";
 
 const unitKey = (u: ManagerUnit) => u.sectionId ?? "pontile";
 
@@ -49,6 +49,7 @@ export function PierDetail({
   mapOpen,
   mapUnitId,
   onShowMap,
+  onPickedChange,
   found,
   isFirst,
   isLast,
@@ -68,6 +69,8 @@ export function PierDetail({
   mapUnitId: string | null;
   /** Apre o chiude la mappa sotto la scheda; manca senza pianta. */
   onShowMap?: (unitId: string | null) => void;
+  /** I posti scelti con «Scegli più posti», per evidenziarli sulla mappa aperta sotto. */
+  onPickedChange?: (ids: string[]) => void;
   /** Posto trovato con «Trova un posto»: si evidenzia. */
   found: string | null;
   isFirst: boolean;
@@ -94,6 +97,11 @@ export function PierDetail({
   const byCategory = categories.map((cat) => ({ cat, n: all.filter((b) => b.categoryId === cat.id).length })).filter((x) => x.n > 0);
   const without = all.filter((b) => !b.categoryId || !categories.some((cat) => cat.id === b.categoryId)).length;
   const codes = useMemo(() => [...existingCodes], [existingCodes]);
+
+  // I posti scelti si vedono evidenziati anche sulla mappa aperta sotto la scheda.
+  useEffect(() => {
+    onPickedChange?.([...picked]);
+  }, [picked, onPickedChange]);
 
   // Chiude il menu toccando fuori.
   useEffect(() => {
@@ -333,8 +341,6 @@ export function PierDetail({
           </p>
         )}
 
-        {multi && <p className="text-sm text-muted">Pontile in più tratti (unito o diviso): per elenchi, codici e tariffe è uno solo, ma ogni tratto si gestisce anche da sé e sulla pianta si sposta da solo.</p>}
-
         {all.length === 0 && !add && <p className="text-sm text-muted">Questo pontile non ha ancora posti: usa «Aggiungi posti».</p>}
 
         {/* Posti, tratto per tratto */}
@@ -351,43 +357,30 @@ export function PierDetail({
                   {uc.total} {uc.total === 1 ? "posto" : "posti"} · {uc.busy} {uc.busy === 1 ? "occupato" : "occupati"} · {uc.free}{" "}
                   {uc.free === 1 ? "libero" : "liberi"}
                 </span>
-                <span className="flex flex-1 flex-wrap justify-end gap-x-3 gap-y-1 text-sm">
-                  {u.berths.length > 0 && (
-                    <UnitLink active={open === "arrange"} onClick={() => toggle("arrange")}>
-                      Disposizione
-                    </UnitLink>
-                  )}
-                  {u.berths.length > 1 && (
-                    <UnitLink active={open === "numbers"} onClick={() => toggle("numbers")}>
-                      Numerazione
-                    </UnitLink>
-                  )}
-                  {u.berths.length > 1 && (
-                    <UnitLink active={open === "divide"} onClick={() => toggle("divide")}>
-                      Dividi
-                    </UnitLink>
-                  )}
-                  {multi && (
-                    <UnitLink active={add?.sectionId === u.sectionId} onClick={() => setAdd(add?.sectionId === u.sectionId ? null : { sectionId: u.sectionId })}>
-                      Aggiungi posti
-                    </UnitLink>
-                  )}
-                  {u.sectionId && (
-                    <>
-                      <UnitLink active={open === "rename"} onClick={() => toggle("rename")}>
-                        Rinomina
-                      </UnitLink>
-                      <UnitLink active={open === "split"} onClick={() => toggle("split")}>
-                        Rendi pontile a sé
-                      </UnitLink>
-                    </>
-                  )}
+                <span className="flex flex-1 flex-wrap items-center justify-end gap-2">
                   {onShowMap && multi && (
-                    <UnitLink active={mapOpen && mapUnitId === (u.sectionId ?? pier.id)} onClick={() => onShowMap(u.sectionId ?? pier.id)}>
-                      Sulla mappa
-                    </UnitLink>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      aria-pressed={mapOpen && mapUnitId === (u.sectionId ?? pier.id)}
+                      onClick={() => onShowMap(u.sectionId ?? pier.id)}
+                    >
+                      <MapIcon size={15} aria-hidden="true" /> Sulla mappa
+                    </button>
                   )}
-                  {u.sectionId && <DissolveSectionButton sectionId={u.sectionId} label={u.label} />}
+                  {/* Tutti i comandi del tratto in un menu solo, per non riempire la scheda di collegamenti. */}
+                  <UnitMenu
+                    label={u.sectionId ? "Modifica il tratto" : "Modifica i posti"}
+                    items={[
+                      u.berths.length > 0 && { label: "Disposizione dei posti", onClick: () => toggle("arrange") },
+                      u.berths.length > 1 && { label: "Numerazione", onClick: () => toggle("numbers") },
+                      u.berths.length > 1 && { label: "Dividi in due tratti", onClick: () => toggle("divide") },
+                      multi && { label: "Aggiungi posti qui", onClick: () => setAdd({ sectionId: u.sectionId }) },
+                      u.sectionId && { label: "Rinomina il tratto", onClick: () => toggle("rename") },
+                      u.sectionId && { label: "Rendi pontile a sé", onClick: () => toggle("split") },
+                      u.sectionId && { label: "Togli il tratto", onClick: () => toggle("dissolve"), danger: true },
+                    ]}
+                  />
                 </span>
               </div>
               {open && (
@@ -419,7 +412,13 @@ export function PierDetail({
                       second={u.label ? `${u.label} 2` : "2"}
                     />
                   )}
-                  {open === "rename" && u.sectionId && <RenameSectionForm sectionId={u.sectionId} label={u.label} />}
+                  {open === "rename" && u.sectionId && <RenameSectionForm sectionId={u.sectionId} label={u.label} onDone={() => setUnitAction(null)} />}
+                  {open === "dissolve" && u.sectionId && (
+                    <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
+                      <span>I posti restano nel pontile, ma sulla mappa non si spostano più da soli.</span>
+                      <DissolveSectionButton sectionId={u.sectionId} label={u.label} />
+                    </div>
+                  )}
                   {open === "split" && u.sectionId && <SplitSectionForm sectionId={u.sectionId} code={u.label.slice(0, 4).toUpperCase()} name={`${pier.name} ${u.label}`} />}
                 </div>
               )}
@@ -533,11 +532,40 @@ function Chip({ children, onClick }: { children: React.ReactNode; onClick: () =>
   );
 }
 
-function UnitLink({ children, onClick, active }: { children: React.ReactNode; onClick: () => void; active: boolean }) {
+/** Menu dei comandi di un tratto (o dei posti di un pontile senza tratti): un pulsante, la lista sotto; si chiude toccando fuori. */
+function UnitMenu({ label, items }: { label: string; items: (false | null | "" | undefined | { label: string; onClick: () => void; danger?: boolean })[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: globalThis.MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const list = items.filter((x): x is { label: string; onClick: () => void; danger?: boolean } => Boolean(x));
+  if (list.length === 0) return null;
   return (
-    <button type="button" onClick={onClick} aria-pressed={active} className={`link ${active ? "font-semibold" : ""}`}>
-      {children}
-    </button>
+    <div className="relative" ref={ref}>
+      <button type="button" className="btn btn-secondary btn-sm" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        {label} <Ellipsis size={16} aria-hidden="true" />
+      </button>
+      {open && (
+        <div role="menu" className="absolute top-full right-0 z-30 mt-1.5 w-60 rounded-lg border border-line bg-card p-1 shadow-xl">
+          {list.map((item) => (
+            <MenuItem
+              key={item.label}
+              danger={item.danger}
+              onClick={() => {
+                setOpen(false);
+                item.onClick();
+              }}
+            >
+              {item.label}
+            </MenuItem>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

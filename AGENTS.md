@@ -84,7 +84,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   (`mirrorBerths`, `src/lib/plan-mirror.ts`); con «estremi» sul tratto intero la linea salvata si inverte. Non sta nell'editor.
   Nomi dei moduli in `berth_modules` (pontile, tratto, numero del modulo; `renameModule` fissa anche `plan_module` dei posti).
   «Mostra sulla mappa» nella scheda del pontile apre sotto l'editor (`loadPlanEditor` in `src/server/plan-editor.ts`, condiviso con
-  Mappa del porto) inquadrato sul pontile o tratto (`PlanEditor zoomTo`, `PlanZoom focus`).
+  Mappa del porto) inquadrato sul pontile o tratto (`PlanEditor zoomTo`, `PlanZoom focus`); in giallo (`highlightIds`) i posti scelti
+  nella scheda o il tratto aperto. I comandi di ogni tratto stanno in un menu solo (`UnitMenu`). Bordo dei posti nell'editor: 0,08 m.
   In Pontili e posti i moduli lunghi vanno a capo a blocchi (`BerthStrip`), mai barra di scorrimento.
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
 - Riquadro del posto sulla mappa (`src/app/(app)/mappa/berth-panel.tsx`): ufficio e direzione vedono la scheda con foto della barca,
