@@ -44,16 +44,22 @@
 @custom-variant shorter (@media (max-height: 760px));
 
 @layer base {
-  /* Solo tema chiaro, anche con il telefono in tema scuro: vedi colorScheme in src/app/layout.tsx. */
+  /*
+   * Solo tema chiaro, anche con il telefono in tema scuro (vedi colorScheme in src/app/layout.tsx).
+   * La radice dichiara «light dark» perché i browser (Samsung Internet, Chrome) non scuriscano l'app da soli;
+   * dal body in giù tutto resta chiaro, campi e controlli del browser compresi, e il blocco
+   * prefers-color-scheme: dark ripete gli stessi colori chiari.
+   */
   :root {
-    color-scheme: only light;
+    color-scheme: light dark;
   }
   html {
-    color-scheme: only light;
     background: var(--color-paper);
+    color: var(--color-ink);
     -webkit-text-size-adjust: 100%;
   }
   body {
+    color-scheme: light;
     background: var(--color-paper);
     color: var(--color-ink);
     font-family: var(--font-sans);
@@ -70,6 +76,18 @@
   }
   ::selection {
     background: var(--color-sea-soft);
+  }
+}
+
+/* Tema scuro del telefono: stessi colori del tema chiaro. Serve a far capire ai browser che il tema scuro lo gestiamo noi. */
+@media (prefers-color-scheme: dark) {
+  html,
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+  }
+  body {
+    color-scheme: light;
   }
 }
 
