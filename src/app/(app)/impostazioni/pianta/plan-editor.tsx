@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { KeyboardEvent, MouseEvent, PointerEvent } from "react";
 import { MousePointer2, Plus, Ruler, Spline } from "@/components/icons";
 import { PlanZoom } from "@/app/(app)/mappa/plan-zoom";
@@ -9,9 +9,15 @@ import {
   berthSizePx,
   distance,
   layoutPier,
+  MOORING_LABEL,
   normalizeAngle,
+  rowAxis,
+  type Mooring,
   type Point,
 } from "@/lib/plan";
+import { buildDrawing } from "@/lib/plan-drawing";
+import { pathOf, type PlanFeature } from "@/lib/plan-features";
+import { PIER, SHAPE, WATER } from "@/lib/plan-style";
 import { Field, Form, FormMessage, Submit } from "@/components/form";
 import { compareCodes } from "@/lib/berth-codes";
 import { alignRows } from "@/lib/plan-align";
@@ -53,6 +59,7 @@ export function PlanEditor({
   initialPierId,
   categories = [],
   usedCodes = [],
+  features = [],
 }: {
   imageUrl: string;
   // Base disegnata (stessa inquadratura della foto): si può mettere sotto i posti al posto della foto.
@@ -76,10 +83,17 @@ export function PlanEditor({
   categories?: { id: string; name: string; maxLengthCm: number; maxBeamCm: number }[];
   /** Sigle dei pontili già usate (per proporne una libera). */
   usedCodes?: string[];
+  /** Sfondo dello schema (terra, acqua, edifici, verde), già nell'ordine di disegno: serve senza base disegnata. */
+  features?: PlanFeature[];
 }) {
   // I moduli mancanti si riconoscono all'apertura dalle posizioni salvate, poi restano fissi (si salvano con la pianta).
   const [berths, setBerths] = useState(() => withModules(initialBerths, initialPxPerMeter, width));
-  const [under, setUnder] = useState<"foto" | "base">("foto");
+  // Sotto i posti si parte dalla base disegnata (o, senza, dallo schema ricavato dai posti); la foto dal vero si sceglie.
+  const [under, setUnder] = useState<"foto" | "base">(() =>
+    baseUrl || (initialPxPerMeter && initialBerths.some((b) => b.x !== null)) ? "base" : "foto",
+  );
+  // Ormeggio con cui si dispongono i posti tracciando una linea: di punta (perpendicolari) o all'inglese (di fianco).
+  const [mooring, setMooring] = useState<Mooring>("punta");
   const [pxPerMeter, setPxPerMeter] = useState(initialPxPerMeter);
   const [tool, setTool] = useState<Tool>(
     initialPxPerMeter ? "select" : "scale",
@@ -121,10 +135,19 @@ export function PlanEditor({
   const [draft, setDraft] = useState<{ a: Point; b: Point } | null>(null);
   const [draftForm, setDraftForm] = useState(() => {
     const code = freeCode(usedCodes);
-    return { code, name: `Pontile ${code}`, nameTouched: false, kind: "pontile" as "pontile" | "banchina", left: "10", right: "10", categoryId: categories[0]?.id ?? "" };
+    return {
+      code,
+      name: `Pontile ${code}`,
+      nameTouched: false,
+      kind: "pontile" as "pontile" | "banchina",
+      mooring: "punta" as Mooring,
+      left: "10",
+      right: "10",
+      categoryId: categories[0]?.id ?? "",
+    };
   });
   // Ultima linea usata per ridisegnare i posti scelti: serve a «Inverti il lato».
-  const [pickedLine, setPickedLine] = useState<{ a: Point; b: Point; flip: boolean } | null>(null);
+  const [pickedLine, setPickedLine] = useState<{ a: Point; b: Point; flip: boolean; mooring: Mooring } | null>(null);
   const [moveMode, setMoveMode] = useState<"pontile" | "modulo" | "scelti" | "posto">(
     "pontile",
   );
@@ -136,6 +159,7 @@ export function PlanEditor({
     b: Point;
     widthM: number;
     flip: boolean;
+    mooring: Mooring;
   } | null>(null);
   // Linee tracciate in questa sessione, una per pontile: si salvano per disegnare i pontili nello schema.
   const [traces, setTraces] = useState<
@@ -198,6 +222,25 @@ export function PlanEditor({
     traces[id] ?? savedTraces.current[id] ?? null;
   const hasBerths = berths.length > 0;
 
+  // Schema dal vivo (senza base disegnata): pontili e posti come sono adesso nell'editor.
+  const liveDrawing = useMemo(() => {
+    if (baseUrl || !pxPerMeter) return null;
+    return buildDrawing(
+      piers.map((p) => ({
+        id: p.id,
+        name: p.name,
+        trace: traces[p.id] ?? savedTraces.current[p.id] ?? null,
+        berths: berths.flatMap((b) =>
+          b.pierId === p.id && b.x !== null && b.y !== null
+            ? [{ id: b.id, side: b.side, x: b.x, y: b.y, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm }]
+            : [],
+        ),
+      })),
+      pxPerMeter,
+    );
+  }, [baseUrl, pxPerMeter, piers, berths, traces]);
+  const schemaAvailable = Boolean(baseUrl || liveDrawing);
+
   // Avviso se si chiude la pagina con modifiche non salvate.
   useEffect(() => {
     if (!dirty) return;
@@ -256,7 +299,7 @@ export function PlanEditor({
   }
 
   // «Ridisegna con una linea»: i posti scelti, in ordine di codice, lungo la linea da a a b, tutti dallo stesso lato.
-  function layPickedAlong(a: Point, b: Point, flip: boolean) {
+  function layPickedAlong(a: Point, b: Point, flip: boolean, how: Mooring = mooring) {
     if (!pxPerMeter) return;
     const list = berths.filter((x) => picked.has(x.id)).sort((p, q) => compareCodes(p.code, q.code));
     const placements = layoutPier(
@@ -266,8 +309,9 @@ export function PlanEditor({
       pxPerMeter,
       (parseMeters(pierWidth) ?? 200) / 100,
       flip,
+      how,
     );
-    setPickedLine({ a, b, flip });
+    setPickedLine({ a, b, flip, mooring: how });
     placePicked(placements, `${list.length} posti ridisegnati lungo la linea. Se sono dalla parte sbagliata premi «Inverti il lato».`);
   }
 
@@ -324,6 +368,7 @@ export function PlanEditor({
         b: p,
         widthM: (width ?? 200) / 100,
         flip: false,
+        mooring,
       });
       setPoints([]);
     }
@@ -336,6 +381,7 @@ export function PlanEditor({
     b: Point;
     widthM: number;
     flip: boolean;
+    mooring: Mooring;
   }) {
     const placements = pxPerMeter
       ? layoutPier(
@@ -345,6 +391,7 @@ export function PlanEditor({
           pxPerMeter,
           trace.widthM,
           trace.flip,
+          trace.mooring,
         )
       : [];
     if (placements.length === 0) {
@@ -372,7 +419,7 @@ export function PlanEditor({
       ok: true,
       message: trace.flip
         ? `Lati invertiti: ${placements.length} posti spostati dall'altra parte della linea.`
-        : `${placements.length} posti disposti. Se sono dalla parte sbagliata premi «Inverti i lati»; i singoli posti si ritoccano con «Seleziona».`,
+        : `${placements.length} posti disposti ${MOORING_LABEL[trace.mooring]}. Se sono dalla parte sbagliata premi «Inverti i lati»; i singoli posti si ritoccano con «Seleziona».`,
     });
   }
 
@@ -553,16 +600,8 @@ export function PlanEditor({
   // Allunga (metri > 0) o accorcia il gruppo scelto lungo il pontile: cambia la distanza tra i posti, non le loro misure.
   function stretch(meters: number) {
     if (!selected || !pxPerMeter || group.length < 2) return;
-    // Direzione del pontile: media degli angoli dei posti (sugli angoli doppi), di traverso al lato lungo del posto.
-    let sx = 0;
-    let sy = 0;
-    for (const b of group) {
-      const a = ((b.angle ?? 0) * Math.PI) / 90;
-      sx += Math.cos(a);
-      sy += Math.sin(a);
-    }
-    const th = Math.atan2(sy, sx) / 2;
-    const d = { x: Math.cos(th), y: Math.sin(th) };
+    // Direzione del pontile dai posti: di traverso al lato lungo (di punta) o lungo il lato lungo (all'inglese).
+    const { d } = rowAxis(group.map((b) => ({ x: b.x!, y: b.y!, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm })), pxPerMeter);
     const proj = group.map((b) => b.x! * d.x + b.y! * d.y);
     const lo = Math.min(...proj);
     const hi = Math.max(...proj);
@@ -595,17 +634,10 @@ export function PlanEditor({
   // Lunghezza del gruppo scelto lungo il pontile, in metri (dal primo all'ultimo posto, con la loro larghezza).
   const groupLengthM = (() => {
     if (!pxPerMeter || group.length < 2) return null;
-    let sx = 0;
-    let sy = 0;
-    for (const b of group) {
-      const a = ((b.angle ?? 0) * Math.PI) / 90;
-      sx += Math.cos(a);
-      sy += Math.sin(a);
-    }
-    const th = Math.atan2(sy, sx) / 2;
-    const proj = group.map((b) => b.x! * Math.cos(th) + b.y! * Math.sin(th));
-    const beam = Math.max(...group.map((b) => sizeOf(b).w));
-    return (Math.max(...proj) - Math.min(...proj) + beam) / pxPerMeter;
+    const { d, mooring: how } = rowAxis(group.map((b) => ({ x: b.x!, y: b.y!, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm })), pxPerMeter);
+    const proj = group.map((b) => b.x! * d.x + b.y! * d.y);
+    const span = Math.max(...group.map((b) => (how === "inglese" ? sizeOf(b).l : sizeOf(b).w)));
+    return (Math.max(...proj) - Math.min(...proj) + span) / pxPerMeter;
   })();
 
   // Posti del pontile disegnato, per l'anteprima sulla foto (stessa regola usata dal server per crearli).
@@ -616,7 +648,7 @@ export function PlanEditor({
   });
   const draftBerths =
     draft && pxPerMeter && draftForm.code.trim()
-      ? planBerths(draftForm.code.trim().toUpperCase(), draftForm.kind, draft.a, draft.b, draftSides, pxPerMeter)
+      ? planBerths(draftForm.code.trim().toUpperCase(), draftForm.kind, draft.a, draft.b, draftSides, pxPerMeter, draftForm.mooring)
       : [];
 
   // Disposizione da salvare: posizioni e moduli dei posti, linee tracciate.
@@ -647,6 +679,7 @@ export function PlanEditor({
             code: draftForm.code.trim().toUpperCase(),
             name: draftForm.name.trim() || `Pontile ${draftForm.code}`,
             kind: draftForm.kind,
+            mooring: draftForm.mooring,
             a: draft.a,
             b: draft.b,
             sides: draftSides.map((x) => ({ side: x.side, count: x.count, categoryId: draftForm.categoryId })),
@@ -668,6 +701,23 @@ export function PlanEditor({
       }
     });
   }
+
+  // Scelta dell'ormeggio: di punta (perpendicolari, poppa al pontile) o all'inglese (di fianco, una barca dietro l'altra).
+  const mooringPicker = (value: Mooring, onChange: (v: Mooring) => void, id: string) => (
+    <div className="grid grid-cols-2 gap-1 rounded-md border border-line bg-white p-0.5 text-sm" role="group" aria-label="Ormeggio" id={id}>
+      {(["punta", "inglese"] as const).map((v) => (
+        <button
+          key={v}
+          type="button"
+          aria-pressed={value === v}
+          onClick={() => onChange(v)}
+          className={`rounded px-2 py-1.5 font-medium ${value === v ? "bg-ink text-white" : "text-ink hover:bg-line-soft"}`}
+        >
+          {v === "punta" ? "Di punta" : "All'inglese"}
+        </button>
+      ))}
+    </div>
+  );
 
   const toolButton = (
     value: Tool,
@@ -758,18 +808,25 @@ export function PlanEditor({
               </button>
             ))}
           </span>
-          {baseUrl && (
-            <label className="inline-flex items-center gap-1.5 text-sm text-muted">
-              Sotto
-              <select
-                className="input w-auto py-1 text-sm"
-                value={under}
-                onChange={(e) => setUnder(e.target.value as "foto" | "base")}
-              >
-                <option value="foto">foto aerea</option>
-                <option value="base">base disegnata</option>
-              </select>
-            </label>
+          {schemaAvailable && (
+            <span
+              className="inline-flex items-center gap-1 rounded-md border border-line bg-white p-0.5 text-sm"
+              role="group"
+              aria-label="Cosa c'è sotto i posti"
+            >
+              <span className="px-1.5 text-muted">Sotto:</span>
+              {(["base", "foto"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={under === v}
+                  onClick={() => setUnder(v)}
+                  className={`rounded px-2 py-1 font-medium ${under === v ? "bg-ink text-white" : "text-ink hover:bg-line-soft"}`}
+                >
+                  {v === "foto" ? "Foto dal vero" : baseUrl ? "Base disegnata" : "Schema"}
+                </button>
+              ))}
+            </span>
           )}
         </div>
         <p className="mb-2 min-h-10 text-sm text-muted" aria-live="polite">
@@ -788,12 +845,31 @@ export function PlanEditor({
               className="block h-auto w-full select-none"
               onClick={onCanvasClick}
             >
-              <image
-                href={under === "base" && baseUrl ? baseUrl : imageUrl}
-                width={width}
-                height={height}
-                preserveAspectRatio="none"
-              />
+              {under === "base" && baseUrl ? (
+                <image href={baseUrl} width={width} height={height} preserveAspectRatio="none" />
+              ) : under === "base" && liveDrawing ? (
+                // Schema ricavato dai posti come sono ora: segue le modifiche mentre si lavora.
+                <g pointerEvents="none">
+                  <rect width={width} height={height} fill={WATER} />
+                  {features.map((f) =>
+                    f.kind === "servizio" ? null : (
+                      <path key={f.id} d={pathOf(f.points)} strokeLinejoin="round" strokeWidth={0.15 * (pxPerMeter ?? 1)} {...SHAPE[f.kind]} />
+                    ),
+                  )}
+                  {liveDrawing.piers.map((p) => (
+                    <polygon
+                      key={p.id}
+                      points={p.outline.map((q) => `${q.x},${q.y}`).join(" ")}
+                      fill={PIER.fill}
+                      stroke={PIER.stroke}
+                      strokeWidth={0.12 * (pxPerMeter ?? 1)}
+                      strokeLinejoin="round"
+                    />
+                  ))}
+                </g>
+              ) : (
+                <image href={imageUrl} width={width} height={height} preserveAspectRatio="none" />
+              )}
               {berths.map((b) => {
                 if (b.x === null || b.y === null) return null;
                 const { w, l } = sizeOf(b);
@@ -939,6 +1015,10 @@ export function PlanEditor({
               </div>
             </div>
             <div>
+              <span className="label">Ormeggio</span>
+              {mooringPicker(draftForm.mooring, (v) => setDraftForm((f) => ({ ...f, mooring: v })), "np-mooring")}
+            </div>
+            <div>
               <label htmlFor="np-name" className="label">
                 Nome
               </label>
@@ -1066,6 +1146,10 @@ export function PlanEditor({
                 onChange={(e) => setPierWidth(e.target.value)}
               />
             </div>
+            <div>
+              <span className="label">Ormeggio</span>
+              {mooringPicker(mooring, setMooring, "plan-mooring")}
+            </div>
             <button
               type="button"
               className="btn btn-secondary w-full"
@@ -1093,7 +1177,9 @@ export function PlanEditor({
             )}
             <p className="hint">
               Per una banchina, traccia la linea lungo il bordo del molo e metti
-              larghezza 0.
+              larghezza 0. «All&apos;inglese»: le barche si ormeggiano di fianco
+              al pontile, una dietro l&apos;altra; vale anche per «Ridisegna con
+              una linea».
             </p>
           </div>
         </section>
@@ -1172,7 +1258,7 @@ export function PlanEditor({
                     Ridisegna con una linea
                   </button>
                   {pickedLine && (
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => layPickedAlong(pickedLine.a, pickedLine.b, !pickedLine.flip)}>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => layPickedAlong(pickedLine.a, pickedLine.b, !pickedLine.flip, pickedLine.mooring)}>
                       Inverti il lato
                     </button>
                   )}

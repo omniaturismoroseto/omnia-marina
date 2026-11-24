@@ -185,6 +185,8 @@ const proposalsInput = z.object({
         kind: z.enum(["pontile", "banchina"]),
         a: pointSchema,
         b: pointSchema,
+        // Come si ormeggia: di punta (predefinito) o all'inglese, di fianco al pontile.
+        mooring: z.enum(["punta", "inglese"]).optional(),
         sides: z
           .array(z.object({ side: z.enum(["sx", "dx"]), count: z.number().int().min(1).max(MAX_BERTHS_PER_SIDE), categoryId: z.uuid() }))
           .min(1)
@@ -239,6 +241,7 @@ export async function createFromProposals(input: ProposalsInput): Promise<Result
       item.b,
       item.sides.map((s) => ({ side: s.side, count: s.count, lengthCm: categoryById.get(s.categoryId)!.maxLengthCm, beamCm: categoryById.get(s.categoryId)!.maxBeamCm })),
       pxPerMeter,
+      item.mooring,
     ),
   }));
   const allCodes = planned.flatMap((p) => p.berths.map((b) => b.code));

@@ -16,6 +16,7 @@ import {
 } from "@/db/schema";
 import { berthSizePx } from "@/lib/plan";
 import { buildDrawing } from "@/lib/plan-drawing";
+import { drawingOrder } from "@/lib/plan-features";
 import { planUnits, traceFromColumns, unitPositions } from "@/lib/plan-units";
 import { requireMarina } from "@/lib/context";
 import { SettingsTabs } from "../tabs";
@@ -274,6 +275,7 @@ export default page(async function PlanSettingsPage({ searchParams }: { searchPa
               initialPierId={uuidOrNull(one(params.struttura)) ?? undefined}
               categories={categories}
               usedCodes={pierRows.map((p) => p.code)}
+              features={drawingOrder(featureRows)}
             />
           </Card>
           </div>

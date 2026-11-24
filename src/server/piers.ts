@@ -4,7 +4,7 @@ import type { Tx } from "@/db";
 import { berths, marinas, pierSections, piers, rates } from "@/db/schema";
 import { compareCodes } from "@/lib/berth-codes";
 import { appendPositions } from "@/lib/pier-merge";
-import { berthSlots, layoutPier } from "@/lib/plan";
+import { berthSlots, layoutPier, mooringAlong } from "@/lib/plan";
 import { clipTrace, estimateTrace, fitTrace, renumberPier, type Trace } from "@/lib/plan-extend";
 import { traceFromColumns, unitPositions } from "@/lib/plan-units";
 import { DomainError } from "./errors";
@@ -270,15 +270,21 @@ export async function arrangeUnit(tx: Tx, marinaId: string, pierId: string, sect
   const placed = unit.flatMap((b) => (b.x !== null && b.y !== null ? [{ ...b, x: b.x, y: b.y, angle: b.angle ?? 0 }] : []));
   const base = saved ?? estimateTrace(placed, m);
   if (!base) return { count: unit.length, onPlan: false };
+  // L'ormeggio resta quello dei posti già disposti (di punta o all'inglese, rispetto alla linea).
+  const baseLen = Math.hypot(base.b.x - base.a.x, base.b.y - base.a.y) || 1;
+  const mooring = mooringAlong(placed, { x: (base.b.x - base.a.x) / baseLen, y: (base.b.y - base.a.y) / baseLen });
   // Con più posti per lato di prima (es. tutti da una parte) la linea si allunga quanto serve, per non sovrapporli.
   const slotCount = Math.max(...[...rel.values()].map((r) => r.position)) + 1;
-  const trace = fitTrace(base, slotCount, (Math.max(...unit.map((b) => b.beamCm)) / 100) * m);
+  const span = Math.max(...unit.map((b) => (mooring === "inglese" ? b.lengthCm : b.beamCm)));
+  const trace = fitTrace(base, slotCount, (span / 100) * m);
   const placements = layoutPier(
     unit.map((b) => ({ id: b.id, side: rel.get(b.id)!.side, position: rel.get(b.id)!.position, lengthCm: b.lengthCm, beamCm: b.beamCm })),
     trace.a,
     trace.b,
     m,
     trace.widthM,
+    false,
+    mooring,
   );
   // Ridisposti in fila: il modulo si riconosce di nuovo all'apertura dell'editor.
   for (const p of placements) await tx.update(berths).set({ planX: p.x, planY: p.y, planAngle: p.angle, planModule: null }).where(eq(berths.id, p.id));

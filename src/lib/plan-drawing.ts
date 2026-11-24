@@ -1,7 +1,7 @@
 // Disegno pulito del porto ricavato dalla pianta dal vero: pontili come strisce grigie e, su ogni posto,
 // la barca orientata con la poppa verso il pontile. Tutte le coordinate sono in pixel della foto.
 
-import type { Point } from "./plan";
+import { isAlongside, longAxis, rowAxis, type Point } from "./plan";
 
 export interface DrawingBerth {
   id: string;
@@ -37,25 +37,7 @@ export interface Drawing {
   bounds: { x: number; y: number; width: number; height: number };
 }
 
-const rad = (deg: number) => (deg * Math.PI) / 180;
 const dot = (p: Point, q: Point) => p.x * q.x + p.y * q.y;
-
-// Direzione del lato lungo del posto (la y locale ruotata).
-function longAxis(angle: number): Point {
-  return { x: -Math.sin(rad(angle)), y: Math.cos(rad(angle)) };
-}
-
-// Direzione media del pontile dagli angoli dei posti (media sugli angoli doppi: 10° e 190° valgono uguale).
-function pierDirection(berths: DrawingBerth[]): Point {
-  let sx = 0;
-  let sy = 0;
-  for (const b of berths) {
-    sx += Math.cos(2 * rad(b.angle));
-    sy += Math.sin(2 * rad(b.angle));
-  }
-  const a = Math.atan2(sy, sx) / 2;
-  return { x: Math.cos(a), y: Math.sin(a) };
-}
 
 const mean = (values: number[]) => values.reduce((s, v) => s + v, 0) / values.length;
 
@@ -78,9 +60,12 @@ export function buildDrawing(piers: DrawingPier[], pxPerMeter: number): Drawing 
       const len = Math.hypot(trace.b.x - trace.a.x, trace.b.y - trace.a.y);
       d = { x: (trace.b.x - trace.a.x) / len, y: (trace.b.y - trace.a.y) / len };
     } else {
-      d = pierDirection(list);
+      // Senza linea la direzione viene dai posti: di traverso al lato lungo, o lungo il lato lungo se sono all'inglese.
+      d = rowAxis(list, m).d;
     }
     const n = { x: -d.y, y: d.x };
+    // Posti all'inglese: di fianco al pontile, la poppa non è verso il pontile e sporgono di metà larghezza.
+    const alongside = new Set(list.filter((b) => isAlongside(b.angle, d)).map((b) => b.id));
 
     // Da che parte del pontile sta ogni posto e dove ha la poppa.
     const across = (p: Point) => dot(p, n);
@@ -93,7 +78,7 @@ export function buildDrawing(piers: DrawingPier[], pxPerMeter: number): Drawing 
       for (const b of list) {
         const v = longAxis(b.angle);
         const toLine = lineAt - across(b);
-        stern.set(b.id, dot(v, n) * toLine >= 0 ? 1 : -1);
+        stern.set(b.id, alongside.has(b.id) || dot(v, n) * toLine >= 0 ? 1 : -1);
       }
       const sides = new Set(list.map((b) => Math.sign(across(b) - lineAt)));
       if (trace.widthM >= 0.5) {
@@ -110,17 +95,22 @@ export function buildDrawing(piers: DrawingPier[], pxPerMeter: number): Drawing 
       const bySide = { sx: list.filter((b) => b.side === "sx"), dx: list.filter((b) => b.side === "dx") };
       const both = bySide.sx.length > 0 && bySide.dx.length > 0;
       const meanOf = (side: "sx" | "dx") => mean(bySide[side].map(across));
+      // dir: segno, lungo n, della direzione verso il pontile.
+      const dirOf = new Map<string, number>();
       for (const b of list) {
         const v = longAxis(b.angle);
-        let dir: number; // segno, lungo n, della direzione verso il pontile
+        let dir: number;
         if (both) dir = Math.sign(meanOf(b.side === "sx" ? "dx" : "sx") - across(b)) || 1;
+        // All'inglese il lato lungo non dice dove sta il pontile: vale la regola del tracciamento (sx a sinistra, cioè verso -n).
+        else if (alongside.has(b.id)) dir = b.side === "sx" ? 1 : -1;
         else dir = Math.sign(dot(b.side === "sx" ? v : { x: -v.x, y: -v.y }, n)) || 1;
-        stern.set(b.id, Math.sign(dot(v, n)) * dir >= 0 ? 1 : -1);
+        dirOf.set(b.id, dir);
+        stern.set(b.id, alongside.has(b.id) || Math.sign(dot(v, n)) * dir >= 0 ? 1 : -1);
       }
+      // Bordo del posto verso il pontile: la poppa (di punta) o il fianco (all'inglese).
       const sternAt = (b: DrawingBerth) => {
-        const v = longAxis(b.angle);
-        const s = stern.get(b.id)!;
-        return across(b) + dot(v, n) * s * (b.lengthCm / 200) * m;
+        const reach = alongside.has(b.id) ? b.beamCm / 200 : (Math.abs(dot(longAxis(b.angle), n)) * b.lengthCm) / 200;
+        return across(b) + dirOf.get(b.id)! * reach * m;
       };
       if (both) {
         const a = mean(bySide.sx.map(sternAt));
@@ -140,7 +130,7 @@ export function buildDrawing(piers: DrawingPier[], pxPerMeter: number): Drawing 
     // Estensione lungo il pontile: tutti i posti (con la loro larghezza) più la linea tracciata.
     const along = list.flatMap((b) => {
       const t = dot(b, d);
-      const r = (b.beamCm / 200) * m;
+      const r = ((alongside.has(b.id) ? b.lengthCm : b.beamCm) / 200) * m;
       return [t - r, t + r];
     });
     if (trace) along.push(dot(trace.a, d), dot(trace.b, d));
