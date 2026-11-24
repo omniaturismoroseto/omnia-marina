@@ -518,8 +518,8 @@ function useWidth<T extends HTMLElement>() {
 
 // Primo e ultimo codice di un gruppo di posti (R23–R33), per riconoscere i pezzi di un pontile andato a capo.
 /**
- * Posti come sono in porto, modulo per modulo (le parti staccate riconosciute sulla pianta): sopra il lato sinistro, in mezzo
- * la passerella, sotto il destro, dalla radice alla testata. Un modulo non va mai a capo (sembrerebbe un altro pontile): le celle
+ * Posti come sono in porto, modulo per modulo (le parti staccate riconosciute sulla pianta): sopra il lato sinistro,
+ * sotto il destro, dalla radice alla testata. Un modulo non va mai a capo (sembrerebbe un altro pontile): le celle
  * si allargano per riempire la riga e, se il modulo è più lungo dello schermo, si scorre di lato.
  */
 function BerthStrip({
@@ -561,12 +561,12 @@ function BerthStrip({
                 className="grid w-max gap-1"
                 style={{
                   gridTemplateColumns: `repeat(${g.span}, ${cell}px)`,
-                  gridTemplateRows: sides.size === 2 ? "auto 0.5rem auto" : sides.has("sx") ? "auto 0.5rem" : "0.5rem auto",
+                  gridTemplateRows: sides.size === 2 ? "auto auto" : "auto",
                 }}
               >
                 {g.berths.map((b) => {
                   const on = picked.has(b.id);
-                  const row = b.side === "sx" ? 1 : sides.size === 2 ? 3 : 2;
+                  const row = b.side === "dx" && sides.size === 2 ? 2 : 1;
                   return (
                     <button
                       key={b.id}
@@ -584,12 +584,6 @@ function BerthStrip({
                     </button>
                   );
                 })}
-                {/* La passerella (o il bordo della banchina) */}
-                <div
-                  className="rounded-sm bg-line"
-                  style={{ gridColumn: `1 / ${g.span + 1}`, gridRow: sides.size === 2 || sides.has("sx") ? 2 : 1 }}
-                  aria-hidden="true"
-                />
               </div>
             </div>
           </div>
