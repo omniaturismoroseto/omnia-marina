@@ -37,6 +37,8 @@ export interface ManagerBerth {
   sectionId: string | null;
   side: "sx" | "dx";
   position: number;
+  /** Modulo della pianta (parte staccata del pontile o tratto), come nell'editor della Mappa del porto; null senza pianta. */
+  module: number | null;
   categoryId: string | null;
   lengthCm: number;
   beamCm: number;

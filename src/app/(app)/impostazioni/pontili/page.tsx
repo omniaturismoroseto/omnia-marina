@@ -16,6 +16,8 @@ import { SettingsTabs } from "../tabs";
 import { PiersManager } from "./piers-manager";
 import type { ManagerBerth, ManagerPier } from "./types";
 import { byBerthCode } from "@/server/berth-order";
+import { assignModules } from "@/lib/plan-modules";
+import { berthSizePx } from "@/lib/plan";
 
 export const metadata: Metadata = { title: "Pontili e posti barca" };
 
@@ -54,6 +56,18 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
     sections: sectionRows.filter((sec) => sec.pierId === p.id).map((sec) => ({ id: sec.id, label: sec.label })),
     contracts: contractsByPier.get(p.id) ?? 0,
   }));
+  // Moduli della pianta: quelli salvati dall'editor; per i posti disposti che non ne hanno ancora uno si riconoscono come nell'editor.
+  const modules =
+    marina?.pxPerMeter
+      ? assignModules(
+          berthRows.flatMap((b) =>
+            b.planX !== null && b.planY !== null
+              ? [{ id: b.id, unit: b.sectionId ?? b.pierId, x: b.planX, y: b.planY, angle: b.planAngle ?? 0, ...berthSizePx(b, marina.pxPerMeter!), module: b.planModule }]
+              : [],
+          ),
+          marina.pxPerMeter,
+        )
+      : new Map<string, number>();
   const managerBerths: ManagerBerth[] = berthRows.map((b) => {
     const now = boardBerths.get(b.id);
     const o = now?.occupant;
@@ -64,6 +78,7 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
       sectionId: b.sectionId,
       side: b.side,
       position: b.position,
+      module: modules.get(b.id) ?? null,
       categoryId: b.categoryId,
       lengthCm: b.lengthCm,
       beamCm: b.beamCm,
