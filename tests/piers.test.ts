@@ -9,6 +9,7 @@ import { planUnits, unitPositions } from "@/lib/plan-units";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
 import { arrangeUnit, dissolveSection, flipNumbering, mergePiers, renameModule, sectionFromBerths, splitSection, splitUnitAt } from "@/server/piers";
 import { byBerthCode } from "@/server/berth-order";
+import { activeContractMessage, activeContractsOnBerths } from "@/server/contracts";
 
 describe("unione dei pontili: regole pure", () => {
   it("strutture della pianta: un'unità per tratto, posizioni dalla radice del tratto", () => {
@@ -97,6 +98,30 @@ describe.skipIf(!hasDb)("unione dei pontili (database)", () => {
 
   afterAll(async () => {
     await db.$client.end();
+  });
+
+  it("riconosce i posti con un contratto attivo, che non cambiano codice", async () => {
+    const [p] = await db.insert(piers).values({ marinaId, code: "KC", name: "Codici", sortOrder: 8 }).returning({ id: piers.id });
+    const [busy, free, old] = await db
+      .insert(berths)
+      .values(
+        ["KC1", "KC2", "KC3"].map((code, i) => ({ marinaId, pierId: p.id, categoryId, code, side: "sx" as const, position: i, lengthCm: 800, beamCm: 300 })),
+      )
+      .returning({ id: berths.id });
+    const [owner] = await db.insert(owners).values({ marinaId, type: "persona", firstName: "Bo", lastName: "Kc", displayName: "Kc Bo" }).returning({ id: owners.id });
+    const [boat] = await db.insert(boats).values({ marinaId, ownerId: owner.id, name: "Kappa", lengthCm: 700, beamCm: 280 }).returning({ id: boats.id });
+    const base = { marinaId, year: 2026, ownerId: owner.id, boatId: boat.id, type: "transito" as const, amountCents: 1000, vatRate: 22 };
+    await db.insert(contracts).values([
+      { ...base, berthId: busy.id, status: "attivo", number: "2026/77", startDate: "2026-06-01", endDate: "2026-12-31", occupiedUntil: "2026-12-31" },
+      // Concluso o già finito: il codice si può cambiare.
+      { ...base, berthId: old.id, status: "attivo", startDate: "2026-01-01", endDate: "2026-01-05", occupiedUntil: "2026-01-05" },
+      { ...base, berthId: free.id, status: "concluso", startDate: "2026-06-01", endDate: "2026-12-31", occupiedUntil: "2026-12-31" },
+    ]);
+    const active = await activeContractsOnBerths(db, marinaId, [busy.id, free.id, old.id], "2026-07-01");
+    expect(active).toEqual([{ berthId: busy.id, code: "KC1", number: "2026/77" }]);
+    expect(activeContractMessage(active)).toContain("Il posto KC1 ha un contratto attivo (contratto n. 2026/77)");
+    // Un altro porto non vede i contratti di questo.
+    expect(await activeContractsOnBerths(db, otherMarinaId, [busy.id], "2026-07-01")).toEqual([]);
   });
 
   it("gira la numerazione (estremi e lati) anche sulla pianta e dà un nome al modulo", async () => {

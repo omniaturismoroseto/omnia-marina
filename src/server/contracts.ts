@@ -46,6 +46,44 @@ export async function contractNumberGaps(marinaId: string, tx: Tx | typeof db = 
 }
 
 // Contratto attivo o concluso che occupa già il posto nel periodo indicato.
+/**
+ * Posti con un contratto attivo (in corso o che deve ancora iniziare). Il contratto legge il codice dal posto: cambiarlo
+ * vorrebbe dire modificare un contratto attivo, che non si fa. Per quei posti il codice resta, e serve un nuovo contratto.
+ */
+export async function activeContractsOnBerths(
+  tx: Tx | typeof db,
+  marinaId: string,
+  berthIds: string[],
+  today = todayRome(),
+): Promise<{ berthId: string; code: string; number: string | null }[]> {
+  if (berthIds.length === 0) return [];
+  return tx
+    .select({ berthId: berths.id, code: berths.code, number: contracts.number })
+    .from(contracts)
+    .innerJoin(berths, eq(berths.id, contracts.berthId))
+    .where(
+      and(
+        eq(contracts.marinaId, marinaId),
+        inArray(contracts.berthId, berthIds),
+        eq(contracts.status, "attivo"),
+        sql`${contracts.endDate} >= ${today}`,
+      ),
+    )
+    .orderBy(berths.code);
+}
+
+/** Messaggio per chi prova a cambiare il codice di posti con un contratto attivo. */
+export function activeContractMessage(list: { code: string; number: string | null }[]): string {
+  const codes = [...new Set(list.map((x) => x.code))];
+  const numbers = [...new Set(list.map((x) => x.number).filter((n): n is string => Boolean(n)))];
+  const which = codes.length === 1 ? `Il posto ${codes[0]} ha` : `I posti ${codes.join(", ")} hanno`;
+  const contract = numbers.length ? ` (contratt${numbers.length === 1 ? "o" : "i"} n. ${numbers.join(", ")})` : "";
+  return (
+    `${which} un contratto attivo${contract}: i contratti attivi non si modificano, quindi il codice non cambia. ` +
+    "Per usare il nuovo codice chiudi o annulla il contratto, cambia il codice e fai un nuovo contratto per quel posto."
+  );
+}
+
 export async function findBerthConflict(tx: Tx, marinaId: string, berthId: string, startDate: string, until: string, excludeId?: string) {
   const [row] = await tx
     .select({ number: contracts.number, startDate: contracts.startDate, endDate: contracts.endDate })

@@ -8,6 +8,7 @@ import { OFFICE, requireMarina } from "@/lib/context";
 import { isValidISODate, todayRome } from "@/lib/dates";
 import { formatDimensions } from "@/lib/format";
 import { one, uuidOrNull, type SearchParams } from "@/lib/params";
+import { listsWithExtras } from "@/server/list-extras";
 import { loadPlanMap } from "@/server/plan-map";
 import { ContractForm } from "../contract-form";
 
@@ -41,7 +42,7 @@ export default page(async function NewContractPage({ searchParams }: { searchPar
   const berthId = uuidOrNull(sp.posto) ?? "";
 
   // Schema del porto per «Scegli dalla mappa».
-  const map = await loadPlanMap(ctx.marinaId);
+  const [map, priceLists] = await Promise.all([loadPlanMap(ctx.marinaId), listsWithExtras(ctx.marinaId)]);
 
   return (
     <>
@@ -62,6 +63,7 @@ export default page(async function NewContractPage({ searchParams }: { searchPar
           defaultVatRate={marina.vat}
           fees={{ gestione: marina.serviceFee, rifiuti: marina.wasteFee }}
           map={map}
+          priceLists={priceLists}
           initial={{
             ownerId: ownerList.some((o) => o.id === ownerId) ? ownerId : "",
             boatId: boat?.id ?? (ownerBoats.length === 1 ? ownerBoats[0].id : ""),

@@ -2,6 +2,7 @@
 
 import { CheckboxField, Field, Form, FormMessage, SelectField, Submit } from "@/components/form";
 import { deleteBerths, makeBerthSection, renameBerths, updateBerths } from "@/server/settings-actions";
+import { Notice } from "@/components/ui";
 import type { ManagerBerth, ManagerCategory } from "./types";
 
 // Moduli della barra «posti scelti»: ognuno lavora sui posti scelti di un pontile (pierId + berthIds).
@@ -58,9 +59,18 @@ export function BulkEditForm({ pierId, berths, categories }: { pierId: string; b
 }
 
 export function BulkCodesForm({ pierId, berths, prefix }: { pierId: string; berths: ManagerBerth[]; prefix: string }) {
+  // Posti con un contratto attivo: il loro codice non cambia, quindi l'app non cambia nessun codice finché sono tra quelli scelti.
+  const locked = berths.filter((b) => b.activeContract);
   return (
     <Form action={renameBerths} className="space-y-4">
       <Hidden pierId={pierId} berths={berths} />
+      {locked.length > 0 && (
+        <Notice tone="warn">
+          {locked.length === 1 ? `Il posto ${locked[0].code} ha` : `I posti ${locked.map((b) => b.code).join(", ")} hanno`} un contratto attivo: i
+          contratti attivi non si modificano, quindi il codice non si può cambiare. Toglili dalla scelta, oppure chiudi o annulla il contratto,
+          cambia il codice e fai un nuovo contratto per quel posto.
+        </Notice>
+      )}
       <p className="text-sm text-muted">
         Nuova sigla per i posti scelti, per esempio da CN1 a {prefix || "G"}1. Se hanno sigle diverse con gli stessi numeri (CN1 e CS1), scegli
         «Rinumera in fila»: in ordine di codice prendono i numeri dal primo in poi. Contratti e pianta restano collegati.

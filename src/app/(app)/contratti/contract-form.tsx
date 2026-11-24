@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ListWithExtras } from "@/server/list-extras";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Field, Form, FormMessage, SelectField, Submit, TextareaField } from "@/components/form";
 import { addDays, addMonths, annualEnd, formatDate, isValidISODate, SEASON_END, yearPeriod } from "@/lib/dates";
@@ -43,9 +44,12 @@ export function ContractForm({
   initial,
   draft,
   map,
+  priceLists = [],
 }: {
   // Schema del porto per «Scegli dalla mappa»; null se la pianta non è pronta.
   map: PlanMapData | null;
+  /** Listini con servizi e cauzioni: si propongono quelli del listino in vigore alla data di inizio, anche prima di scegliere la barca. */
+  priceLists?: ListWithExtras[];
   owners: { id: string; name: string }[];
   boats: { id: string; ownerId: string; name: string; size: string }[];
   today: string;
@@ -160,6 +164,8 @@ export function ContractForm({
   const amountCents = parseMoney(amount);
   const extrasCents = spacesCents + (parseMoney(gestione) ?? 0) + (parseMoney(rifiuti) ?? 0);
   const plan = amountCents && amountCents > 0 && isValidISODate(firstDue) ? splitInstalments(amountCents, instalments, firstDue, everyMonths) : [];
+  // Listino in vigore alla data di inizio (il più recente se più d'uno), come fa il preventivo.
+  const listAtStart = isValidISODate(startDate) ? priceLists.find((l) => l.validFrom <= startDate && startDate <= l.validTo) : undefined;
   const availableBerths = options?.berths.filter((b) => b.available) ?? [];
   const unavailableBerths = options?.berths.filter((b) => !b.available) ?? [];
   const piersInOrder = [...new Set(availableBerths.map((b) => b.pierName))];
@@ -366,8 +372,9 @@ export function ContractForm({
             }}
             onSpacesTotal={setSpacesCents}
             prices={options?.itemPrices ?? {}}
-            listExtras={options?.listExtras ?? []}
-            listReady={options !== null}
+            listExtras={listAtStart?.extras ?? []}
+            listName={listAtStart?.name ?? null}
+            listReady={isValidISODate(startDate)}
             annualDefault={type === "annuale"}
           />
         )}
