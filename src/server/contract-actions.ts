@@ -231,7 +231,10 @@ function parseItems(formData: FormData): { ok: true; items: ContractItemInput[] 
       errors[`${kind}_to`] = "La fine precede l'inizio.";
       continue;
     }
-    items.push({ kind, reference: r.data.reference, startDate: r.data.startDate, endDate: r.data.endDate, amountCents: r.data.amount, annual });
+    // Posto auto della mappa scelto (il codice lo mette il server nel riferimento); altrimenti il numero scritto a mano.
+    const parking = String(read(kind, "parking"));
+    const parkingSpaceId = z.uuid().safeParse(parking).success ? parking : null;
+    items.push({ kind, reference: parkingSpaceId ? null : r.data.reference, parkingSpaceId, startDate: r.data.startDate, endDate: r.data.endDate, amountCents: r.data.amount, annual });
   }
   for (const kind of FEE_ITEM_KINDS) {
     const r = feeSchema.safeParse({ amount: read(kind, "amount") });
@@ -427,6 +430,7 @@ const itemSchema = z.object({
   description: f.optText(),
   vatRate: z.preprocess((v) => (v === "" || v === null || v === undefined ? null : Number(v)), z.number().int().nullable()),
   annual: f.checkbox(),
+  parkingSpaceId: f.optId(),
 });
 
 export async function addContractItemAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -446,7 +450,8 @@ export async function addContractItemAction(_prev: FormState, formData: FormData
     await db.transaction(async (tx) => {
       const item = {
         kind: d.kind,
-        reference: period ? d.reference : null,
+        reference: period && !d.parkingSpaceId ? d.reference : null,
+        parkingSpaceId: period ? d.parkingSpaceId : null,
         startDate: period ? d.startDate : null,
         endDate: period ? d.endDate : null,
         annual,

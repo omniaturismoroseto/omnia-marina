@@ -22,6 +22,8 @@ export interface ContractItemInput {
   /** Solo per i servizi: descrizione (es. «Cauzione badge») e aliquota (0 = senza IVA). */
   description?: string | null;
   vatRate?: number | null;
+  /** Solo per i posti auto: posto auto della mappa assegnato (il codice va in `reference`). */
+  parkingSpaceId?: string | null;
 }
 
 /** Gli spazi (a terra, posti auto, carrello) hanno un periodo; le spese fisse no. */

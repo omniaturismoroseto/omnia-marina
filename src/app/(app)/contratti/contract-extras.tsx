@@ -8,11 +8,13 @@ import { formatMoney, moneyInput, parseMoney } from "@/lib/format";
 import { CONTRACT_ITEM_LABEL } from "@/lib/labels";
 import { SPACE_ITEM_KINDS } from "@/lib/contract-items";
 import type { ListExtra } from "@/server/list-extras";
+import type { PlanMapData } from "@/server/plan-map";
+import { ParkingPicker } from "./parking-picker";
 
 type SpaceKind = (typeof SPACE_ITEM_KINDS)[number];
 // fromList: nome della voce del listino scelta, mostrato sotto l'importo al posto del prezzo generico.
 // annual: spazio per l'anno solare (fino al 31 dicembre); la fine si calcola e non si modifica.
-type SpaceState = { on: boolean; annual: boolean; ref: string; from: string; to: string; amount: string; fromList?: string };
+type SpaceState = { on: boolean; annual: boolean; ref: string; parking: string; from: string; to: string; amount: string; fromList?: string };
 type ServiceLine = { key: number; desc: string; amount: string; vatRate: number };
 
 const vatLabel = (rate: number) => (rate === 0 ? "senza IVA" : `IVA ${rate}% inclusa`);
@@ -38,6 +40,7 @@ export function ContractExtras({
   listName,
   listReady,
   annualDefault,
+  map = null,
 }: {
   startDate: string;
   endDate: string;
@@ -54,9 +57,11 @@ export function ContractExtras({
   listReady: boolean;
   // Contratto annuale: gli spazi aggiunti nascono già con «Annuale» spuntato.
   annualDefault: boolean;
+  // Mappa del porto, per scegliere il posto auto dalla mappa.
+  map?: PlanMapData | null;
 }) {
   const [spaces, setSpaces] = useState<Record<SpaceKind, SpaceState>>(
-    () => Object.fromEntries(SPACE_ITEM_KINDS.map((k) => [k, { on: false, annual: false, ref: "", from: "", to: "", amount: "" }])) as Record<SpaceKind, SpaceState>,
+    () => Object.fromEntries(SPACE_ITEM_KINDS.map((k) => [k, { on: false, annual: false, ref: "", parking: "", from: "", to: "", amount: "" }])) as Record<SpaceKind, SpaceState>,
   );
   const [services, setServices] = useState<ServiceLine[]>([]);
   // Chiave delle righe di servizio aggiunte (un contatore: basta che sia diversa per ogni riga).
@@ -191,8 +196,22 @@ export function ContractExtras({
                 {CONTRACT_ITEM_LABEL[kind]}
               </label>
               {s.on && (
-                <div className={`mt-3 grid grid-cols-1 gap-3 ${HAS_REFERENCE[kind] ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
-                  {HAS_REFERENCE[kind] && <Field name={`${kind}_ref`} label="Numero" value={s.ref} onChange={(e) => update(kind, { ref: e.target.value })} />}
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {/* Posti auto: si sceglie il posto della mappa libero nel periodo; senza posti auto in Impostazioni, il numero a mano. */}
+                  {HAS_REFERENCE[kind] && (
+                    <ParkingPicker
+                      name={`${kind}_parking`}
+                      covered={kind === "auto_coperto"}
+                      from={s.from}
+                      to={s.to}
+                      value={s.parking}
+                      onChange={(id) => update(kind, { parking: id })}
+                      map={map}
+                      fallback={
+                        <Field name={`${kind}_ref`} label="Numero" value={s.ref} onChange={(e) => update(kind, { ref: e.target.value })} wrapperClassName="sm:col-span-full" />
+                      }
+                    />
+                  )}
                   <Field
                     name={`${kind}_from`}
                     label="Dal"

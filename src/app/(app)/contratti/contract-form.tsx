@@ -376,6 +376,7 @@ export function ContractForm({
             listName={listAtStart?.name ?? null}
             listReady={isValidISODate(startDate)}
             annualDefault={type === "annuale"}
+            map={map}
           />
         )}
         {!draft && extrasCents > 0 && (
