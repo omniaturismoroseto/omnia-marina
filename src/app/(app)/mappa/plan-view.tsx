@@ -6,6 +6,7 @@ import { pathOf, type PlanFeature } from "@/lib/plan-features";
 import { PIER, SHAPE, WATER } from "@/lib/plan-style";
 import { serviceTitle } from "@/lib/port-services";
 import { STATE_LABEL } from "@/lib/berth-states";
+import { ParkingMarks, type ParkingMark } from "./parking-marks";
 import type { BerthState, BoardBerth } from "@/server/board";
 
 /** Quello che serve per disegnare un posto: i dati della mappa ne hanno di più. */
@@ -54,6 +55,9 @@ export function PlanView({
   features,
   bounds,
   baseUrl,
+  parking = [],
+  selectedParkingId = null,
+  onSelectParking,
 }: {
   mode: "foto" | "schema";
   // Sfondo (terra, acqua, verde, edifici) e servizi, già nell'ordine di disegno.
@@ -73,6 +77,10 @@ export function PlanView({
   // I posti «fermo» non si possono scegliere.
   hrefFor?: (berthId: string) => string;
   onSelect?: (berthId: string) => void;
+  /** Posti auto sulla pianta; con `onSelectParking` si scelgono (es. nel contratto). */
+  parking?: ParkingMark[];
+  selectedParkingId?: string | null;
+  onSelectParking?: (parkingId: string) => void;
 }) {
   const view = mode === "schema" && !baseUrl ? bounds : { x: 0, y: 0, width, height };
   // Unità di disegno proporzionata all'area mostrata: spessori e testi non dipendono dalla risoluzione della foto.
@@ -226,6 +234,8 @@ export function PlanView({
           </Link>
         );
       })}
+
+      <ParkingMarks spaces={parking} pxPerMeter={m} selectedId={selectedParkingId} onSelect={onSelectParking} />
 
       {features.map((f) =>
         f.kind === "servizio" && f.service ? (

@@ -17,6 +17,7 @@ import { CONTRACT_TYPE_LABEL, MOVEMENT_LABEL } from "@/lib/labels";
 import { one, uuidOrNull, type SearchParams } from "@/lib/params";
 import { listCharges } from "@/server/charges";
 import { extrasForDate } from "@/server/list-extras";
+import { loadPlanMap } from "@/server/plan-map";
 import { latestConsents } from "@/server/owners";
 import { ActivateForm, AddContractItemForm, CancelContractButton, ContractMetaForm, RemoveContractItemButton, RevertToDraftButton } from "./contract-forms";
 import { visibleUser } from "@/lib/account-manager";
@@ -46,7 +47,7 @@ export default page(async function ContractPage({ params, searchParams }: { para
   const { contract: c, boat } = row;
   const today = todayRome();
 
-  const [chargeRows, moveRows, consents, itemRows, listExtras] = await Promise.all([
+  const [chargeRows, moveRows, consents, itemRows, listExtras, planMap] = await Promise.all([
     listCharges(ctx.marinaId, today, { contractId: id }),
     db
       .select({ id: movements.id, kind: movements.kind, at: movements.at, note: movements.note, userName: users.name })
@@ -57,6 +58,8 @@ export default page(async function ContractPage({ params, searchParams }: { para
     latestConsents(ctx.marinaId, c.ownerId),
     db.select().from(contractItems).where(and(eq(contractItems.contractId, id), eq(contractItems.marinaId, ctx.marinaId))),
     extrasForDate(ctx.marinaId, c.startDate),
+    // Per scegliere il posto auto dalla mappa aggiungendo una voce (solo se il contratto è ancora aperto).
+    c.status === "attivo" || c.status === "bozza" ? loadPlanMap(ctx.marinaId) : null,
   ]);
   const items = sortItems(itemRows);
   const itemsTotal = items.reduce((sum, it) => sum + it.amountCents, 0);
@@ -313,7 +316,15 @@ export default page(async function ContractPage({ params, searchParams }: { para
 
           {open && (
             <Card title="Aggiungi spazio o spesa">
-              <AddContractItemForm contractId={id} startDate={c.startDate} endDate={c.endDate} active={c.status === "attivo"} listExtras={listExtras} annualDefault={c.type === "annuale"} />
+              <AddContractItemForm
+                contractId={id}
+                startDate={c.startDate}
+                endDate={c.endDate}
+                active={c.status === "attivo"}
+                listExtras={listExtras}
+                annualDefault={c.type === "annuale"}
+                map={planMap}
+              />
             </Card>
           )}
 

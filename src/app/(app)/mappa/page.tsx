@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
 import { ArrowDownToLine, ArrowUpFromLine, Clock, Waves, Wrench } from "@/components/icons";
 import { page } from "@/components/page";
 import { ButtonLink, EmptyState, FilterTabs, PageHeader } from "@/components/ui";
 import { db } from "@/db";
-import { marinaPlanBases, marinas, planFeatures } from "@/db/schema";
+import { contractItems, contracts, marinaPlanBases, marinas, owners, parkingSpaces, planFeatures } from "@/db/schema";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { formatDateLong, isValidISODate, todayRome } from "@/lib/dates";
 import { one, qs, uuidOrNull, type SearchParams } from "@/lib/params";
@@ -94,7 +94,7 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
   const date = isValidISODate(one(sp.data)) ? one(sp.data) : today;
   const selectedId = uuidOrNull(sp.posto);
 
-  const [board, [plan], featureRows, [base]] = await Promise.all([
+  const [board, [plan], featureRows, [base], parkingRows, parkingTaken] = await Promise.all([
     getBoard(ctx.marinaId, date, today),
     db
       .select({ width: marinas.planWidth, height: marinas.planHeight, pxPerMeter: marinas.planPxPerMeter, version: marinas.planVersion })
@@ -106,7 +106,39 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
       .where(eq(planFeatures.marinaId, ctx.marinaId))
       .orderBy(asc(planFeatures.sortOrder)),
     db.select({ updatedAt: marinaPlanBases.updatedAt }).from(marinaPlanBases).where(eq(marinaPlanBases.marinaId, ctx.marinaId)),
+    // Posti auto sulla mappa e a chi sono assegnati nel giorno mostrato.
+    db
+      .select()
+      .from(parkingSpaces)
+      .where(and(eq(parkingSpaces.marinaId, ctx.marinaId), isNotNull(parkingSpaces.planX))),
+    db
+      .select({ id: contractItems.parkingSpaceId, owner: owners.displayName, number: contracts.number })
+      .from(contractItems)
+      .innerJoin(contracts, eq(contracts.id, contractItems.contractId))
+      .innerJoin(owners, eq(owners.id, contracts.ownerId))
+      .where(
+        and(
+          eq(contractItems.marinaId, ctx.marinaId),
+          isNotNull(contractItems.parkingSpaceId),
+          inArray(contracts.status, ["attivo", "concluso"]),
+          lte(contractItems.startDate, date),
+          gte(contractItems.endDate, date),
+        ),
+      ),
   ]);
+  const holder = new Map(parkingTaken.map((r) => [r.id, `di ${r.owner}${r.number ? ` (contratto ${r.number})` : ""}`]));
+  const parking = parkingRows.map((r) => ({
+    id: r.id,
+    code: r.code,
+    x: r.planX!,
+    y: r.planY!,
+    angle: r.planAngle ?? 0,
+    lengthCm: r.lengthCm,
+    widthCm: r.widthCm,
+    covered: r.covered,
+    state: !r.active ? ("fermo" as const) : holder.has(r.id) ? ("occupato" as const) : ("libero" as const),
+    note: !r.active ? "fuori servizio" : (holder.get(r.id) ?? "libero"),
+  }));
   const baseUrl = base ? `/pianta/base?v=${base.updatedAt.getTime()}` : null;
   const features = drawingOrder(featureRows);
   const services = features.filter((f) => f.kind === "servizio" && f.service);
@@ -140,7 +172,8 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
   const schemaBounds = drawing
     ? baseUrl
       ? { x: 0, y: 0, width: plan.width!, height: plan.height! }
-      : extendBounds(drawing.bounds, features, plan.width!, plan.height!)
+      : // I posti auto (spesso a terra, fuori dai pontili) devono restare dentro lo schema.
+        extendBounds(drawing.bounds, [...features, ...parking.map((p) => ({ points: [{ x: p.x, y: p.y }] }))], plan.width!, plan.height!)
     : null;
   const view = drawing && one(sp.vista) === "foto" ? "foto" : "schema";
   const vista = view === "foto" ? "foto" : null;
@@ -227,6 +260,7 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
                     imageUrl={`/pianta/immagine?v=${plan.version}`}
                     selectedId={selectedId}
                     hrefFor={hrefFor}
+                    parking={parking}
                   />
                 </PlanZoom>
                 {selected && (
@@ -248,6 +282,20 @@ export default page(async function MapPage({ searchParams }: { searchParams: Sea
                 )}
               </div>
               {!selected && <p className="mt-2 text-sm text-muted">Tocca un posto sulla mappa per vedere chi lo occupa e registrare arrivi e partenze.</p>}
+              {parking.length > 0 && (
+                <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted" aria-label="Posti auto">
+                  <span className="font-medium text-ink">Posti auto:</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <i className="inline-block h-3 w-4 rounded-sm border border-[#4f5f6f] bg-[#eef1f4]" aria-hidden="true" />
+                    {parking.filter((p) => p.state === "libero").length} liberi
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <i className="inline-block h-3 w-4 rounded-sm bg-[#4f5f6f]" aria-hidden="true" />
+                    {parking.filter((p) => p.state === "occupato").length} assegnati
+                  </span>
+                  <span>bordo continuo = coperto, tratteggiato = scoperto</span>
+                </p>
+              )}
               {services.length > 0 && (
                 <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm" aria-label="Servizi del porto">
                   {services.map((f) => (

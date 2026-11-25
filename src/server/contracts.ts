@@ -9,6 +9,7 @@ import { splitVat } from "@/lib/format";
 import { CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { occupiedUntil, splitInstalments } from "@/lib/pricing";
 import { DomainError } from "./errors";
+import { assertParkingFree, resolveParkingItems } from "./parking";
 
 export interface Actor {
   marinaId: string;
@@ -244,8 +245,9 @@ async function assertOwnBerth(tx: Tx, marinaId: string, berthId: string | null) 
 
 export async function createContract(tx: Tx, actor: Actor, input: ContractInput): Promise<{ id: string; number: string | null; fillsGap: boolean }> {
   if (input.endDate < input.startDate) throw new DomainError("La data di fine precede la data di inizio.", "endDate");
-  const items = input.items ?? [];
-  validateItems(items);
+  validateItems(input.items ?? []);
+  // Posti auto della mappa: del tipo giusto e, se il contratto nasce attivo, liberi nel periodo.
+  const items = await resolveParkingItems(tx, actor.marinaId, input.items ?? [], { occupy: input.status === "attivo" });
 
   const [owner] = await tx.select({ id: owners.id }).from(owners).where(and(eq(owners.id, input.ownerId), eq(owners.marinaId, actor.marinaId))).limit(1);
   if (!owner) throw new DomainError("Cliente non trovato.", "ownerId");
@@ -381,6 +383,9 @@ export async function activateContract(tx: Tx, actor: Actor, contractId: string,
   if (!c.berthId) throw new DomainError("Assegna un posto barca prima di attivare il contratto.");
   const [boat] = await tx.select().from(boats).where(eq(boats.id, c.boatId)).limit(1);
   await assertBerthUsable(tx, actor.marinaId, c.berthId, boat, c.startDate, c.occupiedUntil, c.id);
+  // Anche i posti auto della bozza vanno impegnati: devono essere ancora liberi.
+  const parked = await tx.select().from(contractItems).where(eq(contractItems.contractId, c.id));
+  await assertParkingFree(tx, actor.marinaId, parked, c.id);
   const year = yearOf(c.startDate);
   const { seq, number, fillsGap } = await assignContractNumber(tx, actor.marinaId, year);
   await tx.update(contracts).set({ status: "attivo", year, seq, number, updatedAt: new Date() }).where(eq(contracts.id, c.id));
@@ -397,6 +402,10 @@ export async function addContractItem(tx: Tx, actor: Actor, contractId: string, 
   if (c.status !== "bozza" && c.status !== "attivo") throw new DomainError("Il contratto è chiuso: non si possono aggiungere voci.");
   const existing = await tx.select().from(contractItems).where(eq(contractItems.contractId, c.id));
   validateItems([...existing, item]);
+  // Posto auto della mappa: tipo giusto, non doppio nel contratto e, se il contratto è attivo, libero nel periodo.
+  const resolved = await resolveParkingItems(tx, actor.marinaId, [...existing, item], { occupy: false });
+  item = resolved[resolved.length - 1];
+  if (c.status === "attivo") await assertParkingFree(tx, actor.marinaId, [item], c.id);
   const [created] = await tx
     .insert(contractItems)
     .values({ marinaId: actor.marinaId, contractId: c.id, ...item })

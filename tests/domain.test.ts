@@ -5,7 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import { db } from "@/db";
-import { berthCategories, berths, boats, charges, contractItems, contracts, ledgerEntries, ledgerImports, marinas, movements, owners, piers, priceListExtras, priceLists, rates, users } from "@/db/schema";
+import { berthCategories, berths, boats, charges, contractItems, contracts, ledgerEntries, ledgerImports, marinas, movements, owners, parkingSpaces, piers, priceListExtras, priceLists, rates, users } from "@/db/schema";
 import { addDays, todayRome } from "@/lib/dates";
 import { deletePayment, importLedger, registerPayment, undoLedgerImport } from "@/server/accounting";
 import {
@@ -191,6 +191,52 @@ describe.skipIf(!available)("regole del porto (database)", () => {
     expect(rows.map((r) => r.grossCents)).toEqual([33333, 33333, 33334]);
     expect(rows.map((r) => r.dueDate)).toEqual(["2030-01-31", "2030-05-31", "2030-09-30"]);
     expect(rows.every((r) => r.netCents + r.vatCents === r.grossCents)).toBe(true);
+  });
+
+  it("un posto auto della mappa si assegna una volta per periodo, solo nella voce del suo tipo e solo del proprio porto", async () => {
+    const [p1, p2] = await db
+      .insert(parkingSpaces)
+      .values([
+        { marinaId: a.marinaId, code: "P1", covered: false },
+        { marinaId: a.marinaId, code: "P2", covered: true, active: false },
+      ])
+      .returning({ id: parkingSpaces.id });
+    const [foreign] = await db.insert(parkingSpaces).values({ marinaId: b.marinaId, code: "P1", covered: false }).returning({ id: parkingSpaces.id });
+    const space = (id: string, kind: "auto_coperto" | "auto_scoperto", startDate: string, endDate: string) => ({
+      kind,
+      reference: null,
+      parkingSpaceId: id,
+      startDate,
+      endDate,
+      amountCents: 5000,
+    });
+    const feb = { type: "mensile" as const, startDate: "2033-02-01", endDate: "2033-02-28", instalments: { count: 1, firstDueDate: "2033-02-01", everyMonths: 1 } };
+    const mar = { type: "mensile" as const, boatId: a.otherBoatId, startDate: "2033-03-01", endDate: "2033-03-31", instalments: { count: 1, firstDueDate: "2033-03-01", everyMonths: 1 } };
+
+    // Il codice del posto auto va nel riferimento della voce (com'è nel contratto stampato).
+    const first = await create(a, { ...feb, items: [space(p1.id, "auto_scoperto", "2033-02-01", "2033-02-28")] });
+    const [item] = await db.select().from(contractItems).where(eq(contractItems.contractId, first.id));
+    expect([item.reference, item.parkingSpaceId]).toEqual(["P1", p1.id]);
+
+    // Già assegnato nei giorni che si sovrappongono; un posto coperto non va nella voce «scoperto»; fuori servizio non si assegna.
+    await expect(create(a, { ...mar, items: [space(p1.id, "auto_scoperto", "2033-02-20", "2033-03-31")] })).rejects.toThrow(/già assegnato/);
+    await expect(create(a, { ...mar, items: [space(p1.id, "auto_coperto", "2033-03-01", "2033-03-31")] })).rejects.toThrow(/scoperto/);
+    await expect(create(a, { ...mar, items: [space(p2.id, "auto_coperto", "2033-03-01", "2033-03-31")] })).rejects.toThrow(/fuori servizio/);
+    // Un posto auto di un altro porto non si trova.
+    await expect(create(a, { ...mar, items: [space(foreign.id, "auto_scoperto", "2033-03-01", "2033-03-31")] })).rejects.toThrow(/non trovato/);
+
+    // La bozza non impegna il posto auto, ma non si attiva finché è di un altro.
+    const draft = await create(a, { ...mar, status: "bozza", items: [space(p1.id, "auto_scoperto", "2033-02-25", "2033-03-31")] });
+    await expect(db.transaction((tx) => activateContract(tx, actor(a), draft.id, mar.instalments))).rejects.toThrow(/già assegnato/);
+
+    // Aggiungendo la voce a un contratto attivo vale la stessa regola; dal giorno dopo è libero.
+    await expect(
+      db.transaction((tx) => addContractItem(tx, actor(a), first.id, { ...space(p1.id, "auto_scoperto", "2033-02-10", "2033-02-12"), annual: false })),
+    ).rejects.toThrow(/compare due volte/);
+    await db.transaction((tx) => removeContractItem(tx, actor(a), item.id));
+    await db.transaction((tx) => activateContract(tx, actor(a), draft.id, mar.instalments));
+    const [taken] = await db.select().from(contractItems).where(eq(contractItems.contractId, draft.id));
+    expect(taken.reference).toBe("P1");
   });
 
   it("il listino ufficiale 2026 si carica con i prezzi della darsena C e ricaricandolo non duplica nulla", async () => {

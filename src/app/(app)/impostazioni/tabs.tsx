@@ -4,6 +4,7 @@ const TABS = [
   { key: "porto", href: "/impostazioni", label: "Porto" },
   { key: "pontili", href: "/impostazioni/pontili", label: "Pontili e posti" },
   { key: "pianta", href: "/impostazioni/pianta", label: "Mappa del porto" },
+  { key: "postiauto", href: "/impostazioni/posti-auto", label: "Posti auto" },
   { key: "categorie", href: "/impostazioni/categorie", label: "Categorie" },
   { key: "utenti", href: "/impostazioni/utenti", label: "Utenti" },
   { key: "registro", href: "/impostazioni/registro", label: "Registro" },

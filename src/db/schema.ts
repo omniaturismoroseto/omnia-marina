@@ -585,6 +585,31 @@ export const berths = pgTable(
   (t) => [uniqueIndex("berths_marina_code_uq").on(t.marinaId, t.code), index("berths_pier_idx").on(t.pierId)],
 );
 
+// Posti auto riservati del porto: si dispongono sulla mappa come i posti barca e si assegnano nelle voci «posto auto» dei contratti.
+export const parkingSpaces = pgTable(
+  "parking_spaces",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    code: text("code").notNull(),
+    // Coperto o scoperto: corrisponde alla voce del contratto (auto_coperto / auto_scoperto).
+    covered: boolean("covered").notNull().default(false),
+    lengthCm: integer("length_cm").notNull().default(500),
+    widthCm: integer("width_cm").notNull().default(250),
+    // Fuori servizio: resta sulla mappa ma non si assegna.
+    active: boolean("active").notNull().default(true),
+    notes: text("notes"),
+    // Come per i posti barca: centro in pixel della foto e rotazione in gradi (a 0° il lato lungo è verticale); vuoti = non sulla mappa.
+    planX: real("plan_x"),
+    planY: real("plan_y"),
+    planAngle: real("plan_angle"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("parking_spaces_marina_code_uq").on(t.marinaId, t.code)],
+);
+
 // ───────────────────────── Tariffe ─────────────────────────
 
 export const priceLists = pgTable(
@@ -737,8 +762,10 @@ export const contractItems = pgTable(
       .notNull()
       .references(() => contracts.id, { onDelete: "cascade" }),
     kind: contractItemKindEnum("kind").notNull(),
-    // Numero del posto auto o altro riferimento.
+    // Numero del posto auto o altro riferimento (per i posti auto della mappa, il loro codice al momento della scelta).
     reference: text("reference"),
+    // Posto auto della mappa assegnato con questa voce (solo auto_coperto / auto_scoperto); vuoto = scritto a mano.
+    parkingSpaceId: uuid("parking_space_id").references(() => parkingSpaces.id, { onDelete: "restrict" }),
     // Periodo per gli spazi; vuoto per le spese fisse. annual: spazio preso per l'anno solare (fino al 31 dicembre)
     // (la fine è il giorno prima dello stesso giorno dell'anno dopo), come si stampa nel contratto.
     startDate: date("start_date"),
@@ -752,7 +779,7 @@ export const contractItems = pgTable(
     chargeId: uuid("charge_id").references(() => charges.id, { onDelete: "set null" }),
     createdAt: createdAt(),
   },
-  (t) => [index("contract_items_contract_idx").on(t.contractId)],
+  (t) => [index("contract_items_contract_idx").on(t.contractId), index("contract_items_parking_idx").on(t.parkingSpaceId)],
 );
 
 export const movements = pgTable(

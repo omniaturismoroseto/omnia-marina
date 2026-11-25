@@ -7,6 +7,8 @@ import { annualEnd, isValidISODate } from "@/lib/dates";
 import { formatMoney, moneyInput } from "@/lib/format";
 import { CONTRACT_ITEM_LABEL } from "@/lib/labels";
 import type { ListExtra } from "@/server/list-extras";
+import type { PlanMapData } from "@/server/plan-map";
+import { ParkingPicker } from "../parking-picker";
 import {
   activateContractAction,
   addContractItemAction,
@@ -96,8 +98,11 @@ export function AddContractItemForm({
   active,
   listExtras,
   annualDefault,
+  map = null,
 }: {
   contractId: string;
+  // Mappa del porto, per scegliere il posto auto dalla mappa.
+  map?: PlanMapData | null;
   startDate: string;
   endDate: string;
   active: boolean;
@@ -114,6 +119,7 @@ export function AddContractItemForm({
   const [annual, setAnnual] = useState(annualDefault);
   const [from, setFrom] = useState(startDate);
   const [to, setTo] = useState(annualDefault ? annualEnd(startDate) : endDate);
+  const [parking, setParking] = useState("");
   const period = itemHasPeriod(kind);
 
   function changeFrom(value: string) {
@@ -145,6 +151,7 @@ export function AddContractItemForm({
     setAnnual(annualDefault);
     setFrom(startDate);
     setTo(annualDefault ? annualEnd(startDate) : endDate);
+    setParking("");
   }
 
   // Dopo un salvataggio riuscito il modulo si svuota: anche le scelte tornano quelle iniziali.
@@ -178,7 +185,21 @@ export function AddContractItemForm({
         )}
         {period && (
           <>
-            {(kind === "auto_coperto" || kind === "auto_scoperto") && <Field name="reference" label="Numero del posto auto" />}
+            {(kind === "auto_coperto" || kind === "auto_scoperto") && (
+              // Il posto auto della mappa libero nel periodo (escluso questo contratto); senza posti auto, il numero a mano.
+              <ParkingPicker
+                key={kind}
+                name="parkingSpaceId"
+                covered={kind === "auto_coperto"}
+                from={from}
+                to={to}
+                contractId={contractId}
+                value={parking}
+                onChange={setParking}
+                map={map}
+                fallback={<Field name="reference" label="Numero del posto auto" />}
+              />
+            )}
             <div className="grid grid-cols-2 gap-3">
               <Field name="startDate" label="Dal" type="date" value={from} onChange={(e) => changeFrom(e.target.value)} required />
               <Field name="endDate" label="Al" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} readOnly={annual} required />

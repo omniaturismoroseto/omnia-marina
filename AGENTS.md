@@ -88,6 +88,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   nella scheda o il tratto aperto. I comandi di ogni tratto stanno in un menu solo (`UnitMenu`). Bordo dei posti nell'editor: 0,08 m.
   In Pontili e posti i moduli lunghi vanno a capo a blocchi (`BerthStrip`), mai barra di scorrimento.
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
+- Posti auto riservati (Impostazioni → Posti auto, `/impostazioni/posti-auto`): tabella `parking_spaces` (codice, coperto, misure,
+  in servizio, `plan_x/plan_y/plan_angle` in pixel della foto come i posti barca); azioni in `src/server/parking-actions.ts`, editor
+  sulla mappa `parking-editor.tsx` (posa, «Metti in fila» con `layoutPier`, trascina, ruota). Nei contratti la voce `auto_coperto` /
+  `auto_scoperto` può avere `contract_items.parking_space_id`: `ParkingPicker` (`src/app/(app)/contratti/parking-picker.tsx`, elenco +
+  «Scegli dalla mappa») nel nuovo contratto e in «Aggiungi spazio o spesa». Regole in `src/server/parking.ts`: tipo giusto, il codice
+  va in `reference` (stampa), impegnato da contratti attivi o conclusi nel periodo della voce (date comprese), bozze no; controllato in
+  `createContract`, `activateContract`, `addContractItem`. Sulla mappa `ParkingMarks` (`src/app/(app)/mappa/parking-marks.tsx`) in `PlanView`.
 - Riquadro del posto sulla mappa (`src/app/(app)/mappa/berth-panel.tsx`): ufficio e direzione vedono la scheda con foto della barca,
   proprietario con pulsante per chiamare e barra del periodo; la banchina la fascia dello stato e righe grandi. Calcoli puri in
   `src/lib/berth-panel.ts`. Foto della barca in `boat_photos` (`boats.has_photo`/`photo_version`), servita e caricata da

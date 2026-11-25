@@ -225,6 +225,13 @@
       "when": 1795551770535,
       "tag": "0031_nomi_dei_moduli",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1795588979335,
+      "tag": "0032_posti_auto",
+      "breakpoints": true
     }
   ]
 }

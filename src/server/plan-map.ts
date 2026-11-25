@@ -1,7 +1,7 @@
 import "server-only";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { berths, marinaPlanBases, marinas, pierSections, piers, planFeatures } from "@/db/schema";
+import { berths, marinaPlanBases, marinas, parkingSpaces, pierSections, piers, planFeatures } from "@/db/schema";
 import type { DrawingPier } from "@/lib/plan-drawing";
 import { drawingOrder, type PlanFeature } from "@/lib/plan-features";
 import { planUnits, traceFromColumns } from "@/lib/plan-units";
@@ -29,10 +29,25 @@ export interface PlanMapData {
   features: PlanFeature[];
   piers: DrawingPier[];
   berths: PlanMapBerth[];
+  /** Posti auto messi sulla mappa (Impostazioni → Posti auto). */
+  parking: PlanMapParking[];
+}
+
+/** Posto auto disposto sulla mappa. */
+export interface PlanMapParking {
+  id: string;
+  code: string;
+  covered: boolean;
+  active: boolean;
+  x: number;
+  y: number;
+  angle: number;
+  lengthCm: number;
+  widthCm: number;
 }
 
 export async function loadPlanMap(marinaId: string): Promise<PlanMapData | null> {
-  const [[plan], pierRows, sectionRows, berthRows, featureRows, [base]] = await Promise.all([
+  const [[plan], pierRows, sectionRows, berthRows, featureRows, [base], parkingRows] = await Promise.all([
     db.select({ width: marinas.planWidth, height: marinas.planHeight, pxPerMeter: marinas.planPxPerMeter }).from(marinas).where(eq(marinas.id, marinaId)),
     db.select().from(piers).where(eq(piers.marinaId, marinaId)).orderBy(asc(piers.sortOrder), asc(piers.code)),
     db.select().from(pierSections).where(eq(pierSections.marinaId, marinaId)).orderBy(asc(pierSections.sortOrder)),
@@ -57,6 +72,7 @@ export async function loadPlanMap(marinaId: string): Promise<PlanMapData | null>
       .where(eq(planFeatures.marinaId, marinaId))
       .orderBy(asc(planFeatures.sortOrder)),
     db.select({ updatedAt: marinaPlanBases.updatedAt }).from(marinaPlanBases).where(eq(marinaPlanBases.marinaId, marinaId)),
+    db.select().from(parkingSpaces).where(eq(parkingSpaces.marinaId, marinaId)),
   ]);
   if (!plan || plan.width === null || plan.height === null || plan.pxPerMeter === null) return null;
   const placed = berthRows.flatMap((b) => (b.planX === null || b.planY === null ? [] : [{ ...b, planX: b.planX, planY: b.planY }]));
@@ -84,5 +100,10 @@ export async function loadPlanMap(marinaId: string): Promise<PlanMapData | null>
       berths: unit.berths.map((b) => ({ id: b.id, side: b.side, x: b.planX, y: b.planY, angle: b.planAngle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm })),
     })),
     berths: placed.map(({ id, code, planX, planY, planAngle, lengthCm, beamCm }) => ({ id, code, planX, planY, planAngle, lengthCm, beamCm })),
+    parking: parkingRows.flatMap((r) =>
+      r.planX !== null && r.planY !== null
+        ? [{ id: r.id, code: r.code, covered: r.covered, active: r.active, x: r.planX, y: r.planY, angle: r.planAngle ?? 0, lengthCm: r.lengthCm, widthCm: r.widthCm }]
+        : [],
+    ),
   };
 }
