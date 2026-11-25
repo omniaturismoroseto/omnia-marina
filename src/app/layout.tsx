@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/figtree";
 import "./globals.css";
+import { SamsungDarkNotice } from "@/components/samsung-dark-notice";
 
 export const metadata: Metadata = {
   title: { default: "Omnia Marina Gestionale", template: "%s · Omnia Marina" },
@@ -22,7 +23,11 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="it" className="h-full antialiased">
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        {children}
+        {/* Solo su Samsung Internet in tema scuro: spiega come togliere lo scurimento automatico, che il sito non può spegnere. */}
+        <SamsungDarkNotice />
+      </body>
     </html>
   );
 }

@@ -107,7 +107,7 @@ export function buildDrawing(piers: DrawingPier[], pxPerMeter: number): Drawing 
         dirOf.set(b.id, dir);
         stern.set(b.id, alongside.has(b.id) || Math.sign(dot(v, n)) * dir >= 0 ? 1 : -1);
       }
-      // Bordo del posto verso il pontile: la poppa (di punta) o il fianco (all'inglese).
+      // Bordo del posto verso il pontile: la poppa (di prua) o il fianco (all'inglese).
       const sternAt = (b: DrawingBerth) => {
         const reach = alongside.has(b.id) ? b.beamCm / 200 : (Math.abs(dot(longAxis(b.angle), n)) * b.lengthCm) / 200;
         return across(b) + dirOf.get(b.id)! * reach * m;

@@ -34,7 +34,7 @@ export function distance(a: Point, b: Point): number {
 /** Come stanno le barche rispetto al pontile: «punta» = perpendicolari, con la poppa verso il pontile; «inglese» = di fianco, una dietro l'altra. */
 export type Mooring = "punta" | "inglese";
 
-export const MOORING_LABEL: Record<Mooring, string> = { punta: "di punta", inglese: "all'inglese" };
+export const MOORING_LABEL: Record<Mooring, string> = { punta: "di prua", inglese: "all'inglese" };
 
 /** Direzione del lato lungo di un posto (a 0° è verticale). */
 export function longAxis(angle: number): Point {
@@ -70,10 +70,10 @@ const median = (values: number[]) => {
 };
 
 /**
- * Direzione di una fila di posti dove sono. Dall'orientamento medio (sugli angoli doppi: 10° e 190° valgono uguale) i posti di punta
+ * Direzione di una fila di posti dove sono. Dall'orientamento medio (sugli angoli doppi: 10° e 190° valgono uguale) i posti di prua
  * stanno in una o due file di traverso al loro lato lungo; all'inglese stanno uno dietro l'altro, lungo il lato lungo. Si contano i
  * gruppi di centri nelle due direzioni (separati da più di mezza larghezza di traverso, da più di mezza lunghezza per il lungo): la
- * fila va dove i posti si susseguono, cioè dove i gruppi sono di più; a pari merito, di punta.
+ * fila va dove i posti si susseguono, cioè dove i gruppi sono di più; a pari merito, di prua.
  */
 export function rowAxis(
   berths: { x: number; y: number; angle: number; lengthCm: number; beamCm: number }[],
@@ -100,7 +100,7 @@ export function rowAxis(
 
 /**
  * Dispone i posti di un pontile lungo la linea tracciata sulla foto, dalla radice (a) alla testata (b).
- * I posti si distribuiscono a intervalli regolari secondo la loro posizione: perpendicolari al pontile (di punta) o, all'inglese,
+ * I posti si distribuiscono a intervalli regolari secondo la loro posizione: perpendicolari al pontile (di prua) o, all'inglese,
  * di fianco al pontile, una barca dietro l'altra. Il lato "sx" a sinistra di chi cammina da a verso b, il lato "dx" a destra
  * (al contrario con `flip`).
  */
@@ -125,7 +125,7 @@ export function layoutPier(
 
   return berths.map((berth) => {
     const along = ((berth.position + 0.5) / slots) * length;
-    // Di punta il posto sporge di metà lunghezza, all'inglese di metà larghezza.
+    // Di prua il posto sporge di metà lunghezza, all'inglese di metà larghezza.
     const offset = (pierWidthM / 2 + (alongside ? berth.beamCm : berth.lengthCm) / 200) * pxPerMeter;
     // flip: i posti finiscono dall'altro lato della linea (es. banchina tracciata dalla parte "sbagliata").
     const sign = (berth.side === "sx" ? 1 : -1) * (flip ? -1 : 1);

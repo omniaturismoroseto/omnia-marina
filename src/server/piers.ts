@@ -271,7 +271,7 @@ export async function arrangeUnit(tx: Tx, marinaId: string, pierId: string, sect
   const placed = unit.flatMap((b) => (b.x !== null && b.y !== null ? [{ ...b, x: b.x, y: b.y, angle: b.angle ?? 0 }] : []));
   const base = saved ?? estimateTrace(placed, m);
   if (!base) return { count: unit.length, onPlan: false };
-  // L'ormeggio resta quello dei posti già disposti (di punta o all'inglese, rispetto alla linea).
+  // L'ormeggio resta quello dei posti già disposti (di prua o all'inglese, rispetto alla linea).
   const baseLen = Math.hypot(base.b.x - base.a.x, base.b.y - base.a.y) || 1;
   const mooring = mooringAlong(placed, { x: (base.b.x - base.a.x) / baseLen, y: (base.b.y - base.a.y) / baseLen });
   // Con più posti per lato di prima (es. tutti da una parte) la linea si allunga quanto serve, per non sovrapporli.

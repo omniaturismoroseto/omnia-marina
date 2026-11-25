@@ -176,7 +176,7 @@ export function structureWidthM(kind: StructureKind): number {
 
 /**
  * I posti di una struttura confermata: numerati di seguito (prima il lato sinistro, poi il destro),
- * con ogni lato che parte dalla radice, e già disposti sulla foto lungo la linea a → b (di punta o all'inglese).
+ * con ogni lato che parte dalla radice, e già disposti sulla foto lungo la linea a → b (di prua o all'inglese).
  */
 export function planBerths(
   code: string,

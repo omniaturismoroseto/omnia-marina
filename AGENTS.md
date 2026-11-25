@@ -74,7 +74,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   trascinamento, frecce, rotazione (attorno al centro) e «Lunghezza ±1/±5 m» (`stretch`, scala le posizioni lungo il pontile); la linea
   salvata segue solo con «pontile o tratto» e si risalva con la pianta.
   Sotto i posti l'editor parte dalla base disegnata (senza base, dallo schema `buildDrawing` calcolato dal vivo coi posti dell'editor);
-  «Foto dal vero» si sceglie. Ormeggio: «di punta» o «all'inglese» (`Mooring`, `layoutPier(..., mooring)` in `src/lib/plan.ts`), scelto
+  «Foto dal vero» si sceglie. Ormeggio: «di prua» o «all'inglese» (`Mooring`, `layoutPier(..., mooring)` in `src/lib/plan.ts`), scelto
   in «Disponi un pontile», «Nuovo pontile» e «Ridisegna con una linea»; non si salva, si riconosce dai posti (`isAlongside` rispetto alla
   linea, `mooringAlong`, `rowAxis` senza linea) in schema, «Allinea in fila», allungamento, posti nuovi e ridisposizione dei tratti.
   Cambiare ormeggio a posti già disposti (`changeMooring` nell'editor, dal riquadro del gruppo o da «Disponi un pontile») li ridispone
@@ -86,6 +86,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   «Mostra sulla mappa» nella scheda del pontile apre sotto l'editor (`loadPlanEditor` in `src/server/plan-editor.ts`, condiviso con
   Mappa del porto) inquadrato sul pontile o tratto (`PlanEditor zoomTo`, `PlanZoom focus`); in giallo (`highlightIds`) i posti scelti
   nella scheda o il tratto aperto. I comandi di ogni tratto stanno in un menu solo (`UnitMenu`). Bordo dei posti nell'editor: 0,08 m.
+  Viceversa i posti scelti sulla mappa (`PlanEditor onSelectionChange`) sono contornati in arancio nella scheda (`mapPickedIds`); la
+  scheda passa al loro pontile, la mappa resta inquadrata (`map.zoomPierId`). Riposizionando posti l'editor usa `placePicked(..., modules)`:
+  «keep» (cambio di ormeggio, allinea: i posti all'inglese, distanziati, per vicinanza sembrerebbero staccati), «one» (ridisegna con una
+  linea), «recognize»; «Rimetti in un modulo solo» per i pontili già spezzati. Nell'interfaccia l'ormeggio è «di prua» / «all'inglese».
   In Pontili e posti i moduli lunghi vanno a capo a blocchi (`BerthStrip`), mai barra di scorrimento.
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
 - Posti auto riservati (Impostazioni → Posti auto, `/impostazioni/posti-auto`): tabella `parking_spaces` (codice, coperto, misure,
@@ -95,6 +99,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   «Scegli dalla mappa») nel nuovo contratto e in «Aggiungi spazio o spesa». Regole in `src/server/parking.ts`: tipo giusto, il codice
   va in `reference` (stampa), impegnato da contratti attivi o conclusi nel periodo della voce (date comprese), bozze no; controllato in
   `createContract`, `activateContract`, `addContractItem`. Sulla mappa `ParkingMarks` (`src/app/(app)/mappa/parking-marks.tsx`) in `PlanView`.
+- Tema scuro del telefono: l'app è solo chiara (`colorScheme: "light dark"` + gli stessi colori nel blocco `prefers-color-scheme: dark`).
+  Samsung Internet scurisce lo stesso con un suo filtro che il sito non può spegnere: `SamsungDarkNotice` (`src/components/samsung-dark-notice.tsx`,
+  solo su Samsung Internet in tema scuro, una volta) spiega di spegnere «Modalità scura» del browser o attivare «Usa il tema scuro dei siti web».
 - Riquadro del posto sulla mappa (`src/app/(app)/mappa/berth-panel.tsx`): ufficio e direzione vedono la scheda con foto della barca,
   proprietario con pulsante per chiamare e barra del periodo; la banchina la fascia dello stato e righe grandi. Calcoli puri in
   `src/lib/berth-panel.ts`. Foto della barca in `boat_photos` (`boats.has_photo`/`photo_version`), servita e caricata da
