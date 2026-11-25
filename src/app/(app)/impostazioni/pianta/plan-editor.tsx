@@ -67,6 +67,7 @@ export function PlanEditor({
   features = [],
   zoomTo,
   highlightIds,
+  onSelectionChange,
 }: {
   imageUrl: string;
   // Base disegnata (stessa inquadratura della foto): si può mettere sotto i posti al posto della foto.
@@ -96,6 +97,8 @@ export function PlanEditor({
   zoomTo?: string[];
   /** Posti da evidenziare in giallo (es. i posti scelti o il tratto aperto in Pontili e posti). */
   highlightIds?: string[];
+  /** I posti scelti sulla mappa (il posto toccato e ciò che si sposta con lui, o i posti scelti uno per uno), per mostrarli altrove. */
+  onSelectionChange?: (ids: string[]) => void;
 }) {
   // I moduli mancanti si riconoscono all'apertura dalle posizioni salvate, poi restano fissi (si salvano con la pianta).
   const [berths, setBerths] = useState(() => withModules(initialBerths, initialPxPerMeter, width));
@@ -103,7 +106,7 @@ export function PlanEditor({
   const [under, setUnder] = useState<"foto" | "base">(() =>
     baseUrl || (initialPxPerMeter && initialBerths.some((b) => b.x !== null)) ? "base" : "foto",
   );
-  // Ormeggio con cui si dispongono i posti tracciando una linea: di punta (perpendicolari) o all'inglese (di fianco).
+  // Ormeggio con cui si dispongono i posti tracciando una linea: di prua (perpendicolari) o all'inglese (di fianco).
   const [mooring, setMooring] = useState<Mooring>("punta");
   const [pxPerMeter, setPxPerMeter] = useState(initialPxPerMeter);
   const [tool, setTool] = useState<Tool>(
@@ -230,6 +233,15 @@ export function PlanEditor({
   const pickedPiers = new Set(pickedBerths.map((b) => b.realPierId ?? b.pierId));
   const pickedUnits = new Set(pickedBerths.map((b) => b.pierId));
   const groupIds = new Set(group.map((b) => b.id));
+  // Chi usa l'editor (Pontili e posti) mostra gli stessi posti scelti anche fuori dalla mappa.
+  const selectionKey = [...new Set([...groupIds, ...(selectedId ? [selectedId] : []), ...(moveMode === "scelti" ? picked : [])])].sort().join(",");
+  const onSelectionRef = useRef(onSelectionChange);
+  useEffect(() => {
+    onSelectionRef.current = onSelectionChange;
+  });
+  useEffect(() => {
+    onSelectionRef.current?.(selectionKey ? selectionKey.split(",") : []);
+  }, [selectionKey]);
   const selectedPier = selected
     ? piers.find((p) => p.id === selected.pierId)
     : undefined;
@@ -304,16 +316,30 @@ export function PlanEditor({
   }
 
   // Posti scelti: nuove posizioni (il modulo si riconosce di nuovo, sono in fila).
-  function placePicked(placements: { id: string; x: number; y: number; angle: number }[], message: string) {
+  // modules: «keep» = ogni posto resta nel suo modulo (cambio di ormeggio, allineamento: i posti all'inglese, distanziati lungo il
+  // pontile, per vicinanza sembrerebbero tutti staccati); «one» = i posti diventano un modulo solo (ridisegnati lungo una linea);
+  // «recognize» = il modulo si riconosce di nuovo dalla vicinanza.
+  function placePicked(
+    placements: { id: string; x: number; y: number; angle: number }[],
+    message: string,
+    modules: "keep" | "one" | "recognize" = "recognize",
+  ) {
     if (placements.length === 0) return;
     const byId = new Map(placements.map((pl) => [pl.id, pl]));
-    setBerths((list) =>
-      withModules(
-        list.map((b) => (byId.has(b.id) ? { ...b, ...byId.get(b.id)!, module: null } : b)),
-        pxPerMeter,
-        width,
-      ),
-    );
+    setBerths((list) => {
+      // Un modulo nuovo per struttura (i numeri dei moduli valgono dentro la struttura).
+      const fresh = new Map<string, number>();
+      const newModule = (unit: string) => {
+        if (!fresh.has(unit)) fresh.set(unit, nextModule(list, unit));
+        return fresh.get(unit)!;
+      };
+      const moved = list.map((b) => {
+        if (!byId.has(b.id)) return b;
+        const mod = modules === "one" ? newModule(b.pierId) : modules === "keep" ? (b.module ?? newModule(b.pierId)) : null;
+        return { ...b, ...byId.get(b.id)!, module: mod };
+      });
+      return withModules(moved, pxPerMeter, width);
+    });
     setDirty(true);
     setNotice({ ok: true, message });
   }
@@ -331,10 +357,11 @@ export function PlanEditor({
         pxPerMeter,
       ),
       `${list.length} posti rimessi in fila. Se serve, ritocca e salva la pianta.`,
+      "keep",
     );
   }
 
-  // Ormeggio di un gruppo di posti già disposti: «di punta» o «all'inglese» rispetto alla linea del pontile.
+  // Ormeggio di un gruppo di posti già disposti: «di prua» o «all'inglese» rispetto alla linea del pontile.
   function mooringOf(list: EditorBerth[]): Mooring | null {
     const placed = list.filter((b) => b.x !== null && b.y !== null);
     if (!pxPerMeter || placed.length === 0) return null;
@@ -374,7 +401,8 @@ export function PlanEditor({
       placements,
       next === "inglese"
         ? `${placements.length} posti ormeggiati all'inglese, di fianco al pontile. Se sono dalla parte sbagliata premi «Inverti i lati»; poi salva la pianta.`
-        : `${placements.length} posti ormeggiati di punta. Se serve, ritocca e salva la pianta.`,
+        : `${placements.length} posti ormeggiati di prua. Se serve, ritocca e salva la pianta.`,
+      "keep",
     );
     if (unitId) {
       setTraces((all) => ({ ...all, [unitId]: { a: trace.a, b: trace.b, widthM: trace.widthM } }));
@@ -396,7 +424,7 @@ export function PlanEditor({
       how,
     );
     setPickedLine({ a, b, flip, mooring: how });
-    placePicked(placements, `${list.length} posti ridisegnati lungo la linea. Se sono dalla parte sbagliata premi «Inverti il lato».`);
+    placePicked(placements, `${list.length} posti ridisegnati lungo la linea. Se sono dalla parte sbagliata premi «Inverti il lato».`, "one");
   }
 
   function chooseTool(next: Tool) {
@@ -684,7 +712,7 @@ export function PlanEditor({
   // Allunga (metri > 0) o accorcia il gruppo scelto lungo il pontile: cambia la distanza tra i posti, non le loro misure.
   function stretch(meters: number) {
     if (!selected || !pxPerMeter || group.length < 2) return;
-    // Direzione del pontile dai posti: di traverso al lato lungo (di punta) o lungo il lato lungo (all'inglese).
+    // Direzione del pontile dai posti: di traverso al lato lungo (di prua) o lungo il lato lungo (all'inglese).
     const { d } = rowAxis(group.map((b) => ({ x: b.x!, y: b.y!, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm })), pxPerMeter);
     const proj = group.map((b) => b.x! * d.x + b.y! * d.y);
     const lo = Math.min(...proj);
@@ -790,7 +818,7 @@ export function PlanEditor({
     });
   }
 
-  // Scelta dell'ormeggio: di punta (perpendicolari, poppa al pontile) o all'inglese (di fianco, una barca dietro l'altra).
+  // Scelta dell'ormeggio: di prua (perpendicolari, poppa al pontile) o all'inglese (di fianco, una barca dietro l'altra).
   const mooringPicker = (value: Mooring, onChange: (v: Mooring) => void, id: string) => (
     <div className="grid grid-cols-2 gap-1 rounded-md border border-line bg-white p-0.5 text-sm" role="group" aria-label="Ormeggio" id={id}>
       {(["punta", "inglese"] as const).map((v) => (
@@ -801,7 +829,7 @@ export function PlanEditor({
           onClick={() => onChange(v)}
           className={`rounded px-2 py-1.5 font-medium ${value === v ? "bg-ink text-white" : "text-ink hover:bg-line-soft"}`}
         >
-          {v === "punta" ? "Di punta" : "All'inglese"}
+          {v === "punta" ? "Di prua" : "All'inglese"}
         </button>
       ))}
     </div>
@@ -1553,6 +1581,30 @@ export function PlanEditor({
                     <p className="hint mt-1">
                       Raddrizza {moveMode === "modulo" ? "il modulo" : "il pontile"} dove si trova: stessa linea, stesso angolo, stessa
                       distanza tra i posti, in ordine di codice.
+                    </p>
+                  </div>
+                )}
+                {moveMode === "pontile" && group.length > 1 && new Set(group.map((b) => b.module)).size > 1 && (
+                  <div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        const ids = new Set(group.map((b) => b.id));
+                        const unit = selected.pierId;
+                        setBerths((list) => {
+                          const mod = nextModule(list, unit);
+                          return list.map((b) => (ids.has(b.id) ? { ...b, module: mod } : b));
+                        });
+                        setDirty(true);
+                        setNotice({ ok: true, message: `${ids.size} posti ora sono un modulo solo. Salva la pianta per tenerlo.` });
+                      }}
+                    >
+                      Rimetti in un modulo solo
+                    </button>
+                    <p className="hint mt-1">
+                      Il pontile è diviso in {new Set(group.map((b) => b.module)).size} moduli: se è un pezzo unico (per esempio dopo il cambio di
+                      ormeggio) riuniscili.
                     </p>
                   </div>
                 )}

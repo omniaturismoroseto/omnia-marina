@@ -50,6 +50,7 @@ export function PierDetail({
   mapUnitId,
   onShowMap,
   onPickedChange,
+  mapPickedIds = [],
   found,
   isFirst,
   isLast,
@@ -71,6 +72,8 @@ export function PierDetail({
   onShowMap?: (unitId: string | null) => void;
   /** I posti scelti con «Scegli più posti», per evidenziarli sulla mappa aperta sotto. */
   onPickedChange?: (ids: string[]) => void;
+  /** Posti scelti sulla mappa aperta sotto: nella striscia sono contornati in arancio, come sulla mappa. */
+  mapPickedIds?: string[];
   /** Posto trovato con «Trova un posto»: si evidenzia. */
   found: string | null;
   isFirst: boolean;
@@ -92,6 +95,8 @@ export function PierDetail({
   const menuRef = useRef<HTMLDivElement>(null);
 
   const selected = all.filter((b) => picked.has(b.id));
+  // Codici dei posti di questo pontile scelti sulla mappa aperta sotto.
+  const mapCodes = all.filter((b) => mapPickedIds.includes(b.id)).map((b) => b.code);
   const c = stateCounts(all);
   const multi = units.some((u) => u.sectionId);
   const byCategory = categories.map((cat) => ({ cat, n: all.filter((b) => b.categoryId === cat.id).length })).filter((x) => x.n > 0);
@@ -343,6 +348,16 @@ export function PierDetail({
 
         {all.length === 0 && !add && <p className="text-sm text-muted">Questo pontile non ha ancora posti: usa «Aggiungi posti».</p>}
 
+        {mapCodes.length > 0 && (
+          <p className="flex flex-wrap items-center gap-2 rounded-md bg-[#fbe9e2] px-3 py-2 text-sm text-ink" aria-live="polite">
+            <i className="inline-block h-3 w-4 rounded-sm border-2 border-[#d4502a]" aria-hidden="true" />
+            Scelti sulla mappa:{" "}
+            <b className="tabular-nums">
+              {mapCodes.length === 1 ? `il posto ${mapCodes[0]}` : `${mapCodes.length} posti (${mapCodes.length > 8 ? `${mapCodes[0]} … ${mapCodes[mapCodes.length - 1]}` : mapCodes.join(", ")})`}
+            </b>
+          </p>
+        )}
+
         {/* Posti, tratto per tratto */}
         {units.map((u) => {
           const uc = stateCounts(u.berths);
@@ -428,6 +443,7 @@ export function PierDetail({
                 selecting={selecting}
                 found={found}
                 onBerth={onBerth}
+                mapPicked={mapPickedIds}
                 pierId={pier.id}
                 sectionId={u.sectionId}
                 moduleNames={moduleNames}
@@ -600,6 +616,7 @@ function BerthStrip({
   selecting,
   found,
   onBerth,
+  mapPicked = [],
   pierId,
   sectionId,
   moduleNames,
@@ -609,6 +626,7 @@ function BerthStrip({
   selecting: boolean;
   found: string | null;
   onBerth: (e: MouseEvent, b: ManagerBerth) => void;
+  mapPicked?: string[];
   pierId: string;
   sectionId: string | null;
   moduleNames: Record<string, string>;
@@ -677,7 +695,7 @@ function BerthStrip({
                       title={`${b.code} · ${STATE_LABEL[b.state]}${b.occupant ? ` · ${b.occupant.boatName}` : ""}`}
                       style={{ gridColumn: (column % cols) + 1, gridRow: row }}
                       className={`relative flex h-10 min-w-0 items-center justify-center overflow-hidden rounded-md border px-0.5 text-[13px] font-semibold tabular-nums transition hover:-translate-y-px hover:shadow ${STATE_CELL[b.state]} ${
-                        on ? "ring-2 ring-buoy ring-offset-1" : ""
+                        on ? "ring-2 ring-buoy ring-offset-1" : mapPicked.includes(b.id) ? "ring-[3px] ring-[#d4502a] ring-offset-1" : ""
                       } ${found === b.id ? "animate-pulse ring-2 ring-buoy ring-offset-2" : ""}`}
                     >
                       {b.code}

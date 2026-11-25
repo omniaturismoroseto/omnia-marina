@@ -185,7 +185,7 @@ const proposalsInput = z.object({
         kind: z.enum(["pontile", "banchina"]),
         a: pointSchema,
         b: pointSchema,
-        // Come si ormeggia: di punta (predefinito) o all'inglese, di fianco al pontile.
+        // Come si ormeggia: di prua (predefinito) o all'inglese, di fianco al pontile.
         mooring: z.enum(["punta", "inglese"]).optional(),
         sides: z
           .array(z.object({ side: z.enum(["sx", "dx"]), count: z.number().int().min(1).max(MAX_BERTHS_PER_SIDE), categoryId: z.uuid() }))

@@ -50,7 +50,11 @@ export function PiersManager({
   const drag = useRef<{ id: string } | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   // Mappa aperta sotto la scheda: tutto il pontile (null) o una sua struttura (tratto).
-  const [map, setMap] = useState<{ open: boolean; unitId: string | null }>({ open: false, unitId: null });
+  // zoomPierId: il pontile su cui è inquadrata la mappa. Scegliendo un posto di un altro pontile sulla mappa la scheda passa a quel
+  // pontile ma la mappa resta dov'è; scegliendo un pontile dall'elenco la mappa lo inquadra.
+  const [map, setMap] = useState<{ open: boolean; unitId: string | null; zoomPierId: string | null }>({ open: false, unitId: null, zoomPierId: null });
+  // Posti scelti sulla mappa: nella scheda del pontile sono contornati.
+  const [mapPicked, setMapPicked] = useState<string[]>([]);
   const mapRef = useRef<HTMLDivElement>(null);
   // Posti scelti nella scheda: sulla mappa sono evidenziati.
   const [pickedIds, setPickedIds] = useState<string[]>([]);
@@ -71,7 +75,7 @@ export function PiersManager({
 
   function open(id: string) {
     setCurrentId(id);
-    setMap((m) => ({ ...m, unitId: null }));
+    setMap((m) => ({ ...m, unitId: null, zoomPierId: id }));
     setShowDetail(true);
     setFound(null);
     window.history.replaceState(null, "", `?pontile=${id}`);
@@ -133,7 +137,19 @@ export function PiersManager({
   };
 
   // Strutture dell'editor da inquadrare: il tratto scelto o tutte quelle del pontile (i suoi tratti e il pontile stesso).
-  const zoomTo = current ? (map.unitId ? [map.unitId] : [current.id, ...current.sections.map((sec) => sec.id)]) : [];
+  const zoomPier = (map.zoomPierId && byId.get(map.zoomPierId)) || current;
+  const zoomTo = zoomPier ? (map.unitId ? [map.unitId] : [zoomPier.id, ...zoomPier.sections.map((sec) => sec.id)]) : [];
+  // Posti scelti sulla mappa: se sono di un altro pontile, la scheda passa a quel pontile.
+  function onMapSelection(ids: string[]) {
+    setMapPicked(ids);
+    const pierId = ids.length ? berths.find((b) => b.id === ids[0])?.pierId : undefined;
+    if (pierId && pierId !== currentId) {
+      setCurrentId(pierId);
+      setShowDetail(true);
+      setFound(null);
+      window.history.replaceState(null, "", `?pontile=${pierId}`);
+    }
+  }
   // Sulla mappa in giallo: i posti scelti o, senza scelta, il tratto aperto con «Sulla mappa».
   const highlightIds =
     pickedIds.length > 0
@@ -142,7 +158,7 @@ export function PiersManager({
         ? berths.filter((b) => b.pierId === current.id && (map.unitId === current.id ? !current.sections.some((sec) => sec.id === b.sectionId) : b.sectionId === map.unitId)).map((b) => b.id)
         : [];
   function showMap(unitId: string | null) {
-    setMap((m) => (m.open && m.unitId === unitId ? { open: false, unitId: null } : { open: true, unitId }));
+    setMap((m) => (m.open && m.unitId === unitId ? { open: false, unitId: null, zoomPierId: null } : { open: true, unitId, zoomPierId: current?.id ?? null }));
   }
   // Aprendo la mappa la si porta in vista.
   useEffect(() => {
@@ -271,6 +287,7 @@ export function PiersManager({
               mapUnitId={map.unitId}
               onShowMap={editor ? showMap : undefined}
               onPickedChange={setPickedIds}
+              mapPickedIds={map.open ? mapPicked : []}
               found={found && berths.find((b) => b.id === found)?.pierId === current.id ? found : null}
               isFirst={piers[0]?.id === current.id}
               isLast={piers[piers.length - 1]?.id === current.id}
@@ -303,11 +320,11 @@ export function PiersManager({
                 </>
               )}
             </span>
-            <button type="button" className="btn btn-secondary btn-sm ml-auto" onClick={() => setMap({ open: false, unitId: null })}>
+            <button type="button" className="btn btn-secondary btn-sm ml-auto" onClick={() => setMap({ open: false, unitId: null, zoomPierId: null })}>
               Chiudi la mappa
             </button>
           </div>
-          <PlanEditor {...editor} key={editor.key} initialPierId={map.unitId ?? zoomTo.find((id) => editor.initialBerths.some((b) => b.pierId === id)) ?? current.id} zoomTo={zoomTo} highlightIds={highlightIds} />
+          <PlanEditor {...editor} key={editor.key} initialPierId={map.unitId ?? zoomTo.find((id) => editor.initialBerths.some((b) => b.pierId === id)) ?? current.id} zoomTo={zoomTo} highlightIds={highlightIds} onSelectionChange={onMapSelection} />
         </section>
       )}
 
