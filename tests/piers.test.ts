@@ -7,7 +7,7 @@ import { berthCategories, berthModules, berths, boats, contracts, marinas, owner
 import { appendPositions, movedOrder, parseIdList } from "@/lib/pier-merge";
 import { planUnits, unitPositions } from "@/lib/plan-units";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
-import { arrangeUnit, dissolveSection, flipNumbering, mergePiers, renameModule, sectionFromBerths, splitSection, splitUnitAt } from "@/server/piers";
+import { arrangeUnit, dissolveSection, flipNumbering, mergePiers, renameModule, sectionFromBerths, setModules, splitSection, splitUnitAt } from "@/server/piers";
 import { byBerthCode } from "@/server/berth-order";
 import { activeContractMessage, activeContractsOnBerths } from "@/server/contracts";
 
@@ -122,6 +122,29 @@ describe.skipIf(!hasDb)("unione dei pontili (database)", () => {
     expect(activeContractMessage(active)).toContain("Il posto KC1 ha un contratto attivo (contratto n. 2026/77)");
     // Un altro porto non vede i contratti di questo.
     expect(await activeContractsOnBerths(db, otherMarinaId, [busy.id], "2026-07-01")).toEqual([]);
+  });
+
+  it("unisce posti e moduli in un modulo solo o in uno esistente", async () => {
+    const [p] = await db.insert(piers).values({ marinaId, code: "MU", name: "Moduli", sortOrder: 10 }).returning({ id: piers.id });
+    const rows = await db
+      .insert(berths)
+      .values(["MU1", "MU2", "MU3", "MU4"].map((code, i) => ({ marinaId, pierId: p.id, categoryId, code, side: "sx" as const, position: i, lengthCm: 800, beamCm: 300 })))
+      .returning({ id: berths.id });
+    const ids = rows.map((r) => r.id);
+    // Come li mostra la scheda: un modulo per posto (riconosciuti e non ancora salvati).
+    const layout = ids.map((id, i) => ({ id, module: i + 1 }));
+    await db.transaction((tx) => renameModule(tx, marinaId, p.id, [ids[3]], 4, "Testata"));
+    const merged = await db.transaction((tx) => setModules(tx, marinaId, p.id, layout, ids.slice(0, 3), "new"));
+    expect(merged).toEqual({ module: 5, count: 3 });
+    let mods = (await db.select().from(berths).where(eq(berths.pierId, p.id)).orderBy(asc(berths.code))).map((b) => b.planModule);
+    expect(mods).toEqual([5, 5, 5, 4]);
+    // Nel modulo esistente «Testata»: il modulo 5 resta vuoto, il nome della testata resta.
+    const now = ids.map((id, i) => ({ id, module: i < 3 ? 5 : 4 }));
+    await db.transaction((tx) => setModules(tx, marinaId, p.id, now, ids.slice(0, 3), 4));
+    mods = (await db.select().from(berths).where(eq(berths.pierId, p.id)).orderBy(asc(berths.code))).map((b) => b.planModule);
+    expect(mods).toEqual([4, 4, 4, 4]);
+    expect((await db.select().from(berthModules).where(eq(berthModules.pierId, p.id))).map((n) => n.name)).toEqual(["Testata"]);
+    await expect(db.transaction((tx) => setModules(tx, marinaId, p.id, now, ids.slice(0, 1), 99))).rejects.toThrow(/non trovato/);
   });
 
   it("gira la numerazione (estremi e lati) anche sulla pianta e dà un nome al modulo", async () => {

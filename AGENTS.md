@@ -82,6 +82,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Numerazione girata dalla scheda del pontile in Pontili e posti («Numerazione»: «Parti dall'altra estremità» / «Scambia i lati»,
   tratto intero o un modulo): `flipNumbering` in `src/server/piers.ts` cambia `position`/`side` e specchia i posti sulla pianta
   (`mirrorBerths`, `src/lib/plan-mirror.ts`); con «estremi» sul tratto intero la linea salvata si inverte. Non sta nell'editor.
+  «Unisci» nella barra dei posti scelti (`BulkModuleForm`, `setModules` in `src/server/piers.ts`): i posti di un tratto diventano un modulo
+  nuovo o entrano in uno esistente; si fissano i moduli del tratto come li mostra la scheda e si tolgono i nomi dei moduli vuoti.
   Nomi dei moduli in `berth_modules` (pontile, tratto, numero del modulo; `renameModule` fissa anche `plan_module` dei posti).
   «Mostra sulla mappa» nella scheda del pontile apre sotto l'editor (`loadPlanEditor` in `src/server/plan-editor.ts`, condiviso con
   Mappa del porto) inquadrato sul pontile o tratto (`PlanEditor zoomTo`, `PlanZoom focus`); in giallo (`highlightIds`) i posti scelti
