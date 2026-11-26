@@ -22,7 +22,7 @@ import { parseCoordinates } from "@/lib/weather";
 import { checkPassword, createAccount, setPassword } from "./credentials";
 import { activeContractMessage, activeContractsOnBerths } from "./contracts";
 import { DomainError, toFormState } from "./errors";
-import { arrangeUnit, dissolveSection, flipNumbering, renameModule, mergePiers, renameSection, sectionFromBerths, splitSection, splitUnitAt, type MergeResult } from "./piers";
+import { arrangeUnit, dissolveSection, flipNumbering, renameModule, setModules, mergePiers, renameSection, sectionFromBerths, splitSection, splitUnitAt, type MergeResult } from "./piers";
 
 const ACCOUNT_SERVICE_DOWN = "Il servizio di accesso non risponde: riprova tra qualche minuto.";
 
@@ -752,6 +752,37 @@ export async function flipBerthNumbering(_prev: FormState, formData: FormData): 
     });
     revalidatePath("/", "layout");
     return { ok: true, message: mode === "estremi" ? `Numerazione girata: ${n} posti, ora dall'altra estremità.` : `Lati scambiati per ${n} posti.` };
+  } catch (err) {
+    return toFormState(err);
+  }
+}
+
+const layoutSchema = z.array(z.object({ id: z.uuid(), module: z.number().int().min(1).max(100000).nullable() })).max(2000);
+
+// Moduli dalla scheda del pontile: i posti scelti diventano un modulo nuovo o entrano in uno che c'è già (target = numero o «new»).
+export async function setBerthModuleAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const pierId = formId(formData, "pierId");
+  if (!pierId) return fail("Pontile non trovato.");
+  const ids = parseIdList(formData.get("berthIds"));
+  if (ids.length === 0) return fail("Scegli almeno un posto.");
+  const rawTarget = String(formData.get("target") ?? "");
+  const target = rawTarget === "new" ? ("new" as const) : Number.parseInt(rawTarget, 10);
+  if (target !== "new" && !Number.isInteger(target)) return fail("Scegli il modulo.", { target: "Scegli il modulo" });
+  let layout: z.infer<typeof layoutSchema>;
+  try {
+    layout = layoutSchema.parse(JSON.parse(String(formData.get("layout") ?? "[]")));
+  } catch {
+    return fail("Dati dei moduli non validi: ricarica la pagina.");
+  }
+  try {
+    const r = await db.transaction(async (tx) => {
+      const result = await setModules(tx, ctx.marinaId, pierId, layout, ids, target);
+      await audit(ctx, "modifica", "pontile", pierId, `${result.count} posti nel modulo ${result.module}`, tx);
+      return result;
+    });
+    revalidatePath("/", "layout");
+    return { ok: true, message: target === "new" ? `Fatto: i ${r.count} posti ora sono un modulo solo.` : `Fatto: ${r.count} posti aggiunti al modulo.` };
   } catch (err) {
     return toFormState(err);
   }

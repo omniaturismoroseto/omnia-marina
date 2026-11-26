@@ -11,13 +11,13 @@ import { moduleCodes, stripModules } from "@/lib/pier-strip";
 import { deletePier, mergePierInto, movePier } from "@/server/settings-actions";
 import { PierForm } from "../settings-forms";
 import { AddBerthsPanel } from "./add-berths";
-import { BulkCodesForm, BulkDeleteForm, BulkEditForm, BulkSectionForm, pickedSummary } from "./bulk-forms";
+import { BulkCodesForm, BulkDeleteForm, BulkEditForm, BulkModuleForm, BulkSectionForm, pickedSummary } from "./bulk-forms";
 import { Drawer } from "./drawer";
 import { STATE_CELL, STATE_ORDER, stateCounts } from "./states";
 import { moduleKey, type ManagerBerth, type ManagerCategory, type ManagerPier, type ManagerUnit } from "./types";
 import { ArrangeForm, DissolveSectionButton, ModuleNameForm, NumberingForm, RenameSectionForm, SplitAtForm, SplitSectionForm } from "./unit-tools";
 
-type Bulk = "edit" | "codes" | "section" | "delete";
+type Bulk = "edit" | "codes" | "module" | "section" | "delete";
 type UnitAction = "arrange" | "numbers" | "divide" | "rename" | "split" | "dissolve";
 
 const unitKey = (u: ManagerUnit) => u.sectionId ?? "pontile";
@@ -465,6 +465,7 @@ export function PierDetail({
               [
                 ["edit", "Modifica"],
                 ["codes", "Codici"],
+                ["module", "Unisci"],
                 ["section", "Tratto"],
                 ["delete", "Elimina"],
               ] as const
@@ -488,13 +489,34 @@ export function PierDetail({
 
       {bulk && selected.length > 0 && (
         <Drawer
-          title={{ edit: "Modifica i posti scelti", codes: "Cambia i codici", section: "Fai un tratto della pianta", delete: "Elimina i posti scelti" }[bulk]}
+          title={
+            { edit: "Modifica i posti scelti", codes: "Cambia i codici", module: "Unisci in un modulo", section: "Fai un tratto della pianta", delete: "Elimina i posti scelti" }[bulk]
+          }
           subtitle={`${selected.length === 1 ? "1 posto" : `${selected.length} posti`}: ${pickedSummary(selected)}`}
           onClose={() => setBulk(null)}
         >
           {bulk === "edit" && <BulkEditForm pierId={pier.id} berths={selected} categories={categories} />}
           {bulk === "codes" && <BulkCodesForm pierId={pier.id} berths={selected} prefix={commonPrefix(selected, pier.code)} />}
           {bulk === "section" && <BulkSectionForm pierId={pier.id} berths={selected} />}
+          {bulk === "module" &&
+            (() => {
+              // I moduli valgono dentro un tratto: i posti scelti devono essere tutti dello stesso.
+              const unit = units.find((u) => selected.every((b) => u.berths.some((x) => x.id === b.id)));
+              if (!unit) return <p className="text-sm text-bad">I posti scelti sono in tratti diversi: un modulo si fa con posti di un tratto solo.</p>;
+              const groups = stripModules(unit.berths).filter((g) => g.module !== null);
+              return (
+                <BulkModuleForm
+                  pierId={pier.id}
+                  berths={selected}
+                  layout={unit.berths.map((b) => ({ id: b.id, module: b.module }))}
+                  modules={groups.map((g, i) => ({
+                    module: g.module!,
+                    label: `${moduleNames[moduleKey(pier.id, unit.sectionId, g.module!)] || `Modulo ${i + 1}`} (${moduleCodes(g.berths)})`,
+                  }))}
+                  onDone={endSelection}
+                />
+              );
+            })()}
           {bulk === "delete" && <BulkDeleteForm pierId={pier.id} berths={selected} />}
         </Drawer>
       )}

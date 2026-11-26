@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckboxField, Field, Form, FormMessage, SelectField, Submit } from "@/components/form";
-import { deleteBerths, makeBerthSection, renameBerths, updateBerths } from "@/server/settings-actions";
+import { deleteBerths, makeBerthSection, renameBerths, setBerthModuleAction, updateBerths } from "@/server/settings-actions";
 import { Notice } from "@/components/ui";
 import type { ManagerBerth, ManagerCategory } from "./types";
 
@@ -126,6 +126,46 @@ export function BulkDeleteForm({ pierId, berths }: { pierId: string; berths: Man
         </p>
       </div>
       <Submit variant="danger">Elimina</Submit>
+      <FormMessage />
+    </Form>
+  );
+}
+
+/**
+ * Moduli della pianta: i posti scelti (dello stesso tratto) diventano un modulo nuovo, solo loro, oppure entrano in un modulo che c'è
+ * già. `layout` sono i moduli del tratto come li mostra la scheda: il server li fissa così, insieme alla scelta.
+ */
+export function BulkModuleForm({
+  pierId,
+  berths,
+  modules,
+  layout,
+  onDone,
+}: {
+  pierId: string;
+  berths: ManagerBerth[];
+  modules: { module: number; label: string }[];
+  layout: { id: string; module: number | null }[];
+  onDone: () => void;
+}) {
+  return (
+    <Form action={setBerthModuleAction} className="space-y-4" onSuccess={onDone}>
+      <Hidden pierId={pierId} berths={berths} />
+      <input type="hidden" name="layout" value={JSON.stringify(layout)} />
+      <p className="text-sm text-muted">
+        Un modulo è un pezzo del pontile che sulla mappa si sposta e ruota insieme. Unisci i posti scelti (anche di più moduli) in un modulo
+        solo, oppure aggiungili a un modulo che esiste già. I moduli che restano vuoti spariscono.
+      </p>
+      <SelectField
+        name="target"
+        label="Cosa fare"
+        defaultValue="new"
+        options={[
+          { value: "new", label: "Uniscili in un modulo solo" },
+          ...modules.map((m) => ({ value: String(m.module), label: `Aggiungili a: ${m.label}` })),
+        ]}
+      />
+      <Submit>Unisci</Submit>
       <FormMessage />
     </Form>
   );

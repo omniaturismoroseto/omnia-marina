@@ -217,6 +217,7 @@ async function loadPier(tx: Tx, marinaId: string, pierId: string) {
         x: berths.planX,
         y: berths.planY,
         angle: berths.planAngle,
+        module: berths.planModule,
         lengthCm: berths.lengthCm,
         beamCm: berths.beamCm,
       })
@@ -345,6 +346,51 @@ export async function flipNumbering(tx: Tx, marinaId: string, pierId: string, be
     else await tx.update(piers).set(lineColumns(reversed)).where(eq(piers.id, pier.id));
   }
   return list.length;
+}
+
+/**
+ * Moduli della pianta decisi a mano dalla scheda del pontile: i posti scelti (tutti dello stesso tratto) diventano un modulo nuovo
+ * (`target` «new») o entrano nel modulo `target`. `layout` è come la scheda mostra i moduli del tratto (anche quelli riconosciuti al
+ * volo e non ancora salvati): si fissa così com'è, perché numeri e nomi dei moduli restino quelli che si vedono. I nomi dei moduli
+ * rimasti vuoti si tolgono. Restituisce il numero del modulo e quanti posti ci sono entrati.
+ */
+export async function setModules(
+  tx: Tx,
+  marinaId: string,
+  pierId: string,
+  layout: { id: string; module: number | null }[],
+  chosenIds: string[],
+  target: number | "new",
+): Promise<{ module: number; count: number }> {
+  const { pier, section, list } = await unitBerths(tx, marinaId, pierId, chosenIds);
+  const { rows, sections } = await loadPier(tx, marinaId, pier.id);
+  const known = new Set(sections.map((sec) => sec.id));
+  const groupOf = (b: { sectionId: string | null }) => (b.sectionId && known.has(b.sectionId) ? b.sectionId : null);
+  const unit = rows.filter((b) => groupOf(b) === (section?.id ?? null));
+  const shown = new Map(layout.map((l) => [l.id, l.module]));
+  const current = new Map(unit.map((b) => [b.id, shown.has(b.id) ? shown.get(b.id)! : (b.module ?? null)]));
+  const chosen = new Set(list.map((b) => b.id));
+  const used = [...current.values()].filter((m): m is number => m !== null);
+  let mod: number;
+  if (target === "new") mod = (used.length ? Math.max(...used) : 0) + 1;
+  else {
+    if (!unit.some((b) => !chosen.has(b.id) && current.get(b.id) === target) && !list.some((b) => current.get(b.id) === target)) {
+      throw new DomainError("Modulo non trovato in questo tratto.");
+    }
+    mod = target;
+  }
+  for (const b of unit) {
+    const next = chosen.has(b.id) ? mod : current.get(b.id)!;
+    if (next !== b.module) await tx.update(berths).set({ planModule: next }).where(eq(berths.id, b.id));
+  }
+  // Nomi dei moduli che non hanno più posti.
+  const left = new Set(unit.map((b) => (chosen.has(b.id) ? mod : current.get(b.id))).filter((m): m is number => m !== null));
+  const names = await tx
+    .select({ id: berthModules.id, module: berthModules.module })
+    .from(berthModules)
+    .where(and(eq(berthModules.pierId, pier.id), section ? eq(berthModules.sectionId, section.id) : isNull(berthModules.sectionId)));
+  for (const n of names) if (!left.has(n.module)) await tx.delete(berthModules).where(eq(berthModules.id, n.id));
+  return { module: mod, count: list.length };
 }
 
 /**
