@@ -8,7 +8,6 @@ import {
   flipBerthNumbering,
   renameModuleAction,
   renameSectionAction,
-  splitPierAt,
   splitSectionAction,
 } from "@/server/settings-actions";
 
@@ -85,47 +84,6 @@ export function DissolveSectionButton({ sectionId, label }: { sectionId: string;
   );
 }
 
-/** Divide il pontile (o il tratto) in due tratti dello stesso pontile, dal posto scelto in poi. */
-export function SplitAtForm({
-  pierId,
-  sectionId,
-  berths,
-  first,
-  second,
-}: {
-  pierId: string;
-  sectionId: string | null;
-  /** Posti in ordine di codice. */
-  berths: { id: string; code: string }[];
-  first: string;
-  second: string;
-}) {
-  const middle = berths[Math.floor(berths.length / 2)];
-  return (
-    <Form action={splitPierAt} className="space-y-3">
-      <input type="hidden" name="pierId" value={pierId} />
-      {sectionId && <input type="hidden" name="sectionId" value={sectionId} />}
-      <p className="text-sm text-muted">
-        Il pontile resta uno solo: stessa sigla, stessa categoria e stessi prezzi, e i posti tengono i loro numeri. Diventa due tratti che sulla
-        mappa del porto si spostano, ruotano e tracciano da soli.
-      </p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <SelectField
-          name="fromBerthId"
-          label="Il secondo tratto parte da"
-          defaultValue={middle?.id}
-          options={berths.slice(1).map((b) => ({ value: b.id, label: b.code }))}
-        />
-        <Field name="first" label="Nome del primo tratto" defaultValue={first} maxLength={20} required />
-        <Field name="second" label="Nome del secondo tratto" defaultValue={second} maxLength={20} required />
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <Submit variant="secondary">Dividi</Submit>
-        <FormMessage />
-      </div>
-    </Form>
-  );
-}
 
 /**
  * Numerazione del tratto (o di un suo modulo) girata: dall'altra estremità o con i lati scambiati. I posti tengono codici,
@@ -138,8 +96,8 @@ export function NumberingForm({ pierId, scopes, hasPlan }: { pierId: string; sco
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted">
-        Per far partire i numeri dall&apos;altra testata o dall&apos;altro lato. Ogni posto tiene codice, misure e contratti: cambia
-        solo dove sta{hasPlan ? ", anche sulla mappa" : ""}.
+        Per far partire i numeri dall&apos;altra testata o dall&apos;altro lato. Scegli un tratto intero, un modulo o una fila (per esempio con
+        «Tratto …» o «da… a…»). Ogni posto tiene codice, misure e contratti: cambia solo dove sta{hasPlan ? ", anche sulla mappa" : ""}.
       </p>
       <div className="flex flex-wrap items-end gap-3">
         {scopes.length > 1 && (

@@ -23,7 +23,7 @@ import { parseCoordinates } from "@/lib/weather";
 import { checkPassword, createAccount, setPassword } from "./credentials";
 import { activeContractMessage, activeContractsOnBerths } from "./contracts";
 import { DomainError, toFormState } from "./errors";
-import { arrangeUnit, dissolveSection, flipNumbering, renameModule, setModules, mergePiers, renameSection, sectionFromBerths, splitSection, splitUnitAt, type MergeResult } from "./piers";
+import { arrangeUnit, dissolveSection, flipNumbering, renameModule, setModules, mergePiers, renameSection, sectionFromBerths, splitSection, type MergeResult } from "./piers";
 
 const ACCOUNT_SERVICE_DOWN = "Il servizio di accesso non risponde: riprova tra qualche minuto.";
 
@@ -894,34 +894,6 @@ export async function splitSectionAction(_prev: FormState, formData: FormData): 
   }
   revalidatePath("/", "layout");
   redirect(`/impostazioni/pontili?pontile=${pierId}`);
-}
-
-const splitAtSchema = z.object({
-  pierId: f.id(),
-  sectionId: f.optId(),
-  fromBerthId: f.id("Scegli il posto da cui parte il secondo tratto"),
-  first: z.preprocess((v) => (typeof v === "string" ? v.trim() : ""), z.string().min(1, "Dai un nome al tratto").max(20, "Al massimo 20 caratteri")),
-  second: z.preprocess((v) => (typeof v === "string" ? v.trim() : ""), z.string().min(1, "Dai un nome al tratto").max(20, "Al massimo 20 caratteri")),
-});
-
-// Divide un pontile (o un tratto) in due tratti dello stesso pontile.
-export async function splitPierAt(_prev: FormState, formData: FormData): Promise<FormState> {
-  const ctx = await requireMarina(ADMIN);
-  const parsed = parseForm(splitAtSchema, formData);
-  if (!parsed.ok) return parsed.state;
-  const d = parsed.data;
-  if (d.first.toLocaleLowerCase("it") === d.second.toLocaleLowerCase("it")) return fail("Controlla i campi evidenziati.", { second: "Usa un nome diverso dal primo tratto." });
-  try {
-    const r = await db.transaction(async (tx) => {
-      const result = await splitUnitAt(tx, ctx.marinaId, d.pierId, d.sectionId, d.fromBerthId, { first: d.first, second: d.second });
-      await audit(ctx, "modifica", "pontile", d.pierId, `Diviso in «${d.first}» (${result.first} posti) e «${d.second}» (${result.second} posti)`, tx);
-      return result;
-    });
-    revalidatePath("/", "layout");
-    return { ok: true, message: `Diviso: tratto «${d.first}» con ${r.first} posti e tratto «${d.second}» con ${r.second}.` };
-  } catch (err) {
-    return toFormState(err);
-  }
 }
 
 // Elimina i posti scelti; quelli con contratti (anche vecchi) restano: vanno messi fuori servizio.

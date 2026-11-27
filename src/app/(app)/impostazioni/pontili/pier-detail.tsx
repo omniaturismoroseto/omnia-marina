@@ -15,10 +15,10 @@ import { BulkCodesForm, BulkDeleteForm, BulkEditForm, BulkModuleForm, BulkSectio
 import { Drawer } from "./drawer";
 import { STATE_CELL, STATE_ORDER, stateCounts } from "./states";
 import { moduleKey, type ManagerBerth, type ManagerCategory, type ManagerPier, type ManagerUnit } from "./types";
-import { ArrangeForm, DissolveSectionButton, ModuleNameForm, NumberingForm, RenameSectionForm, SplitAtForm, SplitSectionForm } from "./unit-tools";
+import { ArrangeForm, DissolveSectionButton, ModuleNameForm, NumberingForm, RenameSectionForm, SplitSectionForm } from "./unit-tools";
 
-type Bulk = "edit" | "codes" | "module" | "section" | "delete";
-type UnitAction = "arrange" | "numbers" | "divide" | "rename" | "split" | "dissolve";
+type Bulk = "edit" | "codes" | "numbers" | "module" | "section" | "delete";
+type UnitAction = "arrange" | "rename" | "split" | "dissolve";
 
 const unitKey = (u: ManagerUnit) => u.sectionId ?? "pontile";
 
@@ -388,8 +388,6 @@ export function PierDetail({
                     label={u.sectionId ? "Modifica il tratto" : "Modifica i posti"}
                     items={[
                       u.berths.length > 0 && { label: "Disposizione dei posti", onClick: () => toggle("arrange") },
-                      u.berths.length > 1 && { label: "Numerazione", onClick: () => toggle("numbers") },
-                      u.berths.length > 1 && { label: "Dividi in due tratti", onClick: () => toggle("divide") },
                       multi && { label: "Aggiungi posti qui", onClick: () => setAdd({ sectionId: u.sectionId }) },
                       u.sectionId && { label: "Rinomina il tratto", onClick: () => toggle("rename") },
                       u.sectionId && { label: "Rendi pontile a sé", onClick: () => toggle("split") },
@@ -401,32 +399,6 @@ export function PierDetail({
               {open && (
                 <div className="mb-3 rounded-md border border-line-soft bg-paper p-3">
                   {open === "arrange" && <ArrangeForm pierId={pier.id} sectionId={u.sectionId} hasPlan={hasPlan} />}
-                  {open === "numbers" && (
-                    <NumberingForm
-                      pierId={pier.id}
-                      hasPlan={hasPlan}
-                      scopes={[
-                        { label: u.sectionId ? `Tutto il ${u.title.toLowerCase()}` : "Tutti i posti", berthIds: u.berths.map((b) => b.id) },
-                        // Stessi nomi della striscia qui sotto: «Modulo N» conta i moduli sulla pianta nell'ordine dei codici.
-                        ...stripModules(u.berths)
-                          .filter((g) => g.module !== null)
-                          .map((g, i) => ({
-                            label: moduleNames[moduleKey(pier.id, u.sectionId, g.module!)] || `Modulo ${i + 1}`,
-                            berthIds: g.berths.map((b) => b.id),
-                          }))
-                          .filter((sc) => sc.berthIds.length > 1 && sc.berthIds.length < u.berths.length),
-                      ]}
-                    />
-                  )}
-                  {open === "divide" && (
-                    <SplitAtForm
-                      pierId={pier.id}
-                      sectionId={u.sectionId}
-                      berths={[...u.berths].sort((a, b) => compareCodes(a.code, b.code))}
-                      first={u.label || "1"}
-                      second={u.label ? `${u.label} 2` : "2"}
-                    />
-                  )}
                   {open === "rename" && u.sectionId && <RenameSectionForm sectionId={u.sectionId} label={u.label} onDone={() => setUnitAction(null)} />}
                   {open === "dissolve" && u.sectionId && (
                     <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
@@ -465,8 +437,9 @@ export function PierDetail({
               [
                 ["edit", "Modifica"],
                 ["codes", "Codici"],
+                ["numbers", "Numerazione"],
                 ["module", "Unisci"],
-                ["section", "Tratto"],
+                ["section", "Dividi"],
                 ["delete", "Elimina"],
               ] as const
             ).map(([kind, label]) => (
@@ -490,7 +463,7 @@ export function PierDetail({
       {bulk && selected.length > 0 && (
         <Drawer
           title={
-            { edit: "Modifica i posti scelti", codes: "Cambia i codici", module: "Unisci in un modulo", section: "Fai un tratto della pianta", delete: "Elimina i posti scelti" }[bulk]
+            { edit: "Modifica i posti scelti", codes: "Cambia i codici", numbers: "Numerazione dei posti scelti", module: "Unisci in un modulo", section: "Dividi: un tratto con i posti scelti", delete: "Elimina i posti scelti" }[bulk]
           }
           subtitle={`${selected.length === 1 ? "1 posto" : `${selected.length} posti`}: ${pickedSummary(selected)}`}
           onClose={() => setBulk(null)}
@@ -498,6 +471,12 @@ export function PierDetail({
           {bulk === "edit" && <BulkEditForm pierId={pier.id} berths={selected} categories={categories} />}
           {bulk === "codes" && <BulkCodesForm pierId={pier.id} berths={selected} prefix={commonPrefix(selected, pier.code)} />}
           {bulk === "section" && <BulkSectionForm pierId={pier.id} berths={selected} />}
+          {bulk === "numbers" &&
+            (units.some((u) => selected.every((b) => u.berths.some((x) => x.id === b.id))) ? (
+              <NumberingForm pierId={pier.id} hasPlan={hasPlan} scopes={[{ label: "I posti scelti", berthIds: selected.map((b) => b.id) }]} />
+            ) : (
+              <p className="text-sm text-bad">I posti scelti sono in tratti diversi: la numerazione si gira tratto per tratto.</p>
+            ))}
           {bulk === "module" &&
             (() => {
               // I moduli valgono dentro un tratto: i posti scelti devono essere tutti dello stesso.
