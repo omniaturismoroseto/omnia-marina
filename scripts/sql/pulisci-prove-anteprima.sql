@@ -1,5 +1,6 @@
 -- Anteprima della pulizia dei dati di prova: conta che cosa si cancella e che cosa resta, porto per porto. Non cambia nulla.
 \pset footer off
+\x on
 with keep as (
   select ch.id from charges ch join contracts c on c.id = ch.contract_id where c.status = 'attivo'
 ), keep_pay as (
