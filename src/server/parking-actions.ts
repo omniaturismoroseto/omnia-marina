@@ -3,12 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@/db";
+import { db, type Tx } from "@/db";
 import { contractItems, marinas, parkingSpaces } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OFFICE, requireMarina } from "@/lib/context";
 import { isValidISODate } from "@/lib/dates";
 import { f, fail, formId, parseForm, type FormState } from "@/lib/forms";
+import { nextParkingCode } from "@/lib/parking-codes";
 import { parkingOptions, type ParkingOption } from "./parking";
 
 // Posti auto della mappa (Impostazioni → Posti auto): li gestisce la direzione; l'ufficio li sceglie nei contratti.
@@ -113,33 +114,112 @@ const layoutSchema = z.object({
     .max(5000),
 });
 
-/** Salva le posizioni dei posti auto sulla mappa (in pixel della foto, come i posti barca). */
-export async function saveParkingLayout(input: z.input<typeof layoutSchema>): Promise<{ ok: boolean; message: string }> {
-  const ctx = await requireMarina(ADMIN);
-  const parsed = layoutSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, message: "Dati della mappa non validi." };
-  const { placements } = parsed.data;
-  const [marina] = await db.select({ width: marinas.planWidth, height: marinas.planHeight }).from(marinas).where(eq(marinas.id, ctx.marinaId));
-  if (!marina?.width || !marina.height) return { ok: false, message: "Carica prima la foto del porto." };
+type Placements = z.infer<typeof layoutSchema>["placements"];
+
+/** Controlla e scrive le posizioni dei posti auto (solo del porto); un messaggio se qualcosa non va. */
+async function writeLayout(tx: Tx | typeof db, marinaId: string, placements: Placements): Promise<string | null> {
+  const [marina] = await tx.select({ width: marinas.planWidth, height: marinas.planHeight }).from(marinas).where(eq(marinas.id, marinaId));
+  if (!marina?.width || !marina.height) return "Carica prima la foto del porto.";
   const margin = 0.1;
   const inside = (p: { x: number; y: number }) =>
     p.x >= -marina.width! * margin && p.x <= marina.width! * (1 + margin) && p.y >= -marina.height! * margin && p.y <= marina.height! * (1 + margin);
-  if (placements.some((p) => p.position && !inside(p.position))) return { ok: false, message: "Alcuni posti auto sono fuori dalla foto." };
+  if (placements.some((p) => p.position && !inside(p.position))) return "Alcuni posti auto sono fuori dalla foto.";
   if (placements.length > 0) {
     const rows = sql.join(
       placements.map((p) => sql`(${p.id}::uuid, ${p.position?.x ?? null}::real, ${p.position?.y ?? null}::real, ${p.position?.angle ?? null}::real)`),
       sql`, `,
     );
     // Il filtro sul porto impedisce di spostare posti auto di altri porti.
-    await db.execute(sql`
+    await tx.execute(sql`
       update parking_spaces set plan_x = v.x, plan_y = v.y, plan_angle = v.angle
       from (values ${rows}) as v(id, x, y, angle)
-      where parking_spaces.id = v.id and parking_spaces.marina_id = ${ctx.marinaId}
+      where parking_spaces.id = v.id and parking_spaces.marina_id = ${marinaId}
     `);
   }
-  await audit(ctx, "modifica", "posti auto", ctx.marinaId, `Posizioni sulla mappa di ${placements.length} posti auto`);
+  return null;
+}
+
+/** Salva le posizioni dei posti auto sulla mappa (in pixel della foto, come i posti barca). */
+export async function saveParkingLayout(input: z.input<typeof layoutSchema>): Promise<{ ok: boolean; message: string }> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = layoutSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Dati della mappa non validi." };
+  const problem = await writeLayout(db, ctx.marinaId, parsed.data.placements);
+  if (problem) return { ok: false, message: problem };
+  await audit(ctx, "modifica", "posti auto", ctx.marinaId, `Posizioni sulla mappa di ${parsed.data.placements.length} posti auto`);
   revalidatePath("/", "layout");
   return { ok: true, message: "Posti auto salvati sulla mappa." };
+}
+
+const addSchema = layoutSchema.extend({
+  afterId: z.uuid(),
+  position: z.object({ x: z.number().finite(), y: z.number().finite(), angle: z.number().finite() }),
+});
+
+/**
+ * «Aggiungi un posto» a una fila già sulla mappa: salva le posizioni dell'editor e crea il posto successivo a `afterId` (stesso tipo e
+ * misure, codice successivo) nella posizione calcolata dall'editor, in fondo alla fila.
+ */
+export async function addParkingToRow(input: z.input<typeof addSchema>): Promise<{ ok: boolean; message: string; id?: string }> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = addSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Dati della mappa non validi." };
+  const { placements, afterId, position } = parsed.data;
+  try {
+    const code = await db.transaction(async (tx) => {
+      const problem = await writeLayout(tx, ctx.marinaId, placements);
+      if (problem) throw new Error(problem);
+      const [after] = await tx.select().from(parkingSpaces).where(and(eq(parkingSpaces.id, afterId), eq(parkingSpaces.marinaId, ctx.marinaId)));
+      if (!after) throw new Error("Posto auto non trovato.");
+      const taken = new Set((await tx.select({ code: parkingSpaces.code }).from(parkingSpaces).where(eq(parkingSpaces.marinaId, ctx.marinaId))).map((r) => r.code.toUpperCase()));
+      const next = nextParkingCode(after.code, taken);
+      const [created] = await tx.insert(parkingSpaces).values({
+        marinaId: ctx.marinaId,
+        code: next,
+        covered: after.covered,
+        lengthCm: after.lengthCm,
+        widthCm: after.widthCm,
+        planX: position.x,
+        planY: position.y,
+        planAngle: position.angle,
+      }).returning({ id: parkingSpaces.id });
+      await audit(ctx, "creazione", "posto auto", ctx.marinaId, `${next} aggiunto in fila dopo ${after.code}`, tx);
+      return { next, id: created.id };
+    });
+    revalidatePath("/", "layout");
+    return { ok: true, message: `Aggiunto il posto auto ${code.next} in fondo alla fila.`, id: code.id };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Posto auto non aggiunto." };
+  }
+}
+
+const removeSchema = layoutSchema.extend({ id: z.uuid() });
+
+/** «Togli» un posto dalla fila: salva le posizioni dell'editor ed elimina il posto auto, se non è mai stato in un contratto. */
+export async function removeParkingFromRow(input: z.input<typeof removeSchema>): Promise<{ ok: boolean; message: string }> {
+  const ctx = await requireMarina(ADMIN);
+  const parsed = removeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Dati della mappa non validi." };
+  const { placements, id } = parsed.data;
+  const [used] = await db.select({ id: contractItems.id }).from(contractItems).where(eq(contractItems.parkingSpaceId, id)).limit(1);
+  if (used) return { ok: false, message: "Questo posto auto è in un contratto e non si può eliminare: mettilo fuori servizio (toccalo nell'elenco qui sopra)." };
+  try {
+    const code = await db.transaction(async (tx) => {
+      const problem = await writeLayout(tx, ctx.marinaId, placements.filter((p) => p.id !== id));
+      if (problem) throw new Error(problem);
+      const deleted = await tx
+        .delete(parkingSpaces)
+        .where(and(eq(parkingSpaces.id, id), eq(parkingSpaces.marinaId, ctx.marinaId)))
+        .returning({ code: parkingSpaces.code });
+      if (deleted.length === 0) throw new Error("Posto auto non trovato.");
+      await audit(ctx, "eliminazione", "posto auto", id, `${deleted[0].code} tolto dalla fila`, tx);
+      return deleted[0].code;
+    });
+    revalidatePath("/", "layout");
+    return { ok: true, message: `Posto auto ${code} tolto.` };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Posto auto non tolto." };
+  }
 }
 
 /** Posti auto con chi li ha nel periodo, per sceglierli in un contratto (escluso il contratto stesso, se c'è). */

@@ -71,7 +71,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Le icone dei servizi hanno sempre lo stesso raggio sullo schermo (12 px, `MARKER_SCREEN_RADIUS`), anche sul telefono e a ogni ingrandimento (`--plan-px` impostato da `PlanZoom`).
   Editor dei posti (`plan-editor.tsx`, dentro `PlanZoom arrowKeys={false}`: trascina e zoom come la Mappa, niente barre; riquadri senza
   codici): «Sposta: pontile o tratto / modulo / posto singolo». Modulo = posti collegati per vicinanza (`moduleOf`). Con un gruppo:
-  trascinamento, frecce, rotazione (attorno al centro) e «Lunghezza ±1/±5 m» (`stretch`, scala le posizioni lungo il pontile); la linea
+  trascinamento, frecce, rotazione (attorno al centro) e «Lunghezza ±1/±5 m» (`stretchRows` in `src/lib/plan-align.ts`: lungo la fila, ogni fila
+  rimessa dritta e nello stesso ordine, mai sovrapposti; anche per i posti auto); la linea
   salvata segue solo con «pontile o tratto» e si risalva con la pianta.
   Sotto i posti l'editor parte dalla base disegnata (senza base, dallo schema `buildDrawing` calcolato dal vivo coi posti dell'editor);
   «Foto dal vero» si sceglie. Ormeggio: «di prua» o «all'inglese» (`Mooring`, `layoutPier(..., mooring)` in `src/lib/plan.ts`), scelto
@@ -98,7 +99,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
 - Posti auto riservati (Impostazioni → Posti auto, `/impostazioni/posti-auto`): tabella `parking_spaces` (codice, coperto, misure,
   in servizio, `plan_x/plan_y/plan_angle` in pixel della foto come i posti barca); azioni in `src/server/parking-actions.ts`, editor
-  sulla mappa `parking-editor.tsx` (posa, «Metti in fila» con `layoutPier`, «Allinea in fila» con `alignRows`, «Lunghezza ±1/±5 m» lungo la fila con `rowAxis`, trascina, ruota). Nei contratti la voce `auto_coperto` /
+  sulla mappa `parking-editor.tsx` (posa, «Metti in fila» con `layoutPier`, «Allinea in fila» con `alignRows`, «Lunghezza ±1/±5 m» lungo la fila con `rowAxis`, «Aggiungi un posto» / «Togli» sulla fila scelta con `addParkingToRow` /
+  `removeParkingFromRow`, che salvano anche le posizioni; codice successivo con `nextParkingCode` in `src/lib/parking-codes.ts`, trascina, ruota). Nei contratti la voce `auto_coperto` /
   `auto_scoperto` può avere `contract_items.parking_space_id`: `ParkingPicker` (`src/app/(app)/contratti/parking-picker.tsx`, elenco +
   «Scegli dalla mappa») nel nuovo contratto e in «Aggiungi spazio o spesa». Regole in `src/server/parking.ts`: tipo giusto, il codice
   va in `reference` (stampa), impegnato da contratti attivi o conclusi nel periodo della voce (date comprese), bozze no; controllato in

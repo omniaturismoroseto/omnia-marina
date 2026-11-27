@@ -20,7 +20,7 @@ import { pathOf, type PlanFeature } from "@/lib/plan-features";
 import { PIER, SHAPE, WATER } from "@/lib/plan-style";
 import { Field, Form, FormMessage, Submit } from "@/components/form";
 import { compareCodes } from "@/lib/berth-codes";
-import { alignRows } from "@/lib/plan-align";
+import { alignRows, stretchRows } from "@/lib/plan-align";
 import { estimateTrace, fitTrace } from "@/lib/plan-extend";
 import { assignModules } from "@/lib/plan-modules";
 import { MAX_BERTHS_PER_SIDE, planBerths } from "@/lib/plan-analysis";
@@ -710,29 +710,23 @@ export function PlanEditor({
   }
 
   // Allunga (metri > 0) o accorcia il gruppo scelto lungo il pontile: cambia la distanza tra i posti, non le loro misure.
+  // «Lunghezza ±»: i posti restano in fila (ogni fila dritta, nello stesso ordine) e non si sovrappongono mai (stretchRows).
   function stretch(meters: number) {
     if (!selected || !pxPerMeter || group.length < 2) return;
-    // Direzione del pontile dai posti: di traverso al lato lungo (di prua) o lungo il lato lungo (all'inglese).
-    const { d } = rowAxis(group.map((b) => ({ x: b.x!, y: b.y!, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm })), pxPerMeter);
-    const proj = group.map((b) => b.x! * d.x + b.y! * d.y);
-    const lo = Math.min(...proj);
-    const hi = Math.max(...proj);
-    const len = hi - lo;
-    if (len < 1) return;
-    const k = Math.max(0.1, (len + meters * pxPerMeter) / len);
-    const mid = (lo + hi) / 2;
+    const result = stretchRows(
+      group.map((b) => ({ id: b.id, code: b.code, x: b.x!, y: b.y!, angle: b.angle ?? 0, lengthCm: b.lengthCm, beamCm: b.beamCm })),
+      pxPerMeter,
+      meters,
+    );
+    if (!result) return;
+    const at = new Map(result.placements.map((p) => [p.id, p]));
+    setBerths((list) => list.map((b) => (at.has(b.id) ? { ...b, x: at.get(b.id)!.x, y: at.get(b.id)!.y } : b)));
+    // La linea salvata del pontile si allunga o accorcia allo stesso modo, dal centro.
+    const { d, mid, scale } = result;
     const move = (p: Point): Point => {
       const t = p.x * d.x + p.y * d.y - mid;
-      return {
-        x: Math.round((p.x + (k - 1) * t * d.x) * 10) / 10,
-        y: Math.round((p.y + (k - 1) * t * d.y) * 10) / 10,
-      };
+      return { x: Math.round((p.x + (scale - 1) * t * d.x) * 10) / 10, y: Math.round((p.y + (scale - 1) * t * d.y) * 10) / 10 };
     };
-    setBerths((list) =>
-      list.map((b) =>
-        groupIds.has(b.id) ? { ...b, ...move({ x: b.x!, y: b.y! }) } : b,
-      ),
-    );
     const t = moveMode === "pontile" ? currentTrace(selected.pierId) : null;
     if (t)
       setTraces((all) => ({
@@ -742,6 +736,7 @@ export function PlanEditor({
     setDirty(true);
     setNotice(null);
   }
+
 
   // Lunghezza del gruppo scelto lungo il pontile, in metri (dal primo all'ultimo posto, con la loro larghezza).
   const groupLengthM = (() => {
