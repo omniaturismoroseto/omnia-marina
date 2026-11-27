@@ -7,6 +7,7 @@ import { compareCodes } from "@/lib/berth-codes";
 import { berthSizePx, layoutPier, normalizeAngle, type Point } from "@/lib/plan";
 import { buildDrawing } from "@/lib/plan-drawing";
 import { fitTrace } from "@/lib/plan-extend";
+import { alignRows } from "@/lib/plan-align";
 import { pathOf } from "@/lib/plan-features";
 import { PIER, SHAPE, WATER } from "@/lib/plan-style";
 import { saveParkingLayout } from "@/server/parking-actions";
@@ -177,6 +178,20 @@ export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; im
         return { ...s, x: Math.round((cx + dx * Math.cos(r) - dy * Math.sin(r)) * 10) / 10, y: Math.round((cy + dx * Math.sin(r) + dy * Math.cos(r)) * 10) / 10, angle };
       }),
     );
+  }
+
+  // «Allinea in fila»: i posti scelti già sulla mappa si raddrizzano dove sono, in ordine di codice, stesso angolo e stesso passo
+  // (una fila, o due una di fronte all'altra), come per i posti barca.
+  function align() {
+    const list = chosen.filter((s) => s.x !== null && s.y !== null);
+    if (list.length < 2) return;
+    const placements = alignRows(
+      list.map((s) => ({ id: s.id, code: s.code, x: s.x!, y: s.y!, angle: s.angle ?? 0, lengthCm: s.lengthCm, beamCm: s.widthCm })),
+      m,
+    );
+    const at = new Map(placements.map((p) => [p.id, p]));
+    lastAngle.current = placements[0]?.angle ?? lastAngle.current;
+    change((all) => all.map((s) => (at.has(s.id) ? { ...s, ...at.get(s.id)! } : s)), `${placements.length} posti auto allineati in fila. Se va bene, salva.`);
   }
 
   function toggle(id: string) {
@@ -369,6 +384,14 @@ export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; im
                 ))}
               </div>
               <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={chosen.filter((s) => s.x !== null).length < 2}
+                  onClick={align}
+                >
+                  Allinea in fila
+                </button>
                 {lastRow && (
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => layRow(lastRow.ids, lastRow.a, lastRow.b, !lastRow.flip)}>
                     <RotateCcw size={15} aria-hidden="true" /> Inverti il lato
@@ -386,7 +409,8 @@ export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; im
           )}
           <p className="hint">
             «Metti in fila»: scegli i posti auto, poi clicca inizio e fine della fila; si dispongono uno accanto all&apos;altro in ordine di codice,
-            alla loro misura. «Posa sulla mappa»: un clic per posto.
+            alla loro misura. «Allinea in fila» raddrizza i posti scelti dove sono: stessa linea, stesso angolo, stessa distanza. «Posa sulla
+            mappa»: un clic per posto.
           </p>
         </section>
 
