@@ -141,13 +141,32 @@ export function BulkModuleForm({
   modules,
   layout,
   onDone,
+  regroup = null,
 }: {
   pierId: string;
   berths: ManagerBerth[];
   modules: { module: number; label: string }[];
   layout: { id: string; module: number | null }[];
   onDone: () => void;
+  /** Posti di tratti diversi: i nomi dei tratti e il nome proposto per il tratto che li riunisce. */
+  regroup?: { tratti: string[]; label: string } | null;
 }) {
+  if (regroup) {
+    return (
+      <Form action={setBerthModuleAction} className="space-y-4" onSuccess={onDone}>
+        <Hidden pierId={pierId} berths={berths} />
+        <input type="hidden" name="regroup" value="1" />
+        <input type="hidden" name="target" value="new" />
+        <p className="text-sm text-muted">
+          I posti scelti sono in {regroup.tratti.length} tratti diversi ({regroup.tratti.join(", ")}). Li riunisco in un tratto solo, che sulla
+          mappa si sposta e si traccia da sé, e ne faccio un modulo. I tratti che restano senza posti spariscono; il pontile resta uno solo.
+        </p>
+        <Field name="label" label="Nome del tratto" defaultValue={regroup.label} maxLength={20} required />
+        <Submit>Riunisci e unisci</Submit>
+        <FormMessage />
+      </Form>
+    );
+  }
   return (
     <Form action={setBerthModuleAction} className="space-y-4" onSuccess={onDone}>
       <Hidden pierId={pierId} berths={berths} />

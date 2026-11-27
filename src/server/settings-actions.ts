@@ -23,7 +23,7 @@ import { parseCoordinates } from "@/lib/weather";
 import { checkPassword, createAccount, setPassword } from "./credentials";
 import { activeContractMessage, activeContractsOnBerths } from "./contracts";
 import { DomainError, toFormState } from "./errors";
-import { arrangeUnit, dissolveSection, flipNumbering, renameModule, setModules, mergePiers, renameSection, sectionFromBerths, splitSection, type MergeResult } from "./piers";
+import { arrangeUnit, dissolveSection, flipNumbering, regroupIntoModule, renameModule, setModules, mergePiers, renameSection, sectionFromBerths, splitSection, type MergeResult } from "./piers";
 
 const ACCOUNT_SERVICE_DOWN = "Il servizio di accesso non risponde: riprova tra qualche minuto.";
 
@@ -795,6 +795,22 @@ export async function setBerthModuleAction(_prev: FormState, formData: FormData)
     layout = layoutSchema.parse(JSON.parse(String(formData.get("layout") ?? "[]")));
   } catch {
     return fail("Dati dei moduli non validi: ricarica la pagina.");
+  }
+  // Posti di tratti diversi: prima si riuniscono in un tratto solo, poi diventano un modulo.
+  if (formData.get("regroup") === "1") {
+    const label = String(formData.get("label") ?? "").trim();
+    if (!label || label.length > 20) return fail("Controlla i campi evidenziati.", { label: label ? "Al massimo 20 caratteri" : "Dai un nome al tratto" });
+    try {
+      const n = await db.transaction(async (tx) => {
+        const count = await regroupIntoModule(tx, ctx.marinaId, pierId, ids, label);
+        await audit(ctx, "modifica", "pontile", pierId, `${count} posti riuniti nel tratto «${label}», in un modulo solo`, tx);
+        return count;
+      });
+      revalidatePath("/", "layout");
+      return { ok: true, message: `Fatto: i ${n} posti ora sono nel tratto «${label}», in un modulo solo.` };
+    } catch (err) {
+      return toFormState(err);
+    }
   }
   try {
     const r = await db.transaction(async (tx) => {

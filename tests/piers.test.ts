@@ -7,7 +7,7 @@ import { berthCategories, berthModules, berths, boats, contracts, marinas, owner
 import { appendPositions, movedOrder, parseIdList } from "@/lib/pier-merge";
 import { planUnits, unitPositions } from "@/lib/plan-units";
 import { createMarinaWithDefaults } from "@/server/marina-setup";
-import { arrangeUnit, dissolveSection, flipNumbering, mergePiers, renameModule, sectionFromBerths, setModules, splitSection, splitUnitAt } from "@/server/piers";
+import { arrangeUnit, dissolveSection, flipNumbering, mergePiers, regroupIntoModule, renameModule, sectionFromBerths, setModules, splitSection, splitUnitAt } from "@/server/piers";
 import { byBerthCode } from "@/server/berth-order";
 import { activeContractMessage, activeContractsOnBerths } from "@/server/contracts";
 
@@ -145,6 +145,41 @@ describe.skipIf(!hasDb)("unione dei pontili (database)", () => {
     expect(mods).toEqual([4, 4, 4, 4]);
     expect((await db.select().from(berthModules).where(eq(berthModules.pierId, p.id))).map((n) => n.name)).toEqual(["Testata"]);
     await expect(db.transaction((tx) => setModules(tx, marinaId, p.id, now, ids.slice(0, 1), 99))).rejects.toThrow(/non trovato/);
+  });
+
+  it("riunisce posti di tratti diversi in un tratto solo e in un modulo solo", async () => {
+    const [p] = await db.insert(piers).values({ marinaId, code: "RG", name: "Riunisci", sortOrder: 11 }).returning({ id: piers.id });
+    const [s1, s2] = await db
+      .insert(pierSections)
+      .values([
+        { marinaId, pierId: p.id, label: "R", sortOrder: 0 },
+        { marinaId, pierId: p.id, label: "R", sortOrder: 1 },
+      ])
+      .returning({ id: pierSections.id });
+    const rows = await db
+      .insert(berths)
+      .values(
+        ["RG1", "RG2", "RG3", "RG4"].map((code, i) => ({
+          marinaId,
+          pierId: p.id,
+          sectionId: i < 2 ? s1.id : s2.id,
+          categoryId,
+          code,
+          side: "sx" as const,
+          position: i,
+          lengthCm: 800,
+          beamCm: 300,
+          planModule: i + 1,
+        })),
+      )
+      .returning({ id: berths.id });
+    const n = await db.transaction((tx) => regroupIntoModule(tx, marinaId, p.id, rows.map((r) => r.id), "Testata"));
+    expect(n).toBe(4);
+    const after = await db.select().from(berths).where(eq(berths.pierId, p.id));
+    expect(new Set(after.map((b) => b.sectionId)).size).toBe(1);
+    expect(new Set(after.map((b) => b.planModule)).size).toBe(1);
+    const left = await db.select().from(pierSections).where(eq(pierSections.pierId, p.id));
+    expect(left.map((x) => x.label)).toEqual(["Testata"]);
   });
 
   it("gira la numerazione (estremi e lati) anche sulla pianta e dà un nome al modulo", async () => {

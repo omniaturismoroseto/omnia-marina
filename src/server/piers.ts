@@ -394,6 +394,16 @@ export async function setModules(
 }
 
 /**
+ * «Unisci» con posti di tratti diversi dello stesso pontile: i posti si riuniscono in un tratto nuovo (`label`; i tratti rimasti vuoti
+ * spariscono, la linea del tratto si ricava dai posti) e diventano un modulo solo. Restituisce quanti posti.
+ */
+export async function regroupIntoModule(tx: Tx, marinaId: string, pierId: string, berthIds: string[], label: string): Promise<number> {
+  const count = await sectionFromBerths(tx, marinaId, pierId, berthIds, label);
+  await setModules(tx, marinaId, pierId, [], berthIds, "new");
+  return count;
+}
+
+/**
  * Nome di un modulo della pianta (vuoto = torna «Modulo N»). I posti del modulo ricevono il suo numero, così il nome resta
  * legato a loro anche se i moduli non erano ancora stati salvati dall'editor.
  */
