@@ -14,6 +14,7 @@ import { addParkingToRow, removeParkingFromRow, saveParkingLayout } from "@/serv
 import type { PlanMapData } from "@/server/plan-map";
 import { ParkingMarks } from "../../mappa/parking-marks";
 import { PlanZoom } from "../../mappa/plan-zoom";
+import { UndoButtons, useUndoHistory } from "@/components/use-undo";
 
 export interface EditorParking {
   id: string;
@@ -39,7 +40,26 @@ let carried: { notice: { ok: boolean; message: string }; selected: string[] } | 
 
 export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; imageUrl: string; initial: EditorParking[] }) {
   const m = map.pxPerMeter;
-  const [spaces, setSpaces] = useState(initial);
+  const [spaces, setSpacesState] = useState(initial);
+  // Indietro / Avanti sulle posizioni dei posti auto.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const latest = useRef(spaces);
+  useEffect(() => {
+    latest.current = spaces;
+  });
+  const history = useUndoHistory({
+    read: () => latest.current,
+    restore: (state) => {
+      setSpacesState(state);
+      setDirty(true);
+      setNotice(null);
+    },
+    scope: rootRef,
+  });
+  const setSpaces: typeof setSpacesState = (update) => {
+    history.checkpoint();
+    setSpacesState(update);
+  };
   const [selected, setSelected] = useState<Set<string>>(() => new Set(carried?.selected ?? []));
   const [tool, setTool] = useState<Tool>("select");
   const [points, setPoints] = useState<Point[]>([]);
@@ -161,6 +181,11 @@ export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; im
     const dx = p.x - d.start.x;
     const dy = p.y - d.start.y;
     if (!d.moved && Math.abs(dx) + Math.abs(dy) < 0.2 * m) return;
+    if (!d.moved) {
+      // Un trascinamento è un passo solo di Indietro.
+      history.checkpoint();
+      history.pause(true);
+    }
     d.moved = true;
     setSpaces((all) => all.map((s) => (d.orig.has(s.id) ? { ...s, x: Math.round((d.orig.get(s.id)!.x + dx) * 10) / 10, y: Math.round((d.orig.get(s.id)!.y + dy) * 10) / 10 } : s)));
     setDirty(true);
@@ -318,9 +343,10 @@ export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; im
   );
 
   return (
-    <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
+    <div ref={rootRef} className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
       <div className="min-w-0">
         <div className="mb-2 flex flex-wrap items-center gap-2">
+          <UndoButtons history={history} />
           {toolButton("select", "Seleziona", MousePointer2)}
           {toolButton("place", "Posa sulla mappa", Plus, unplaced.length === 0)}
           {toolButton("row", "Metti in fila", Spline, chosen.length === 0)}
@@ -391,8 +417,14 @@ export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; im
                   style={{ cursor: tool === "select" ? "move" : "inherit", touchAction: tool === "select" ? "none" : "auto" }}
                   onPointerDown={(e) => onSpaceDown(e, s)}
                   onPointerMove={onSpaceMove}
-                  onPointerUp={() => (drag.current = null)}
-                  onPointerCancel={() => (drag.current = null)}
+                  onPointerUp={() => {
+                    drag.current = null;
+                    history.pause(false);
+                  }}
+                  onPointerCancel={() => {
+                    drag.current = null;
+                    history.pause(false);
+                  }}
                   onClick={(e) => tool === "select" && e.stopPropagation()}
                 >
                   <ParkingMarks

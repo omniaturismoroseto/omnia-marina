@@ -97,6 +97,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   linea), «recognize»; «Rimetti in un modulo solo» per i pontili già spezzati. Nell'interfaccia l'ormeggio è «di prua» / «all'inglese».
   In Pontili e posti i moduli lunghi vanno a capo a blocchi (`BerthStrip`), mai barra di scorrimento.
   Una foto con inquadratura diversa azzera posti, linee dei pontili, sfondo e base.
+- Indietro/Avanti: negli editor della mappa (posti, sfondo e servizi, posti auto) `useUndoHistory` + `UndoButtons` (`src/components/use-undo.tsx`,
+  Ctrl+Z/Ctrl+Y): fotografia prima di ogni modifica (i setter passano da `history.checkpoint()`, un trascinamento = un passo con `pause`).
+  Modifiche già salvate: tabella `settings_history` (prima/dopo in JSON) e `src/server/settings-history.ts`; area «pontile» (posti, tratti,
+  nomi dei moduli e linea del pontile, `withPierHistory` attorno alle azioni di Pontili e posti) e «porto» (`withMarinaHistory` con le
+  colonne di `marinas` salvate da Impostazioni → Porto). `stepHistory` annulla/rifà solo se lo stato attuale è uguale al «dopo»/«prima»;
+  una modifica nuova cancella gli «Avanti». Pulsanti `SavedHistoryButtons` (`src/components/saved-history.tsx`), azione `stepSettingsHistory`.
+  Una nuova azione che cambia un pontile o i dati del porto va avvolta in `withPierHistory`/`withMarinaHistory`.
 - Posti auto riservati (Impostazioni → Posti auto, `/impostazioni/posti-auto`): tabella `parking_spaces` (codice, coperto, misure,
   in servizio, `plan_x/plan_y/plan_angle` in pixel della foto come i posti barca); azioni in `src/server/parking-actions.ts`, editor
   sulla mappa `parking-editor.tsx` (posa, «Metti in fila» con `layoutPier`, «Allinea in fila» con `alignRows`, «Lunghezza ±1/±5 m» lungo la fila con `rowAxis`, «Aggiungi un posto» / «Togli» sulla fila scelta con `addParkingToRow` /

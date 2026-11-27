@@ -12,6 +12,8 @@ import { findZoneByComune } from "@/lib/civil-protection";
 import { formatCoordinates } from "@/lib/weather";
 import { latestCivilBulletin } from "@/server/civil-protection";
 import { weatherEnabled } from "@/server/weather";
+import { historyState } from "@/server/settings-history";
+import { SavedHistoryButtons } from "@/components/saved-history";
 import { BoaterSettingsForm, ContractTextsForm, LegalTextsForm, MarinaForm } from "./settings-forms";
 import { SettingsTabs } from "./tabs";
 
@@ -21,14 +23,20 @@ export default page(async function SettingsPage() {
   const ctx = await requireMarina(["admin"]);
   const [marina] = await db.select().from(marinas).where(eq(marinas.id, ctx.marinaId));
   const logo = portLogo(marina);
-  const bulletin = await latestCivilBulletin();
+  const [bulletin, history] = await Promise.all([latestCivilBulletin(), historyState(ctx.marinaId, "porto", [ctx.marinaId])]);
+  const saved = history[ctx.marinaId];
   const zones = bulletin?.days[0]?.zones ?? [];
 
   return (
     <>
       <PageHeader help="impostazioni" title="Impostazioni" description="Dati del porto, struttura dei pontili, categorie e persone che vi lavorano." />
       <SettingsTabs current="porto" />
-      <div className="space-y-5">
+      <div className="mb-4 flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+        <p className="text-sm text-muted">Modifiche salvate in questa pagina:</p>
+        <SavedHistoryButtons area="porto" targetId={ctx.marinaId} undo={saved.undo} redo={saved.redo} />
+      </div>
+      {/* Dopo «Indietro» o «Avanti» i moduli ripartono dai valori salvati. */}
+      <div className="space-y-5" key={saved.version}>
         <Card title="Dati del porto">
           <MarinaForm marina={marina} />
         </Card>

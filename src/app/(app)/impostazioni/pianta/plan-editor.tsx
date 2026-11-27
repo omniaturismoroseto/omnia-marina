@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { KeyboardEvent, MouseEvent, PointerEvent } from "react";
 import { MousePointer2, Plus, Ruler, Spline } from "@/components/icons";
 import { PlanZoom } from "@/app/(app)/mappa/plan-zoom";
+import { UndoButtons, useUndoHistory } from "@/components/use-undo";
 import { parseMeters } from "@/lib/format";
 import {
   berthSizePx,
@@ -101,14 +102,14 @@ export function PlanEditor({
   onSelectionChange?: (ids: string[]) => void;
 }) {
   // I moduli mancanti si riconoscono all'apertura dalle posizioni salvate, poi restano fissi (si salvano con la pianta).
-  const [berths, setBerths] = useState(() => withModules(initialBerths, initialPxPerMeter, width));
+  const [berths, setBerthsState] = useState(() => withModules(initialBerths, initialPxPerMeter, width));
   // Sotto i posti si parte dalla base disegnata (o, senza, dallo schema ricavato dai posti); la foto dal vero si sceglie.
   const [under, setUnder] = useState<"foto" | "base">(() =>
     baseUrl || (initialPxPerMeter && initialBerths.some((b) => b.x !== null)) ? "base" : "foto",
   );
   // Ormeggio con cui si dispongono i posti tracciando una linea: di prua (perpendicolari) o all'inglese (di fianco).
   const [mooring, setMooring] = useState<Mooring>("punta");
-  const [pxPerMeter, setPxPerMeter] = useState(initialPxPerMeter);
+  const [pxPerMeter, setPxState] = useState(initialPxPerMeter);
   const [tool, setTool] = useState<Tool>(
     initialPxPerMeter ? "select" : "scale",
   );
@@ -177,9 +178,39 @@ export function PlanEditor({
     mooring: Mooring;
   } | null>(null);
   // Linee tracciate in questa sessione, una per pontile: si salvano per disegnare i pontili nello schema.
-  const [traces, setTraces] = useState<
+  const [traces, setTracesState] = useState<
     Record<string, { a: Point; b: Point; widthM: number }>
   >({});
+  // Indietro / Avanti: posti, linee tracciate e scala come erano prima di ogni modifica (fino al salvataggio e oltre).
+  const rootRef = useRef<HTMLDivElement>(null);
+  const latest = useRef({ berths, traces, pxPerMeter });
+  useEffect(() => {
+    latest.current = { berths, traces, pxPerMeter };
+  });
+  const history = useUndoHistory({
+    read: () => latest.current,
+    restore: (state) => {
+      setBerthsState(state.berths);
+      setTracesState(state.traces);
+      setPxState(state.pxPerMeter);
+      setDirty(true);
+      setNotice(null);
+    },
+    scope: rootRef,
+  });
+  // Ogni modifica passa da qui: prima si ricorda com'era.
+  const setBerths: typeof setBerthsState = (update) => {
+    history.checkpoint();
+    setBerthsState(update);
+  };
+  const setTraces: typeof setTracesState = (update) => {
+    history.checkpoint();
+    setTracesState(update);
+  };
+  const setPxPerMeter: typeof setPxState = (update) => {
+    history.checkpoint();
+    setPxState(update);
+  };
   // Linee già salvate: spostando o ruotando un pontile intero si spostano anche loro.
   const savedTraces = useRef<
     Record<string, { a: Point; b: Point; widthM: number }>
@@ -619,7 +650,12 @@ export function PlanEditor({
     const d = drag.current;
     if (!d) return;
     const p = toImage(e);
-    if (Math.abs(p.x - d.start.x) + Math.abs(p.y - d.start.y) > u) d.moved = true;
+    if (!d.moved && Math.abs(p.x - d.start.x) + Math.abs(p.y - d.start.y) > u) {
+      d.moved = true;
+      // Un trascinamento è un passo solo di Indietro.
+      history.checkpoint();
+      history.pause(true);
+    }
     translate(
       d.orig,
       p.x - d.start.x,
@@ -632,6 +668,7 @@ export function PlanEditor({
   function onBerthUp() {
     const d = drag.current;
     drag.current = null;
+    history.pause(false);
     if (d?.toggleOff && !d.moved) {
       const off = d.toggleOff;
       setPicked((prev) => {
@@ -880,9 +917,10 @@ export function PlanEditor({
               : "Trascina un posto per spostare solo quello; trascina la foto per muoverti, rotellina o due dita per ingrandire.";
 
   return (
-    <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
+    <div ref={rootRef} className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
       <div className="min-w-0">
         <div className="mb-2 flex flex-wrap items-center gap-2">
+          <UndoButtons history={history} />
           {toolButton("select", "Seleziona", MousePointer2)}
           {toolButton("scale", "Imposta scala", Ruler)}
           {toolButton(
@@ -999,7 +1037,10 @@ export function PlanEditor({
                     onPointerDown={(e) => onBerthDown(e, b)}
                     onPointerMove={onBerthMove}
                     onPointerUp={onBerthUp}
-                    onPointerCancel={() => (drag.current = null)}
+                    onPointerCancel={() => {
+                      drag.current = null;
+                      history.pause(false);
+                    }}
                     onClick={(e) => tool === "select" && e.stopPropagation()}
                   >
                     <title>{`Posto ${b.code}`}</title>
