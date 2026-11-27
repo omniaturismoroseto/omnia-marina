@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { MouseEvent, PointerEvent } from "react";
 import { MousePointer2, Plus, RotateCcw, Spline } from "@/components/icons";
 import { compareCodes } from "@/lib/berth-codes";
-import { berthSizePx, layoutPier, normalizeAngle, type Point } from "@/lib/plan";
+import { berthSizePx, layoutPier, normalizeAngle, rowAxis, type Point } from "@/lib/plan";
 import { buildDrawing } from "@/lib/plan-drawing";
 import { fitTrace } from "@/lib/plan-extend";
+import { alignRows } from "@/lib/plan-align";
 import { pathOf } from "@/lib/plan-features";
 import { PIER, SHAPE, WATER } from "@/lib/plan-style";
 import { saveParkingLayout } from "@/server/parking-actions";
@@ -175,6 +176,48 @@ export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; im
         const angle = normalizeAngle((s.angle ?? 0) + deg);
         lastAngle.current = angle;
         return { ...s, x: Math.round((cx + dx * Math.cos(r) - dy * Math.sin(r)) * 10) / 10, y: Math.round((cy + dx * Math.sin(r) + dy * Math.cos(r)) * 10) / 10, angle };
+      }),
+    );
+  }
+
+  // «Allinea in fila»: i posti scelti già sulla mappa si raddrizzano dove sono, in ordine di codice, stesso angolo e stesso passo
+  // (una fila, o due una di fronte all'altra), come per i posti barca.
+  function align() {
+    const list = chosen.filter((s) => s.x !== null && s.y !== null);
+    if (list.length < 2) return;
+    const placements = alignRows(
+      list.map((s) => ({ id: s.id, code: s.code, x: s.x!, y: s.y!, angle: s.angle ?? 0, lengthCm: s.lengthCm, beamCm: s.widthCm })),
+      m,
+    );
+    const at = new Map(placements.map((p) => [p.id, p]));
+    lastAngle.current = placements[0]?.angle ?? lastAngle.current;
+    change((all) => all.map((s) => (at.has(s.id) ? { ...s, ...at.get(s.id)! } : s)), `${placements.length} posti auto allineati in fila. Se va bene, salva.`);
+  }
+
+  // Direzione della fila dei posti scelti (lungo la fila, che siano affiancati o uno dietro l'altro) e la sua lunghezza in metri.
+  const placedChosen = chosen.filter((s) => s.x !== null && s.y !== null);
+  const rowOf = (list: EditorParking[]) => {
+    const axis = rowAxis(list.map((s) => ({ x: s.x!, y: s.y!, angle: s.angle ?? 0, lengthCm: s.lengthCm, beamCm: s.widthCm })), m);
+    const proj = list.map((s) => s.x! * axis.d.x + s.y! * axis.d.y);
+    const span = Math.max(...list.map((s) => (axis.mooring === "inglese" ? s.lengthCm : s.widthCm))) / 100;
+    return { d: axis.d, lo: Math.min(...proj), hi: Math.max(...proj), lengthM: (Math.max(...proj) - Math.min(...proj)) / m + span };
+  };
+  const rowLengthM = placedChosen.length >= 2 ? rowOf(placedChosen).lengthM : null;
+
+  // «Lunghezza ±1/±5 m»: allunga o accorcia la fila cambiando lo spazio tra i posti (dal centro); le misure dei posti restano.
+  function stretch(meters: number) {
+    if (placedChosen.length < 2) return;
+    const { d, lo, hi } = rowOf(placedChosen);
+    const len = hi - lo;
+    if (len < 1) return;
+    const k = Math.max(0.1, (len + meters * m) / len);
+    const mid = (lo + hi) / 2;
+    const ids = new Set(placedChosen.map((s) => s.id));
+    change((all) =>
+      all.map((s) => {
+        if (!ids.has(s.id)) return s;
+        const t = s.x! * d.x + s.y! * d.y - mid;
+        return { ...s, x: Math.round((s.x! + (k - 1) * t * d.x) * 10) / 10, y: Math.round((s.y! + (k - 1) * t * d.y) * 10) / 10 };
       }),
     );
   }
@@ -368,7 +411,30 @@ export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; im
                   </button>
                 ))}
               </div>
+              {rowLengthM !== null && (
+                <div>
+                  <p className="label">
+                    Lunghezza: {rowLengthM.toLocaleString("it-IT", { maximumFractionDigits: 1 })} m
+                  </p>
+                  <div className="mt-1 flex gap-1">
+                    {[-5, -1, 1, 5].map((d) => (
+                      <button key={d} type="button" className="btn btn-secondary btn-sm flex-1 px-1" onClick={() => stretch(d)}>
+                        {d > 0 ? `+${d} m` : `${d} m`}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="hint mt-1">Allunga o accorcia la fila cambiando lo spazio tra i posti; le misure dei posti restano le stesse.</p>
+                </div>
+              )}
               <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={chosen.filter((s) => s.x !== null).length < 2}
+                  onClick={align}
+                >
+                  Allinea in fila
+                </button>
                 {lastRow && (
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => layRow(lastRow.ids, lastRow.a, lastRow.b, !lastRow.flip)}>
                     <RotateCcw size={15} aria-hidden="true" /> Inverti il lato
@@ -386,7 +452,8 @@ export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; im
           )}
           <p className="hint">
             «Metti in fila»: scegli i posti auto, poi clicca inizio e fine della fila; si dispongono uno accanto all&apos;altro in ordine di codice,
-            alla loro misura. «Posa sulla mappa»: un clic per posto.
+            alla loro misura. «Allinea in fila» raddrizza i posti scelti dove sono: stessa linea, stesso angolo, stessa distanza. «Posa sulla
+            mappa»: un clic per posto.
           </p>
         </section>
 
