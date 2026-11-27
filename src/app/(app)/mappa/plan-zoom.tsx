@@ -337,6 +337,9 @@ export function PlanZoom({
             transformOrigin: "0 0",
             // Le icone dei servizi si rimpiccioliscono di quanto si ingrandisce: sullo schermo restano della stessa misura.
             ["--plan-zoom" as string]: zoom,
+            // Pixel dello schermo per pixel della pianta: i segnaposto dei servizi lo usano per avere sempre la stessa misura vera sullo
+            // schermo (anche sul telefono, dove la pianta intera è piccola).
+            ["--plan-px" as string]: view?.s ?? 1,
             transform: view
               ? `translate(${view.x}px, ${view.y}px) scale(${view.s})`
               : undefined,
