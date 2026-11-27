@@ -615,6 +615,28 @@ export const parkingSpaces = pgTable(
   (t) => [uniqueIndex("parking_spaces_marina_code_uq").on(t.marinaId, t.code)],
 );
 
+// Storico delle modifiche salvate nelle impostazioni, per «Indietro» e «Avanti»: per ogni modifica com'era prima e com'è dopo.
+// area «pontile» (target = pontile: posti, tratti, moduli, linea) o «porto» (target = porto: i campi cambiati). Annullare rimette
+// `before` solo se lo stato attuale è ancora `after`; ripetere il contrario. Una modifica nuova cancella quelle annullate.
+export const settingsHistory = pgTable(
+  "settings_history",
+  {
+    id: id(),
+    marinaId: uuid("marina_id")
+      .notNull()
+      .references(() => marinas.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    area: text("area").notNull(),
+    targetId: uuid("target_id").notNull(),
+    label: text("label").notNull(),
+    before: jsonb("before").notNull(),
+    after: jsonb("after").notNull(),
+    undone: boolean("undone").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index("settings_history_target_idx").on(t.marinaId, t.area, t.targetId, t.createdAt)],
+);
+
 // ───────────────────────── Tariffe ─────────────────────────
 
 export const priceLists = pgTable(

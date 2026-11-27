@@ -19,6 +19,7 @@ import { byBerthCode } from "@/server/berth-order";
 import { assignModules } from "@/lib/plan-modules";
 import { berthSizePx } from "@/lib/plan";
 import { loadPlanEditor } from "@/server/plan-editor";
+import { historyState } from "@/server/settings-history";
 import { moduleKey } from "./types";
 
 export const metadata: Metadata = { title: "Pontili e posti barca" };
@@ -53,6 +54,11 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
       .from(contracts)
       .where(and(eq(contracts.marinaId, ctx.marinaId), eq(contracts.status, "attivo"), gte(contracts.endDate, today))),
   ]);
+  const history = await historyState(
+    ctx.marinaId,
+    "pontile",
+    pierRows.map((p) => p.id),
+  );
   const activeByBerth = new Map(activeRows.map((r) => [r.berthId, r.number ?? "senza numero"]));
   const moduleNames = Object.fromEntries(moduleRows.map((r) => [moduleKey(r.pierId, r.sectionId, r.module), r.name]));
   const hasPlan = Boolean(marina?.pxPerMeter);
@@ -67,6 +73,7 @@ export default page(async function PiersPage({ searchParams }: { searchParams: S
     baseRate: p.baseRate,
     sections: sectionRows.filter((sec) => sec.pierId === p.id).map((sec) => ({ id: sec.id, label: sec.label })),
     contracts: contractsByPier.get(p.id) ?? 0,
+    history: { undo: history[p.id]?.undo ?? null, redo: history[p.id]?.redo ?? null },
   }));
   // Moduli della pianta: quelli salvati dall'editor; per i posti disposti che non ne hanno ancora uno si riconoscono come nell'editor.
   const modules =

@@ -239,6 +239,13 @@
       "when": 1795761148936,
       "tag": "0033_testi_del_contratto",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1795782194656,
+      "tag": "0034_storico_impostazioni",
+      "breakpoints": true
     }
   ]
 }

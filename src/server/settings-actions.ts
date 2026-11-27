@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, asc, eq, inArray, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@/db";
+import { db, type Tx } from "@/db";
 import { berthCategories, berths, contracts, marinas, memberships, ownerAccess, pierSections, piers, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { isAccountManagerEmail, visibleUser } from "@/lib/account-manager";
@@ -23,11 +23,13 @@ import { parseCoordinates } from "@/lib/weather";
 import { checkPassword, createAccount, setPassword } from "./credentials";
 import { activeContractMessage, activeContractsOnBerths } from "./contracts";
 import { DomainError, toFormState } from "./errors";
+import { stepHistory, withMarinaHistory, withPierHistory, type HistoryArea } from "./settings-history";
 import { arrangeUnit, dissolveSection, flipNumbering, regroupIntoModule, renameModule, setModules, mergePiers, renameSection, sectionFromBerths, splitSection, type MergeResult } from "./piers";
 
 const ACCOUNT_SERVICE_DOWN = "Il servizio di accesso non risponde: riprova tra qualche minuto.";
 
 const ADMIN = ["admin" as const];
+const who = (ctx: { marinaId: string; user: { id: string } }) => ({ marinaId: ctx.marinaId, userId: ctx.user.id });
 const password = (message = "Almeno 10 caratteri") => z.preprocess((v) => (typeof v === "string" ? v : ""), z.string().min(10, message).max(200));
 
 // ───────────────────────── Porto ─────────────────────────
@@ -54,11 +56,15 @@ export async function saveMarina(_prev: FormState, formData: FormData): Promise<
   const ctx = await requireMarina(ADMIN);
   const parsed = parseForm(marinaSchema, formData);
   if (!parsed.ok) return parsed.state;
-  await db
-    .update(marinas)
-    .set({ ...parsed.data, province: parsed.data.province?.toUpperCase() ?? null })
-    .where(eq(marinas.id, ctx.marinaId));
-  await audit(ctx, "modifica", "porto", ctx.marinaId, "Dati del porto");
+  await db.transaction((tx) =>
+    withMarinaHistory(tx, who(ctx), "Dati del porto", Object.keys(marinaSchema.shape), async () => {
+      await tx
+        .update(marinas)
+        .set({ ...parsed.data, province: parsed.data.province?.toUpperCase() ?? null })
+        .where(eq(marinas.id, ctx.marinaId));
+      await audit(ctx, "modifica", "porto", ctx.marinaId, "Dati del porto", tx);
+    }),
+  );
   revalidatePath("/", "layout");
   return { ok: true, message: "Dati salvati." };
 }
@@ -86,11 +92,15 @@ export async function saveBoaterSettings(_prev: FormState, formData: FormData): 
   if (coordinates && !position) {
     return fail("Controlla i campi evidenziati.", { coordinates: "Scrivi latitudine e longitudine, per esempio 42.6589, 14.0256" });
   }
-  await db
-    .update(marinas)
-    .set({ ...data, latitude: position?.latitude ?? null, longitude: position?.longitude ?? null })
-    .where(eq(marinas.id, ctx.marinaId));
-  await audit(ctx, "modifica", "porto", ctx.marinaId, "Area diportisti e allerte");
+  await db.transaction((tx) =>
+    withMarinaHistory(tx, who(ctx), "Area diportisti e allerte", [...Object.keys(data), "latitude", "longitude"], async () => {
+      await tx
+        .update(marinas)
+        .set({ ...data, latitude: position?.latitude ?? null, longitude: position?.longitude ?? null })
+        .where(eq(marinas.id, ctx.marinaId));
+      await audit(ctx, "modifica", "porto", ctx.marinaId, "Area diportisti e allerte", tx);
+    }),
+  );
   revalidatePath("/", "layout");
   return { ok: true, message: "Impostazioni salvate." };
 }
@@ -115,9 +125,13 @@ export async function saveContractTexts(_prev: FormState, formData: FormData): P
   }
   const contractTexts = customContractTexts(input);
   const contractSummary = formData.get("contractSummary") === "on";
-  await db.update(marinas).set({ contractTexts, contractSummary }).where(eq(marinas.id, ctx.marinaId));
   const changed = Object.keys(contractTexts).length;
-  await audit(ctx, "modifica", "porto", ctx.marinaId, `Testo del contratto (${changed ? `${changed} parti personalizzate` : "testi predefiniti"})`);
+  await db.transaction((tx) =>
+    withMarinaHistory(tx, who(ctx), "Testo del contratto", ["contractTexts", "contractSummary"], async () => {
+      await tx.update(marinas).set({ contractTexts, contractSummary }).where(eq(marinas.id, ctx.marinaId));
+      await audit(ctx, "modifica", "porto", ctx.marinaId, `Testo del contratto (${changed ? `${changed} parti personalizzate` : "testi predefiniti"})`, tx);
+    }),
+  );
   revalidatePath("/", "layout");
   return { ok: true, message: "Testo del contratto salvato: vale per tutti i contratti, anche già stampati, alla prossima stampa." };
 }
@@ -126,10 +140,43 @@ export async function saveLegalTexts(_prev: FormState, formData: FormData): Prom
   const ctx = await requireMarina(ADMIN);
   const parsed = parseForm(textsSchema, formData);
   if (!parsed.ok) return parsed.state;
-  await db.update(marinas).set(parsed.data).where(eq(marinas.id, ctx.marinaId));
-  await audit(ctx, "modifica", "porto", ctx.marinaId, `Testi di privacy e contratto (informativa v. ${parsed.data.privacyPolicyVersion})`);
+  await db.transaction((tx) =>
+    withMarinaHistory(tx, who(ctx), "Informativa e condizioni", Object.keys(textsSchema.shape), async () => {
+      await tx.update(marinas).set(parsed.data).where(eq(marinas.id, ctx.marinaId));
+      await audit(ctx, "modifica", "porto", ctx.marinaId, `Testi di privacy e contratto (informativa v. ${parsed.data.privacyPolicyVersion})`, tx);
+    }),
+  );
   revalidatePath("/", "layout");
   return { ok: true, message: "Testi salvati." };
+}
+
+// ───────────────────────── Indietro / Avanti ─────────────────────────
+
+// «Indietro» e «Avanti» delle modifiche salvate: area «porto» (Impostazioni → Porto) o «pontile» (scheda del pontile).
+export async function stepSettingsHistory(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const area = String(formData.get("area") ?? "") as HistoryArea;
+  if (area !== "pontile" && area !== "porto") return fail("Richiesta non valida.");
+  const redo = formData.get("direction") === "avanti";
+  let targetId = ctx.marinaId;
+  if (area === "pontile") {
+    const pierId = formId(formData, "targetId");
+    if (!pierId) return fail("Pontile non trovato.");
+    const [pier] = await db.select({ id: piers.id }).from(piers).where(and(eq(piers.id, pierId), eq(piers.marinaId, ctx.marinaId)));
+    if (!pier) return fail("Pontile non trovato.");
+    targetId = pier.id;
+  }
+  try {
+    const label = await db.transaction(async (tx) => {
+      const l = await stepHistory(tx, who(ctx), area, targetId, redo);
+      await audit(ctx, "modifica", area === "porto" ? "porto" : "pontile", targetId, `${redo ? "Rifatto" : "Annullato"}: ${l}`, tx);
+      return l;
+    });
+    revalidatePath("/", "layout");
+    return { ok: true, message: `${redo ? "Rifatto" : "Annullato"}: ${label}.` };
+  } catch (err) {
+    return toFormState(err);
+  }
 }
 
 // ───────────────────────── Pontili e posti ─────────────────────────
@@ -621,19 +668,23 @@ export async function updateBerths(_prev: FormState, formData: FormData): Promis
   if (d.hasPower) set.hasPower = d.hasPower === "si";
   if (Object.keys(set).length === 0) return fail("Scegli che cosa cambiare.");
 
-  await db
-    .update(berths)
-    .set(set)
-    .where(
-      and(
-        eq(berths.marinaId, ctx.marinaId),
-        inArray(
-          berths.id,
-          list.map((b) => b.id),
-        ),
-      ),
-    );
-  await audit(ctx, "modifica", "posti barca", d.pierId, `${list.length} posti (${list.map((b) => b.code).join(", ")})`);
+  await db.transaction((tx) =>
+    withPierHistory(tx, who(ctx), d.pierId, `Modifica di ${list.length} ${list.length === 1 ? "posto" : "posti"}`, async () => {
+      await tx
+        .update(berths)
+        .set(set)
+        .where(
+          and(
+            eq(berths.marinaId, ctx.marinaId),
+            inArray(
+              berths.id,
+              list.map((b) => b.id),
+            ),
+          ),
+        );
+      await audit(ctx, "modifica", "posti barca", d.pierId, `${list.length} posti (${list.map((b) => b.code).join(", ")})`, tx);
+    }),
+  );
   revalidatePath("/", "layout");
   return { ok: true, message: `${list.length} ${list.length === 1 ? "posto aggiornato" : "posti aggiornati"}.` };
 }
@@ -684,7 +735,7 @@ export async function renameBerths(_prev: FormState, formData: FormData): Promis
   );
   if (active.length > 0) return fail(activeContractMessage(active));
 
-  await db.transaction(async (tx) => {
+  await db.transaction((tx) => withPierHistory(tx, who(ctx), d.pierId, `Codici di ${changes.length} ${changes.length === 1 ? "posto" : "posti"}`, async () => {
     // Prima codici provvisori, poi quelli nuovi: così due posti scelti possono anche scambiarsi il codice.
     for (const c of changes) {
       await tx.update(berths).set({ code: `~${c.id}` }).where(and(eq(berths.id, c.id), eq(berths.marinaId, ctx.marinaId)));
@@ -695,7 +746,7 @@ export async function renameBerths(_prev: FormState, formData: FormData): Promis
     const first = changes[0];
     const last = changes[changes.length - 1];
     await audit(ctx, "modifica", "posti barca", d.pierId, `Codici di ${changes.length} posti (${list.find((b) => b.id === first.id)!.code} → ${first.code} … ${last.code})`, tx);
-  });
+  }));
   revalidatePath("/", "layout");
   const codes = result.codes.map((c) => c.code);
   return { ok: true, message: `${changes.length} ${changes.length === 1 ? "codice cambiato" : "codici cambiati"}: ora da ${codes[0]} a ${codes[codes.length - 1]}.` };
@@ -713,11 +764,13 @@ export async function makeBerthSection(_prev: FormState, formData: FormData): Pr
   if (!parsed.ok) return parsed.state;
   const ids = parseIdList(formData.get("berthIds"));
   try {
-    const count = await db.transaction(async (tx) => {
-      const n = await sectionFromBerths(tx, ctx.marinaId, parsed.data.pierId, ids, parsed.data.label);
-      await audit(ctx, "modifica", "pontile", parsed.data.pierId, `Tratto «${parsed.data.label}» della pianta (${n} posti)`, tx);
-      return n;
-    });
+    const count = await db.transaction((tx) =>
+      withPierHistory(tx, who(ctx), parsed.data.pierId, `Dividi: tratto «${parsed.data.label}»`, async () => {
+        const n = await sectionFromBerths(tx, ctx.marinaId, parsed.data.pierId, ids, parsed.data.label);
+        await audit(ctx, "modifica", "pontile", parsed.data.pierId, `Tratto «${parsed.data.label}» della pianta (${n} posti)`, tx);
+        return n;
+      }),
+    );
     revalidatePath("/", "layout");
     return { ok: true, message: `Tratto «${parsed.data.label}» creato con ${count} ${count === 1 ? "posto" : "posti"}: in Mappa del porto ora si sposta da solo.` };
   } catch (err) {
@@ -738,11 +791,13 @@ export async function arrangeBerths(_prev: FormState, formData: FormData): Promi
   if (!parsed.ok) return parsed.state;
   const d = parsed.data;
   try {
-    const result = await db.transaction(async (tx) => {
-      const r = await arrangeUnit(tx, ctx.marinaId, d.pierId, d.sectionId, d.layout);
-      await audit(ctx, "modifica", "posti barca", d.pierId, `Disposizione di ${r.count} posti (${d.layout})`, tx);
-      return r;
-    });
+    const result = await db.transaction((tx) =>
+      withPierHistory(tx, who(ctx), d.pierId, "Disposizione dei posti", async () => {
+        const r = await arrangeUnit(tx, ctx.marinaId, d.pierId, d.sectionId, d.layout);
+        await audit(ctx, "modifica", "posti barca", d.pierId, `Disposizione di ${r.count} posti (${d.layout})`, tx);
+        return r;
+      }),
+    );
     revalidatePath("/", "layout");
     return {
       ok: true,
@@ -766,11 +821,13 @@ export async function flipBerthNumbering(_prev: FormState, formData: FormData): 
   const ids = parseIdList(formData.get("berthIds"));
   const { pierId, mode } = parsed.data;
   try {
-    const n = await db.transaction(async (tx) => {
-      const count = await flipNumbering(tx, ctx.marinaId, pierId, ids, mode);
-      await audit(ctx, "modifica", "posti barca", pierId, `Numerazione girata (${mode === "estremi" ? "dall'altra estremità" : "lati scambiati"}) di ${count} posti`, tx);
-      return count;
-    });
+    const n = await db.transaction((tx) =>
+      withPierHistory(tx, who(ctx), pierId, mode === "estremi" ? "Numerazione dall'altra estremità" : "Lati scambiati", async () => {
+        const count = await flipNumbering(tx, ctx.marinaId, pierId, ids, mode);
+        await audit(ctx, "modifica", "posti barca", pierId, `Numerazione girata (${mode === "estremi" ? "dall'altra estremità" : "lati scambiati"}) di ${count} posti`, tx);
+        return count;
+      }),
+    );
     revalidatePath("/", "layout");
     return { ok: true, message: mode === "estremi" ? `Numerazione girata: ${n} posti, ora dall'altra estremità.` : `Lati scambiati per ${n} posti.` };
   } catch (err) {
@@ -801,11 +858,13 @@ export async function setBerthModuleAction(_prev: FormState, formData: FormData)
     const label = String(formData.get("label") ?? "").trim();
     if (!label || label.length > 20) return fail("Controlla i campi evidenziati.", { label: label ? "Al massimo 20 caratteri" : "Dai un nome al tratto" });
     try {
-      const n = await db.transaction(async (tx) => {
-        const count = await regroupIntoModule(tx, ctx.marinaId, pierId, ids, label);
-        await audit(ctx, "modifica", "pontile", pierId, `${count} posti riuniti nel tratto «${label}», in un modulo solo`, tx);
-        return count;
-      });
+      const n = await db.transaction((tx) =>
+        withPierHistory(tx, who(ctx), pierId, `Unisci nel tratto «${label}»`, async () => {
+          const count = await regroupIntoModule(tx, ctx.marinaId, pierId, ids, label);
+          await audit(ctx, "modifica", "pontile", pierId, `${count} posti riuniti nel tratto «${label}», in un modulo solo`, tx);
+          return count;
+        }),
+      );
       revalidatePath("/", "layout");
       return { ok: true, message: `Fatto: i ${n} posti ora sono nel tratto «${label}», in un modulo solo.` };
     } catch (err) {
@@ -813,11 +872,13 @@ export async function setBerthModuleAction(_prev: FormState, formData: FormData)
     }
   }
   try {
-    const r = await db.transaction(async (tx) => {
-      const result = await setModules(tx, ctx.marinaId, pierId, layout, ids, target);
-      await audit(ctx, "modifica", "pontile", pierId, `${result.count} posti nel modulo ${result.module}`, tx);
-      return result;
-    });
+    const r = await db.transaction((tx) =>
+      withPierHistory(tx, who(ctx), pierId, "Unisci in un modulo", async () => {
+        const result = await setModules(tx, ctx.marinaId, pierId, layout, ids, target);
+        await audit(ctx, "modifica", "pontile", pierId, `${result.count} posti nel modulo ${result.module}`, tx);
+        return result;
+      }),
+    );
     revalidatePath("/", "layout");
     return { ok: true, message: target === "new" ? `Fatto: i ${r.count} posti ora sono un modulo solo.` : `Fatto: ${r.count} posti aggiunti al modulo.` };
   } catch (err) {
@@ -837,10 +898,12 @@ export async function renameModuleAction(_prev: FormState, formData: FormData): 
   if (!parsed.ok) return parsed.state;
   const { pierId, module, name } = parsed.data;
   try {
-    await db.transaction(async (tx) => {
-      await renameModule(tx, ctx.marinaId, pierId, parseIdList(formData.get("berthIds")), module, name);
-      await audit(ctx, "modifica", "pontile", pierId, name ? `Modulo ${module} chiamato «${name}»` : `Modulo ${module} senza nome`, tx);
-    });
+    await db.transaction((tx) =>
+      withPierHistory(tx, who(ctx), pierId, "Nome del modulo", async () => {
+        await renameModule(tx, ctx.marinaId, pierId, parseIdList(formData.get("berthIds")), module, name);
+        await audit(ctx, "modifica", "pontile", pierId, name ? `Modulo ${module} chiamato «${name}»` : `Modulo ${module} senza nome`, tx);
+      }),
+    );
   } catch (err) {
     return toFormState(err);
   }
@@ -853,14 +916,26 @@ const sectionLabelSchema = z.object({
   label: z.preprocess((v) => (typeof v === "string" ? v.trim() : ""), z.string().min(1, "Dai un nome al tratto").max(20, "Al massimo 20 caratteri")),
 });
 
+async function sectionPier(tx: Tx, marinaId: string, sectionId: string): Promise<string> {
+  const [row] = await tx
+    .select({ pierId: pierSections.pierId })
+    .from(pierSections)
+    .where(and(eq(pierSections.id, sectionId), eq(pierSections.marinaId, marinaId)));
+  if (!row) throw new DomainError("Tratto non trovato.");
+  return row.pierId;
+}
+
 export async function renameSectionAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
   const parsed = parseForm(sectionLabelSchema, formData);
   if (!parsed.ok) return parsed.state;
   try {
     await db.transaction(async (tx) => {
-      await renameSection(tx, ctx.marinaId, parsed.data.sectionId, parsed.data.label);
-      await audit(ctx, "modifica", "tratto", parsed.data.sectionId, `Tratto «${parsed.data.label}»`, tx);
+      const pierId = await sectionPier(tx, ctx.marinaId, parsed.data.sectionId);
+      await withPierHistory(tx, who(ctx), pierId, "Nome del tratto", async () => {
+        await renameSection(tx, ctx.marinaId, parsed.data.sectionId, parsed.data.label);
+        await audit(ctx, "modifica", "tratto", parsed.data.sectionId, `Tratto «${parsed.data.label}»`, tx);
+      });
     });
   } catch (err) {
     return toFormState(err);
@@ -875,8 +950,11 @@ export async function dissolveSectionAction(_prev: FormState, formData: FormData
   if (!z.uuid().safeParse(sectionId).success) return fail("Tratto non trovato.");
   try {
     await db.transaction(async (tx) => {
-      const r = await dissolveSection(tx, ctx.marinaId, sectionId);
-      await audit(ctx, "modifica", "pontile", r.pierId, `Tolto il tratto «${r.label}»`, tx);
+      const pierId = await sectionPier(tx, ctx.marinaId, sectionId);
+      await withPierHistory(tx, who(ctx), pierId, "Tratto tolto", async () => {
+        const r = await dissolveSection(tx, ctx.marinaId, sectionId);
+        await audit(ctx, "modifica", "pontile", r.pierId, `Tolto il tratto «${r.label}»`, tx);
+      });
     });
   } catch (err) {
     return toFormState(err);

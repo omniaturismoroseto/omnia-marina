@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
+import { SavedHistoryButtons } from "@/components/saved-history";
 import { ActionButton, Form, FormMessage, SelectField, Submit } from "@/components/form";
 import { Check, ChevronLeft, Ellipsis, Map as MapIcon, Pencil, Plus } from "@/components/icons";
 import { STATE_LABEL } from "@/lib/berth-states";
@@ -173,6 +174,7 @@ export function PierDetail({
           </Link>
         </h2>
         <div className="relative ml-auto flex flex-wrap items-center gap-2" ref={menuRef}>
+          <SavedHistoryButtons area="pontile" targetId={pier.id} undo={pier.history.undo} redo={pier.history.redo} />
           {onShowMap ? (
             // Sotto la scheda si apre la mappa inquadrata sul pontile, dove si modificano i posti.
             <button type="button" className={linkBtn} aria-pressed={mapOpen && mapUnitId === null} onClick={() => onShowMap(null)}>

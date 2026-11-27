@@ -17,6 +17,8 @@ export interface ManagerPier {
   sections: ManagerSection[];
   /** Contratti attivi in corso o futuri sui suoi posti. */
   contracts: number;
+  /** Ultima modifica salvata da annullare («Indietro») e prima annullata da rifare («Avanti»), descritte. */
+  history: { undo: string | null; redo: string | null };
 }
 
 export interface ManagerOccupant {

@@ -81,6 +81,7 @@ const ICONS = {
   Trees: "park",
   TriangleAlert: "warning",
   Undo2: "undo",
+  Redo2: "redo",
   Upload: "upload",
   UserRound: "person",
   Users: "group",

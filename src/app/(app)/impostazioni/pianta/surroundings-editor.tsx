@@ -25,6 +25,7 @@ import {
   type AppIcon,
 } from "@/components/icons";
 import { PlanZoom } from "@/app/(app)/mappa/plan-zoom";
+import { UndoButtons, useUndoHistory } from "@/components/use-undo";
 import { ServiceIcon, ServiceMarker } from "@/components/service-icon";
 import { landContours, landMask } from "@/lib/land-mask";
 import type { Point } from "@/lib/plan";
@@ -77,7 +78,26 @@ export function SurroundingsEditor({
   // Base disegnata caricata: lo schema usa quella, e qui restano da sistemare solo i servizi.
   baseUrl: string | null;
 }) {
-  const [features, setFeatures] = useState(initialFeatures);
+  const [features, setFeaturesState] = useState(initialFeatures);
+  // Indietro / Avanti sulle forme e sui servizi dello sfondo.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const latest = useRef(features);
+  useEffect(() => {
+    latest.current = features;
+  });
+  const history = useUndoHistory({
+    read: () => latest.current,
+    restore: (state) => {
+      setFeaturesState(state);
+      setDirty(true);
+      setNotice(null);
+    },
+    scope: rootRef,
+  });
+  const setFeatures: typeof setFeaturesState = (update) => {
+    history.checkpoint();
+    setFeaturesState(update);
+  };
   const [tool, setTool] = useState<Tool>("select");
   const [draft, setDraft] = useState<Point[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -231,6 +251,9 @@ export function SurroundingsEditor({
       dx: p.x - f.points[index].x,
       dy: p.y - f.points[index].y,
     };
+    // Un trascinamento è un passo solo di Indietro.
+    history.checkpoint();
+    history.pause(true);
     e.currentTarget.setPointerCapture(e.pointerId);
   }
 
@@ -413,9 +436,10 @@ export function SurroundingsEditor({
   const opacity = showPhoto ? 0.72 : 1;
 
   return (
-    <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
+    <div ref={rootRef} className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
       <div className="min-w-0 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
+          <UndoButtons history={history} />
           {showShapes && (
             <>
               <button
@@ -624,8 +648,14 @@ export function SurroundingsEditor({
                     style={{ cursor: "grab", touchAction: "none" }}
                     onPointerDown={(e) => onHandleDown(e, selected.id, i)}
                     onPointerMove={onHandleMove}
-                    onPointerUp={() => (drag.current = null)}
-                    onPointerCancel={() => (drag.current = null)}
+                    onPointerUp={() => {
+                    drag.current = null;
+                    history.pause(false);
+                  }}
+                    onPointerCancel={() => {
+                    drag.current = null;
+                    history.pause(false);
+                  }}
                     onClick={(e) => e.stopPropagation()}
                   />
                 ))}
@@ -638,8 +668,14 @@ export function SurroundingsEditor({
                   }}
                   onPointerDown={(e) => onHandleDown(e, f.id, 0)}
                   onPointerMove={onHandleMove}
-                  onPointerUp={() => (drag.current = null)}
-                  onPointerCancel={() => (drag.current = null)}
+                  onPointerUp={() => {
+                    drag.current = null;
+                    history.pause(false);
+                  }}
+                  onPointerCancel={() => {
+                    drag.current = null;
+                    history.pause(false);
+                  }}
                   onClick={(e) => {
                     if (tool !== "select") return;
                     e.stopPropagation();
