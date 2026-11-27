@@ -71,7 +71,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Le icone dei servizi hanno sempre lo stesso raggio sullo schermo (12 px, `MARKER_SCREEN_RADIUS`), anche sul telefono e a ogni ingrandimento (`--plan-px` impostato da `PlanZoom`).
   Editor dei posti (`plan-editor.tsx`, dentro `PlanZoom arrowKeys={false}`: trascina e zoom come la Mappa, niente barre; riquadri senza
   codici): «Sposta: pontile o tratto / modulo / posto singolo». Modulo = posti collegati per vicinanza (`moduleOf`). Con un gruppo:
-  trascinamento, frecce, rotazione (attorno al centro) e «Lunghezza ±1/±5 m» (`stretch`, scala le posizioni lungo il pontile); la linea
+  trascinamento, frecce, rotazione (attorno al centro) e «Lunghezza ±1/±5 m» (`stretchRows` in `src/lib/plan-align.ts`: lungo la fila, ogni fila
+  rimessa dritta e nello stesso ordine, mai sovrapposti; anche per i posti auto); la linea
   salvata segue solo con «pontile o tratto» e si risalva con la pianta.
   Sotto i posti l'editor parte dalla base disegnata (senza base, dallo schema `buildDrawing` calcolato dal vivo coi posti dell'editor);
   «Foto dal vero» si sceglie. Ormeggio: «di prua» o «all'inglese» (`Mooring`, `layoutPier(..., mooring)` in `src/lib/plan.ts`), scelto

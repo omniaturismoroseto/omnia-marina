@@ -7,7 +7,7 @@ import { compareCodes } from "@/lib/berth-codes";
 import { berthSizePx, layoutPier, normalizeAngle, rowAxis, type Point } from "@/lib/plan";
 import { buildDrawing } from "@/lib/plan-drawing";
 import { fitTrace } from "@/lib/plan-extend";
-import { alignRows } from "@/lib/plan-align";
+import { alignRows, stretchRows } from "@/lib/plan-align";
 import { pathOf } from "@/lib/plan-features";
 import { PIER, SHAPE, WATER } from "@/lib/plan-style";
 import { addParkingToRow, removeParkingFromRow, saveParkingLayout } from "@/server/parking-actions";
@@ -210,23 +210,19 @@ export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; im
   };
   const rowLengthM = placedChosen.length >= 2 ? rowOf(placedChosen).lengthM : null;
 
-  // «Lunghezza ±1/±5 m»: allunga o accorcia la fila cambiando lo spazio tra i posti (dal centro); le misure dei posti restano.
+  // «Lunghezza ±1/±5 m»: allunga o accorcia la fila dal centro, lasciando i posti in fila e senza sovrapporli (stretchRows).
   function stretch(meters: number) {
     if (placedChosen.length < 2) return;
-    const { d, lo, hi } = rowOf(placedChosen);
-    const len = hi - lo;
-    if (len < 1) return;
-    const k = Math.max(0.1, (len + meters * m) / len);
-    const mid = (lo + hi) / 2;
-    const ids = new Set(placedChosen.map((s) => s.id));
-    change((all) =>
-      all.map((s) => {
-        if (!ids.has(s.id)) return s;
-        const t = s.x! * d.x + s.y! * d.y - mid;
-        return { ...s, x: Math.round((s.x! + (k - 1) * t * d.x) * 10) / 10, y: Math.round((s.y! + (k - 1) * t * d.y) * 10) / 10 };
-      }),
+    const result = stretchRows(
+      placedChosen.map((s) => ({ id: s.id, code: s.code, x: s.x!, y: s.y!, angle: s.angle ?? 0, lengthCm: s.lengthCm, beamCm: s.widthCm })),
+      m,
+      meters,
     );
+    if (!result) return;
+    const at = new Map(result.placements.map((p) => [p.id, p]));
+    change((all) => all.map((s) => (at.has(s.id) ? { ...s, x: at.get(s.id)!.x, y: at.get(s.id)!.y } : s)));
   }
+
 
   function toggle(id: string) {
     setSelected((prev) => {
