@@ -79,15 +79,16 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   linea, `mooringAlong`, `rowAxis` senza linea) in schema, «Allinea in fila», allungamento, posti nuovi e ridisposizione dei tratti.
   Cambiare ormeggio a posti già disposti (`changeMooring` nell'editor, dal riquadro del gruppo o da «Disponi un pontile») li ridispone
   lungo la loro linea (`estimateTrace` se manca), stesso lato, allungata con `fitTrace`.
-  Numerazione girata dalla scheda del pontile in Pontili e posti («Numerazione»: «Parti dall'altra estremità» / «Scambia i lati»,
-  tratto intero o un modulo): `flipNumbering` in `src/server/piers.ts` cambia `position`/`side` e specchia i posti sulla pianta
+  Numerazione girata dalla barra dei posti scelti in Pontili e posti («Numerazione»: «Parti dall'altra estremità» / «Scambia i lati»,
+  posti dello stesso tratto): `flipNumbering` in `src/server/piers.ts` cambia `position`/`side` e specchia i posti sulla pianta
   (`mirrorBerths`, `src/lib/plan-mirror.ts`); con «estremi» sul tratto intero la linea salvata si inverte. Non sta nell'editor.
   «Unisci» nella barra dei posti scelti (`BulkModuleForm`, `setModules` in `src/server/piers.ts`): i posti di un tratto diventano un modulo
   nuovo o entrano in uno esistente; si fissano i moduli del tratto come li mostra la scheda e si tolgono i nomi dei moduli vuoti.
   Nomi dei moduli in `berth_modules` (pontile, tratto, numero del modulo; `renameModule` fissa anche `plan_module` dei posti).
   «Mostra sulla mappa» nella scheda del pontile apre sotto l'editor (`loadPlanEditor` in `src/server/plan-editor.ts`, condiviso con
   Mappa del porto) inquadrato sul pontile o tratto (`PlanEditor zoomTo`, `PlanZoom focus`); in giallo (`highlightIds`) i posti scelti
-  nella scheda o il tratto aperto. I comandi di ogni tratto stanno in un menu solo (`UnitMenu`). Bordo dei posti nell'editor: 0,08 m.
+  nella scheda o il tratto aperto. Le azioni sui posti scelti stanno nella barra in basso (Modifica, Codici, Numerazione, Unisci, Dividi = tratto con i posti scelti,
+  Elimina); nel menu del tratto (`UnitMenu`) solo quelle su tutto il tratto (disposizione, aggiungi posti, rinomina, pontile a sé, togli). Bordo dei posti nell'editor: 0,08 m.
   Viceversa i posti scelti sulla mappa (`PlanEditor onSelectionChange`) sono contornati in arancio nella scheda (`mapPickedIds`); la
   scheda passa al loro pontile, la mappa resta inquadrata (`map.zoomPierId`). Riposizionando posti l'editor usa `placePicked(..., modules)`:
   «keep» (cambio di ormeggio, allinea: i posti all'inglese, distanziati, per vicinanza sembrerebbero staccati), «one» (ridisegna con una

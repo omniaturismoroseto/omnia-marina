@@ -101,11 +101,11 @@ export function BulkSectionForm({ pierId, berths }: { pierId: string; berths: Ma
     <Form action={makeBerthSection} className="space-y-4">
       <Hidden pierId={pierId} berths={berths} />
       <p className="text-sm text-muted">
-        I posti scelti diventano un tratto che nella Mappa del porto si sposta, ruota e traccia da solo (per esempio un braccio del pontile). Per
-        la gestione il pontile resta uno solo.
+        Il pontile si divide: i posti scelti diventano un tratto a sé, che nella Mappa del porto si sposta, ruota e traccia da solo (per esempio
+        un braccio del pontile). Per la gestione il pontile resta uno solo, con la stessa sigla, categoria e prezzi.
       </p>
       <Field name="label" label="Nome del tratto" defaultValue={label} maxLength={20} required />
-      <Submit>Crea il tratto</Submit>
+      <Submit>Dividi</Submit>
       <FormMessage />
     </Form>
   );
