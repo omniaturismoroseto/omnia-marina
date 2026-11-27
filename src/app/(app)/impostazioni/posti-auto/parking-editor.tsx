@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { MouseEvent, PointerEvent } from "react";
-import { MousePointer2, Plus, RotateCcw, Spline } from "@/components/icons";
+import { Minus, MousePointer2, Plus, RotateCcw, Spline } from "@/components/icons";
 import { compareCodes } from "@/lib/berth-codes";
 import { berthSizePx, layoutPier, normalizeAngle, rowAxis, type Point } from "@/lib/plan";
 import { buildDrawing } from "@/lib/plan-drawing";
@@ -10,7 +10,7 @@ import { fitTrace } from "@/lib/plan-extend";
 import { alignRows } from "@/lib/plan-align";
 import { pathOf } from "@/lib/plan-features";
 import { PIER, SHAPE, WATER } from "@/lib/plan-style";
-import { saveParkingLayout } from "@/server/parking-actions";
+import { addParkingToRow, removeParkingFromRow, saveParkingLayout } from "@/server/parking-actions";
 import type { PlanMapData } from "@/server/plan-map";
 import { ParkingMarks } from "../../mappa/parking-marks";
 import { PlanZoom } from "../../mappa/plan-zoom";
@@ -34,16 +34,22 @@ type Tool = "select" | "place" | "row";
  * Posti auto sulla mappa del porto: si posano con un clic, si mettono in fila lungo una linea, si trascinano e ruotano.
  * Sotto: la base disegnata (o lo schema) con i posti barca in trasparenza; «Foto dal vero» si sceglie. Misure vere dalla scala.
  */
+// Dopo «Aggiungi un posto» e «Togli» la pagina si ricarica e l'editor riparte dai dati nuovi: messaggio e posti scelti passano da qui.
+let carried: { notice: { ok: boolean; message: string }; selected: string[] } | null = null;
+
 export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; imageUrl: string; initial: EditorParking[] }) {
   const m = map.pxPerMeter;
   const [spaces, setSpaces] = useState(initial);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(carried?.selected ?? []));
   const [tool, setTool] = useState<Tool>("select");
   const [points, setPoints] = useState<Point[]>([]);
   const [lastRow, setLastRow] = useState<{ a: Point; b: Point; flip: boolean; ids: string[] } | null>(null);
   const [under, setUnder] = useState<"base" | "foto">("base");
   const [dirty, setDirty] = useState(false);
-  const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(() => carried?.notice ?? null);
+  useEffect(() => {
+    carried = null;
+  }, []);
   const [saving, startSaving] = useTransition();
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ start: Point; orig: Map<string, Point>; moved: boolean } | null>(null);
@@ -231,6 +237,55 @@ export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; im
     });
   }
 
+  const layoutPayload = () =>
+    spaces.map((s) => ({ id: s.id, position: s.x !== null && s.y !== null ? { x: s.x, y: s.y, angle: s.angle ?? 0 } : null }));
+
+  // «Aggiungi un posto»: dopo l'ultimo (per codice) dei posti scelti, lungo la loro fila, alla distanza tipica tra un posto e l'altro.
+  function addToRow() {
+    if (placedChosen.length === 0) return;
+    const list = byCode(placedChosen);
+    const last = list[list.length - 1];
+    let d: Point;
+    let pitch: number;
+    if (list.length === 1) {
+      // Un posto solo: il nuovo gli va accanto, sul lato lungo.
+      const a = ((last.angle ?? 0) * Math.PI) / 180;
+      d = { x: Math.cos(a), y: Math.sin(a) };
+      pitch = (last.widthCm / 100) * m * 1.05;
+    } else {
+      const axis = rowOf(list);
+      d = axis.d;
+      const first = list[0];
+      if ((last.x! - first.x!) * d.x + (last.y! - first.y!) * d.y < 0) d = { x: -d.x, y: -d.y };
+      const along = list.map((s) => s.x! * d.x + s.y! * d.y);
+      const gaps = along.slice(1).map((t, i) => Math.abs(t - along[i])).sort((p, q) => p - q);
+      pitch = gaps[Math.floor(gaps.length / 2)] || (last.widthCm / 100) * m * 1.05;
+    }
+    const position = { x: Math.round((last.x! + d.x * pitch) * 10) / 10, y: Math.round((last.y! + d.y * pitch) * 10) / 10, angle: last.angle ?? 0 };
+    startSaving(async () => {
+      const result = await addParkingToRow({ placements: layoutPayload(), afterId: last.id, position });
+      setNotice(result);
+      if (result.ok) {
+        setDirty(false);
+        carried = { notice: result, selected: [...selected, ...(result.id ? [result.id] : [])] };
+      }
+    });
+  }
+
+  // «Togli»: il posto scelto, oppure l'ultimo (per codice) della fila scelta; si elimina, se non è mai stato in un contratto.
+  function removeFromRow() {
+    const target = chosen.length === 1 ? chosen[0] : byCode(placedChosen).at(-1);
+    if (!target || !window.confirm(`Eliminare il posto auto ${target.code}?`)) return;
+    startSaving(async () => {
+      const result = await removeParkingFromRow({ placements: layoutPayload(), id: target.id });
+      setNotice(result);
+      if (result.ok) {
+        setDirty(false);
+        carried = { notice: result, selected: [...selected].filter((id) => id !== target.id) };
+      }
+    });
+  }
+
   function save() {
     startSaving(async () => {
       const result = await saveParkingLayout({
@@ -410,6 +465,22 @@ export function ParkingEditor({ map, imageUrl, initial }: { map: PlanMapData; im
                     {d > 0 ? `+${d}°` : `${d}°`}
                   </button>
                 ))}
+              </div>
+              <div>
+                <p className="label">Posti della fila</p>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  <button type="button" className="btn btn-secondary btn-sm" disabled={saving || placedChosen.length === 0} onClick={addToRow}>
+                    <Plus size={15} aria-hidden="true" /> Aggiungi un posto
+                  </button>
+                  <button type="button" className="btn btn-secondary btn-sm text-bad" disabled={saving || placedChosen.length === 0} onClick={removeFromRow}>
+                    <Minus size={15} aria-hidden="true" />{" "}
+                    {chosen.length === 1 ? `Togli ${chosen[0].code}` : `Togli l'ultimo (${byCode(placedChosen).at(-1)?.code ?? ""})`}
+                  </button>
+                </div>
+                <p className="hint mt-1">
+                  Il posto nuovo prende il codice successivo, con tipo e misure dell&apos;ultimo, in fondo alla fila. Le posizioni che hai spostato si
+                  salvano insieme.
+                </p>
               </div>
               {rowLengthM !== null && (
                 <div>
