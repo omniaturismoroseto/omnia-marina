@@ -3,7 +3,7 @@
 #   cd ~/omnia-marina && git pull origin main && bash scripts/pulisci-prove.sh
 # oppure dal PC (PowerShell), che la lancia in Cloud Shell:
 #   gcloud cloud-shell ssh --authorize-session --command "cd ~/omnia-marina && git pull origin main && bash scripts/pulisci-prove.sh"
-# Prima mostra che cosa cancella e chiede conferma, poi fa un backup del database e pulisce.
+# Senza parametri mostra che cosa cancella e chiede conferma; con «ELIMINA» dopo il nome mostra e cancella subito, poi fa un backup del database e pulisce.
 # Via: contratti annullati e conclusi, scadenze e incassi di prova, prima nota (tranne gli incassi dei contratti attivi).
 # Restano: bozze, contratti attivi con rate e incassi, clienti, barche, posti, listini e impostazioni.
 # Le scritte a video sono senza accenti: arrivano leggibili anche nella finestra di PowerShell.
@@ -47,10 +47,16 @@ run() { psql -h 127.0.0.1 -p "$PORT" -U "$DB_USER" -d "$DB_NAME" -X -v ON_ERROR_
 step "Che cosa si cancella (per ora non cambia nulla)"
 run scripts/sql/pulisci-prove-anteprima.sql
 
+# Conferma: la parola ELIMINA dopo il nome dello script (dal PC la finestra non sempre lascia scrivere una risposta),
+# altrimenti la si chiede.
 echo
-printf 'Per cancellare davvero scrivi ELIMINA e premi Invio (altro = annulla): '
-read -r answer || answer=""
-[ "$answer" = "ELIMINA" ] || { echo "Annullato: non ho cambiato nulla."; exit 0; }
+answer="${1:-}"
+if [ -z "$answer" ]; then
+  printf 'Per cancellare davvero scrivi ELIMINA e premi Invio (altro = annulla): '
+  read -r answer || answer=""
+fi
+[ "$answer" = "ELIMINA" ] || { echo "Annullato: non ho cambiato nulla. Per cancellare rilancia con: bash scripts/pulisci-prove.sh ELIMINA"; exit 0; }
+echo "Confermato: procedo."
 
 step "Backup del database prima della pulizia"
 gcloud sql backups create --instance "$SQL_INSTANCE" --project "$PROJECT" --description "Prima della pulizia dei dati di prova" --quiet
