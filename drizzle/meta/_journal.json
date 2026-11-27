@@ -232,6 +232,13 @@
       "when": 1795588979335,
       "tag": "0032_posti_auto",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1795761148936,
+      "tag": "0033_testi_del_contratto",
+      "breakpoints": true
     }
   ]
 }

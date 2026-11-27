@@ -85,6 +85,11 @@ export const marinas = pgTable("marinas", {
   contractTerms: text("contract_terms"),
   // Testo dell'approvazione specifica delle clausole (artt. 1341-1342 c.c.), stampato con una seconda firma.
   contractApprovalText: text("contract_approval_text"),
+  // Testi del contratto stampato scelti dal porto (titolo, apertura, articoli 1-3, firme), per chiave di CONTRACT_PARTS
+  // (src/lib/contract-texts.ts); una chiave assente = testo predefinito.
+  contractTexts: jsonb("contract_texts").$type<Record<string, string>>().notNull().default({}),
+  // Riquadro «In sintesi» in testa al contratto stampato.
+  contractSummary: boolean("contract_summary").notNull().default(true),
   // Spese di gestione comuni e quota rifiuti proposte nei nuovi contratti annuali.
   serviceFeeCents: integer("service_fee_cents"),
   wasteFeeCents: integer("waste_fee_cents"),

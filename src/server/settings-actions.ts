@@ -13,6 +13,7 @@ import { requireMarina, requireUser } from "@/lib/context";
 import { f, fail, formId, parseForm, type FormState } from "@/lib/forms";
 import { ROLE_LABEL } from "@/lib/labels";
 import { renameCodes } from "@/lib/berth-codes";
+import { CONTRACT_PARTS, customContractTexts } from "@/lib/contract-texts";
 import { movedOrder, parseIdList } from "@/lib/pier-merge";
 import { berthSlots } from "@/lib/plan";
 import { placeNewBerths, targetSection } from "@/lib/plan-extend";
@@ -100,6 +101,26 @@ const textsSchema = z.object({
   contractTerms: f.optText(),
   contractApprovalText: f.optText(),
 });
+
+// Testo del contratto stampato (titolo, apertura, articoli 1-3, firme) e riquadro «In sintesi»: si salvano solo i testi cambiati.
+export async function saveContractTexts(_prev: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireMarina(ADMIN);
+  const input: Record<string, string> = {};
+  for (const part of CONTRACT_PARTS) {
+    const value = formData.get(part.key);
+    if (typeof value === "string") {
+      if (value.length > 5000) return fail("Controlla i campi evidenziati.", { [part.key]: "Testo troppo lungo" });
+      input[part.key] = value;
+    }
+  }
+  const contractTexts = customContractTexts(input);
+  const contractSummary = formData.get("contractSummary") === "on";
+  await db.update(marinas).set({ contractTexts, contractSummary }).where(eq(marinas.id, ctx.marinaId));
+  const changed = Object.keys(contractTexts).length;
+  await audit(ctx, "modifica", "porto", ctx.marinaId, `Testo del contratto (${changed ? `${changed} parti personalizzate` : "testi predefiniti"})`);
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Testo del contratto salvato: vale per tutti i contratti, anche già stampati, alla prossima stampa." };
+}
 
 export async function saveLegalTexts(_prev: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireMarina(ADMIN);
