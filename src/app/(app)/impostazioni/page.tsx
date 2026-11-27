@@ -12,7 +12,7 @@ import { findZoneByComune } from "@/lib/civil-protection";
 import { formatCoordinates } from "@/lib/weather";
 import { latestCivilBulletin } from "@/server/civil-protection";
 import { weatherEnabled } from "@/server/weather";
-import { BoaterSettingsForm, LegalTextsForm, MarinaForm } from "./settings-forms";
+import { BoaterSettingsForm, ContractTextsForm, LegalTextsForm, MarinaForm } from "./settings-forms";
 import { SettingsTabs } from "./tabs";
 
 export const metadata: Metadata = { title: "Impostazioni" };
@@ -63,6 +63,14 @@ export default page(async function SettingsPage() {
             detectedZone={findZoneByComune(zones, marina.city)?.name ?? null}
             forecastEnabled={weatherEnabled()}
           />
+        </Card>
+        <Card title="Testo del contratto">
+          <p className="mb-4 max-w-3xl text-sm text-muted">
+            Le parti fisse del contratto stampato: titolo, apertura, dati del porto, testi degli articoli 1-3 e firme. Scrivile come servono al
+            tuo porto; i dati di ogni contratto (cliente, barca, posto, date, importi e scadenze) li aggiunge l&apos;app. Le condizioni
+            dall&apos;articolo 4 e l&apos;approvazione specifica sono qui sotto. Per vedere il risultato apri la stampa di un contratto.
+          </p>
+          <ContractTextsForm texts={marina.contractTexts ?? {}} summary={marina.contractSummary} />
         </Card>
         <Card title="Privacy e condizioni di contratto">
           <div className="mb-4">

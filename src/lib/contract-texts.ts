@@ -23,3 +23,110 @@ Il contratto in oggetto si risolve nel caso di mancato rinnovo o di revoca degli
 17) Le comunicazioni tra le parti possono avvenire anche tramite e-mail o PEC agli indirizzi indicati nel presente contratto. Per quanto non previsto si applicano le norme del Codice civile e del Codice della Navigazione. Per ogni controversia è competente il Foro di Teramo, salvo che il conduttore agisca come consumatore, nel qual caso è competente il foro del luogo di sua residenza.`;
 
 export const CONTRACT_APPROVAL_TEMPLATE = `Ai sensi e per gli effetti degli artt. 1341 e 1342 del Codice civile, il Conduttore dichiara di aver letto e di approvare specificamente le seguenti clausole: art. 3 (pagamento dei servizi comuni anche se non utilizzati); art. 4 (divieto di sospendere o ritardare i pagamenti); art. 6 (liberazione del posto, messa in secca o rimozione dell'unità, esonero da responsabilità, esclusione del rinnovo tacito, risoluzione senza indennità per revoca della concessione); art. 7 (divieto di modifiche, limiti alla sosta in secco); art. 8 (divieto di cessione e sublocazione, risoluzione di diritto); art. 10 (custodia e responsabilità del conduttore, interventi del locatore); art. 11 (accettazione dello stato dei luoghi e dei fondali); art. 13 (sostituzione del posto e messa in secca); art. 14 (limiti agli obblighi del locatore); art. 16 (divieto di cessione del posto barca); art. 17 (foro competente).`;
+
+/**
+ * Parti fisse del contratto stampato che ogni porto può riscrivere (Impostazioni → Porto → Testo del contratto). I dati del contratto
+ * (cliente, barca, posto, periodi, importi, scadenze) restano automatici; nei testi i campi tra graffe si sostituiscono con i dati.
+ */
+export const CONTRACT_PARTS = [
+  {
+    key: "title",
+    label: "Titolo del contratto",
+    hint: "Se il contratto ha anche sosta a terra, posti auto o carrello, l'app aggiunge «– di area all'aperto per …».",
+    fields: [],
+    rows: 2,
+    text: "Contratto di locazione di un tratto di banchina e di specchio acqueo antistante",
+  },
+  {
+    key: "opening",
+    label: "Apertura",
+    hint: "La prima riga del contratto, prima dei dati del Locatore.",
+    fields: [],
+    rows: 2,
+    text: "Con la presente scrittura privata, redatta in duplice copia,",
+  },
+  {
+    key: "lessor",
+    label: "Il Locatore",
+    hint: "Dopo questo paragrafo l'app scrive i dati del cliente e della barca.",
+    fields: ["locatore", "sede", "piva", "porto"],
+    rows: 4,
+    text: "la Società {locatore}{sede}{piva}, in persona del suo legale rappresentante pro tempore, domiciliato per la carica presso la sede della predetta Società, che gestisce, in regime di concessione demaniale marittima, il porto turistico “{porto}”, di seguito denominata Locatore,",
+  },
+  {
+    key: "verb",
+    label: "Tra Locatore e Conduttore",
+    hint: "La riga al centro tra i dati del porto e quelli del cliente.",
+    fields: [],
+    rows: 1,
+    text: "cede in locazione",
+  },
+  {
+    key: "art1",
+    label: "Articolo 1 (oggetto)",
+    hint: "Dopo questo testo l'app elenca il posto barca e gli altri spazi, con le loro date.",
+    fields: [],
+    rows: 3,
+    text: "Il Locatore cede in locazione al Conduttore, alle condizioni in seguito elencate e con l'esclusione di ogni obbligo di custodia e/o di presa in consegna dell'unità da diporto e dei beni del Conduttore:",
+  },
+  {
+    key: "art2",
+    label: "Articolo 2 (canone)",
+    hint: "Dopo questo testo l'app mette la tabella degli importi e le scadenze.",
+    fields: ["pagamento", "iva"],
+    rows: 6,
+    text: "Il canone di locazione è da pagarsi anticipatamente {pagamento}. L'entità del canone è strettamente determinata in relazione alla natura stessa del contratto di locazione, che si riferisce alla mera utilizzazione di spazi e dalla quale sono esclusi la supervisione, la sorveglianza, la custodia e la manutenzione in efficienza dei beni del conduttore. Quanto alla locazione del tratto di banchina e specchio acqueo antistante e/o degli spazi all'aperto della struttura portuale, il canone è stabilito in relazione all'effettivo spazio occupato, alla larghezza e lunghezza dell'unità sopra descritta, comprensiva di aggetti, plancette, pulpiti, scalette, battagliole ecc. Il canone, comprensivo di IVA ({iva}%), è convenuto in:",
+  },
+  {
+    key: "art3",
+    label: "Articolo 3 (spese), frase finale",
+    hint: "L'app scrive prima spese di gestione, quota rifiuti e servizi del contratto, poi questa frase.",
+    fields: [],
+    rows: 3,
+    text: "Il conduttore non può rinunciare ai servizi comuni né a quelli previsti dal Regolamento di porto, né può omettere o ritardare il loro pagamento a cagione del mancato utilizzo.",
+  },
+  {
+    key: "signTenant",
+    label: "Firma del cliente",
+    hint: "Sotto la riga della firma.",
+    fields: [],
+    rows: 1,
+    text: "Il Conduttore",
+  },
+  {
+    key: "signLessor",
+    label: "Firma del porto",
+    hint: "Sotto la riga della firma.",
+    fields: [],
+    rows: 1,
+    text: "Il Locatore",
+  },
+] as const;
+
+export type ContractPartKey = (typeof CONTRACT_PARTS)[number]["key"];
+
+/** Che cosa diventa ogni campo tra graffe. */
+export const CONTRACT_FIELD_LABEL: Record<string, string> = {
+  locatore: "ragione sociale della società (o nome del porto)",
+  sede: "«con sede in Città alla Via…», se indicati",
+  piva: "«, P. IVA …», se indicata",
+  porto: "nome del porto",
+  pagamento: "«alle scadenze di seguito indicate» oppure «e contestualmente alla stipula del presente contratto»",
+  iva: "aliquota IVA del contratto",
+};
+
+/** Testo di una parte: quello scelto dal porto, se c'è, altrimenti il predefinito; i campi tra graffe si riempiono con `values`. */
+export function contractPart(custom: Record<string, string> | null | undefined, key: ContractPartKey, values: Record<string, string> = {}): string {
+  const base = custom?.[key]?.trim() || CONTRACT_PARTS.find((p) => p.key === key)!.text;
+  return base.replace(/\{(\w+)\}/g, (all, name: string) => (name in values ? values[name] : all));
+}
+
+/** Testi da salvare: solo quelli diversi dal predefinito (così i testi lasciati come sono seguono gli aggiornamenti del modello). */
+export function customContractTexts(input: Record<string, string | null | undefined>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of CONTRACT_PARTS) {
+    const value = input[part.key]?.replace(/\r\n/g, "\n").trim();
+    if (value && value !== part.text) out[part.key] = value;
+  }
+  return out;
+}

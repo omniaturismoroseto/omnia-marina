@@ -117,7 +117,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   numero e addebiti mai incassati; i buchi (`contractNumberGaps`) si segnalano in elenco contratti e cruscotto finché non vengono ripresi.
   Solo le bozze si modificano (`/contratti/[id]/modifica`, `updateDraftContract`). Mostrare i numeri con `contractNumberLabel`.
 - Contratto stampato (`/contratti/[id]/stampa`): gli articoli 1-3 (oggetto, canone, spese) li compone la pagina con i dati
-  del contratto; dal 4 in poi stampa `marinas.contract_terms`, poi l'approvazione specifica `marinas.contract_approval_text`
+  del contratto, ma le parti fisse (titolo, apertura, Locatore, «cede in locazione», testi degli articoli 1-3, firme) sono
+  `marinas.contract_texts` per chiave di `CONTRACT_PARTS` (`src/lib/contract-texts.ts`, campi tra graffe, si salvano solo quelle diverse dal
+  predefinito) e `marinas.contract_summary` accende il riquadro «In sintesi»; si scrivono in Impostazioni → Porto → «Testo del contratto»; dal 4 in poi stampa `marinas.contract_terms`, poi l'approvazione specifica `marinas.contract_approval_text`
   (modelli in `src/lib/contract-texts.ts`). Spazi a terra, posti auto, carrello e spese fisse sono `contract_items`, ognuna con
   il proprio addebito (`src/server/contracts.ts`). Le voci `servizio` (cauzioni e altri servizi presi dal listino con
   `src/server/list-extras.ts`) hanno descrizione e aliquota propria (`vat_rate` 0 = senza IVA) e possono essere più d'una.

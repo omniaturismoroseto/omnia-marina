@@ -10,6 +10,7 @@ import { formatDimensions, formatMoney } from "@/lib/format";
 import { portLogo } from "@/lib/logo";
 import { CONTRACT_ITEM_LABEL, CONTRACT_TYPE_LABEL } from "@/lib/labels";
 import { marinaAddress } from "@/lib/templates";
+import { CONTRACT_PARTS, type ContractPartKey } from "@/lib/contract-texts";
 import { listCharges } from "@/server/charges";
 
 // Il contratto come si stampa: lo usano la stampa dell'ufficio (/contratti/[id]/stampa) e l'area diportista.
@@ -47,12 +48,29 @@ function Terms({ text }: { text: string }) {
   );
 }
 
-function Signatures() {
+function Signatures({ tenant, lessor }: { tenant: React.ReactNode; lessor: React.ReactNode }) {
   return (
     <div className="mt-10 grid grid-cols-2 gap-16 text-center text-xs">
-      <p className="border-t border-ink pt-1">Il Conduttore</p>
-      <p className="border-t border-ink pt-1">Il Locatore</p>
+      <p className="border-t border-ink pt-1">{tenant}</p>
+      <p className="border-t border-ink pt-1">{lessor}</p>
     </div>
+  );
+}
+
+/**
+ * Una parte del contratto con il testo scelto dal porto (o il predefinito): i campi tra graffe diventano i dati, in grassetto
+ * quelli in `bold`. Un campo che non si conosce resta com'è scritto.
+ */
+function Part({ texts, part, values = {}, bold = [] }: { texts: Record<string, string>; part: ContractPartKey; values?: Record<string, string>; bold?: string[] }) {
+  const text = texts[part]?.trim() || CONTRACT_PARTS.find((p) => p.key === part)!.text;
+  return (
+    <>
+      {text.split(/(\{\w+\})/).map((piece, i) => {
+        const m = /^\{(\w+)\}$/.exec(piece);
+        if (!m || !(m[1] in values)) return <Fragment key={i}>{piece}</Fragment>;
+        return bold.includes(m[1]) && values[m[1]] ? <strong key={i}>{values[m[1]]}</strong> : <Fragment key={i}>{values[m[1]]}</Fragment>;
+      })}
+    </>
   );
 }
 
@@ -129,6 +147,9 @@ export async function ContractDocument({ marinaId, row }: { marinaId: string; ro
   const lessor = marina.legalName || marina.name;
   const logo = portLogo(marina);
   const place = marina.city || "________________";
+  // Testi scelti dal porto (Impostazioni → Porto → Testo del contratto); quelli assenti sono i predefiniti.
+  const texts = marina.contractTexts ?? {};
+  const sign = { tenant: <Part texts={texts} part="signTenant" />, lessor: <Part texts={texts} part="signLessor" /> };
 
   return (
     <>
@@ -156,11 +177,12 @@ export async function ContractDocument({ marinaId, row }: { marinaId: string; ro
         </header>
 
         <h1 className="mt-4 text-center text-[14px] font-bold uppercase print:text-[13px]">
-          Contratto di locazione di un tratto di banchina e di specchio acqueo antistante
+          <Part texts={texts} part="title" />
           {titleExtras.length > 0 && <> – di area all&apos;aperto per {titleExtras.join(", ")}</>}
         </h1>
 
         {/* Riepilogo: i dati che il cliente cerca per primi, ripresi dagli articoli 1-3 che restano il testo che vale. */}
+        {marina.contractSummary && (
         <section className="mt-4 break-inside-avoid rounded-md border border-ink/40 px-4 py-3 text-left">
           <p className="text-[0.85em] font-bold tracking-wider uppercase">In sintesi</p>
           <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4 print:grid-cols-4">
@@ -187,21 +209,27 @@ export async function ContractDocument({ marinaId, row }: { marinaId: string; ro
             </Fact>
           </dl>
         </section>
+        )}
 
-        <p className="mt-4">Con la presente scrittura privata, redatta in duplice copia,</p>
-        <p className="mt-1.5">
-          la Società <strong>{lessor}</strong>
-          {marina.address || marina.city ? (
-            <>
-              {" "}
-              con sede in {marina.city} alla {marina.address}
-            </>
-          ) : null}
-          {marina.vatNumber ? <>, P. IVA {marina.vatNumber}</> : null}, in persona del suo legale rappresentante pro tempore, domiciliato per la carica presso
-          la sede della predetta Società, che gestisce, in regime di concessione demaniale marittima, il porto turistico &ldquo;{marina.name}&rdquo;, di seguito
-          denominata <em>Locatore</em>,
+        <p className="mt-4">
+          <Part texts={texts} part="opening" />
         </p>
-        <p className="my-2 text-center font-bold">cede in locazione</p>
+        <p className="mt-1.5">
+          <Part
+            texts={texts}
+            part="lessor"
+            bold={["locatore"]}
+            values={{
+              locatore: lessor,
+              sede: marina.address || marina.city ? ` con sede in ${[marina.city, marina.address ? `alla ${marina.address}` : null].filter(Boolean).join(" ")}` : "",
+              piva: marina.vatNumber ? `, P. IVA ${marina.vatNumber}` : "",
+              porto: marina.name,
+            }}
+          />
+        </p>
+        <p className="my-2 text-center font-bold">
+          <Part texts={texts} part="verb" />
+        </p>
 
         {isCompany ? (
           <p>
@@ -237,8 +265,7 @@ export async function ContractDocument({ marinaId, row }: { marinaId: string; ro
 
         <section className="mt-3">
           <p>
-            <strong>1)</strong> Il Locatore cede in locazione al Conduttore, alle condizioni in seguito elencate e con l&apos;esclusione di ogni obbligo di
-            custodia e/o di presa in consegna dell&apos;unità da diporto e dei beni del Conduttore:
+            <strong>1)</strong> <Part texts={texts} part="art1" />
           </p>
           <ul className="mt-1 list-none space-y-0.5 pl-3">
             <li>
@@ -257,13 +284,15 @@ export async function ContractDocument({ marinaId, row }: { marinaId: string; ro
 
         <section className="mt-1.5">
           <p>
-            <strong>2)</strong> Il canone di locazione è da pagarsi anticipatamente{" "}
-            {schedule.length > 1 ? "alle scadenze di seguito indicate" : "e contestualmente alla stipula del presente contratto"}. L&apos;entità del canone è
-            strettamente determinata in relazione alla natura stessa del contratto di locazione, che si riferisce alla mera utilizzazione di spazi e dalla quale
-            sono esclusi la supervisione, la sorveglianza, la custodia e la manutenzione in efficienza dei beni del conduttore. Quanto alla locazione del tratto
-            di banchina e specchio acqueo antistante e/o degli spazi all&apos;aperto della struttura portuale, il canone è stabilito in relazione
-            all&apos;effettivo spazio occupato, alla larghezza e lunghezza dell&apos;unità sopra descritta, comprensiva di aggetti, plancette, pulpiti,
-            scalette, battagliole ecc. Il canone, comprensivo di IVA ({c.vatRate}%), è convenuto in:
+            <strong>2)</strong>{" "}
+            <Part
+              texts={texts}
+              part="art2"
+              values={{
+                pagamento: schedule.length > 1 ? "alle scadenze di seguito indicate" : "e contestualmente alla stipula del presente contratto",
+                iva: String(c.vatRate),
+              }}
+            />
           </p>
           <table className="mt-1 ml-3 w-[calc(100%-0.75rem)]">
             <tbody>
@@ -343,8 +372,7 @@ export async function ContractDocument({ marinaId, row }: { marinaId: string; ro
                 .{" "}
               </>
             )}
-            Il conduttore non può rinunciare ai servizi comuni né a quelli previsti dal Regolamento di porto, né può omettere o ritardare il loro pagamento a
-            cagione del mancato utilizzo.
+            <Part texts={texts} part="art3" />
           </p>
         </section>
 
@@ -358,13 +386,13 @@ export async function ContractDocument({ marinaId, row }: { marinaId: string; ro
           <p>
             {place}, lì {c.signedOn ? formatDate(c.signedOn) : "____/____/________"}
           </p>
-          <Signatures />
+          <Signatures {...sign} />
         </section>
 
         {marina.contractApprovalText && (
           <section className="mt-6 break-inside-avoid">
             <p>{marina.contractApprovalText}</p>
-            <Signatures />
+            <Signatures {...sign} />
           </section>
         )}
       </article>

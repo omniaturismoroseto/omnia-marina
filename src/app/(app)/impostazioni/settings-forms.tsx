@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { ActionButton, CheckboxField, Field, Form, FormMessage, SelectField, Submit, TextareaField, useFormResult } from "@/components/form";
 import { pierGroupKey } from "@/lib/pricing";
 import { moneyInput } from "@/lib/format";
-import { CONTRACT_APPROVAL_TEMPLATE, CONTRACT_TERMS_TEMPLATE } from "@/lib/contract-texts";
+import { CONTRACT_APPROVAL_TEMPLATE, CONTRACT_FIELD_LABEL, CONTRACT_PARTS, CONTRACT_TERMS_TEMPLATE } from "@/lib/contract-texts";
 import {
   addMember,
   changeMemberRole,
@@ -18,6 +18,7 @@ import {
   saveBerth,
   saveBoaterSettings,
   saveCategory,
+  saveContractTexts,
   saveLegalTexts,
   saveMarina,
   savePier,
@@ -86,17 +87,18 @@ export function MarinaForm({ marina }: { marina: Marina }) {
 }
 
 // Rimette nel campo il testo modello; si salva solo premendo "Salva i testi".
-function RestoreTemplate({ field, text }: { field: string; text: string }) {
+function RestoreTemplate({ field, text, label = "Usa il testo modello" }: { field: string; text: string; label?: string }) {
   return (
     <button
       type="button"
       className="link text-sm"
       onClick={(e) => {
         const el = e.currentTarget.form?.elements.namedItem(field);
-        if (el instanceof HTMLTextAreaElement && (el.value.trim() === "" || window.confirm("Sostituire il testo attuale con il modello?"))) el.value = text;
+        if ((el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) && (el.value.trim() === "" || window.confirm("Sostituire il testo attuale con il modello?")))
+          el.value = text;
       }}
     >
-      Usa il testo modello
+      {label}
     </button>
   );
 }
@@ -257,6 +259,58 @@ export function LegalTextsForm({
       </div>
       <div className="flex items-center gap-3">
         <Submit>Salva i testi</Submit>
+        <FormMessage />
+      </div>
+    </Form>
+  );
+}
+
+/**
+ * Testo del contratto stampato: titolo, apertura, paragrafo del Locatore, testi fissi degli articoli 1-3 e firme, con i campi tra
+ * graffe che l'app riempie. I dati del contratto (cliente, barca, posto, periodi, importi) restano automatici.
+ */
+export function ContractTextsForm({ texts, summary }: { texts: Record<string, string>; summary: boolean }) {
+  return (
+    <Form action={saveContractTexts} className="space-y-4">
+      {CONTRACT_PARTS.map((part) => (
+        <div key={part.key}>
+          {(() => {
+            const hint = (
+              <>
+                {part.hint}
+                {part.fields.length > 0 && (
+                  <>
+                    {" "}
+                    Campi:{" "}
+                    {part.fields.map((field, i) => (
+                      <span key={field}>
+                        {i > 0 && "; "}
+                        <code>{`{${field}}`}</code> = {CONTRACT_FIELD_LABEL[field]}
+                      </span>
+                    ))}
+                    .
+                  </>
+                )}
+              </>
+            );
+            // Le parti di una riga (la riga tra le parti, le firme) in un campo semplice; le altre in un riquadro di testo.
+            return part.rows === 1 ? (
+              <Field name={part.key} label={part.label} defaultValue={texts[part.key] ?? part.text} hint={hint} maxLength={200} />
+            ) : (
+              <TextareaField name={part.key} label={part.label} defaultValue={texts[part.key] ?? part.text} rows={part.rows} hint={hint} />
+            );
+          })()}
+          <RestoreTemplate field={part.key} text={part.text} label="Torna al testo predefinito" />
+        </div>
+      ))}
+      <CheckboxField
+        name="contractSummary"
+        label="Riquadro «In sintesi» in testa al contratto"
+        defaultChecked={summary}
+        hint="Posto, unità, periodo, assicurazione, canone, spese, totale e rate in un riquadro prima del testo."
+      />
+      <div className="flex flex-wrap items-center gap-3">
+        <Submit>Salva il testo del contratto</Submit>
         <FormMessage />
       </div>
     </Form>
