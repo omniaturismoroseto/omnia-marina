@@ -68,7 +68,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Sulla mappa niente nomi dei pontili (troppe scritte): il nome compare nel riquadro del posto; i servizi hanno icona sulla mappa e legenda sotto.
   Con la pianta la pagina Mappa è a tutta larghezza (`data-wide`, il layout toglie `max-w-6xl`) e `PlanZoom fillScreen` arriva al fondo
   dello schermo; il riquadro del posto sta sopra la mappa sugli schermi grandi (`?posto=`, X per chiudere), sotto sul telefono.
-  Le icone dei servizi restano della stessa misura a ogni ingrandimento (`--plan-zoom` impostato da `PlanZoom`).
+  Le icone dei servizi hanno sempre lo stesso raggio sullo schermo (12 px, `MARKER_SCREEN_RADIUS`), anche sul telefono e a ogni ingrandimento (`--plan-px` impostato da `PlanZoom`).
   Editor dei posti (`plan-editor.tsx`, dentro `PlanZoom arrowKeys={false}`: trascina e zoom come la Mappa, niente barre; riquadri senza
   codici): «Sposta: pontile o tratto / modulo / posto singolo». Modulo = posti collegati per vicinanza (`moduleOf`). Con un gruppo:
   trascinamento, frecce, rotazione (attorno al centro) e «Lunghezza ±1/±5 m» (`stretch`, scala le posizioni lungo il pontile); la linea
