@@ -248,6 +248,18 @@ Lo stesso avviso non parte due volte entro 24 ore. Per fermarlo: togli la spunta
 
 ---
 
+## Cancellare i dati di prova (una volta sola)
+
+Da **Cloud Shell** (https://shell.cloud.google.com):
+
+```bash
+cd ~/omnia-marina && git pull origin main && bash scripts/pulisci-prove.sh
+```
+
+Mostra porto per porto che cosa cancella e chiede di scrivere `ELIMINA`; prima di cancellare fa un backup del database.
+Via: contratti annullati e conclusi, scadenze e incassi di prova, prima nota e importazioni da Excel. Restano: bozze, contratti
+attivi con le loro rate e i loro incassi (anche nella prima nota), clienti, barche, posti, listini e impostazioni.
+
 ## Controllare
 
 ### Che versione è online, e quando è stata pubblicata
