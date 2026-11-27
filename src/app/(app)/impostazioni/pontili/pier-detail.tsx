@@ -481,7 +481,22 @@ export function PierDetail({
             (() => {
               // I moduli valgono dentro un tratto: i posti scelti devono essere tutti dello stesso.
               const unit = units.find((u) => selected.every((b) => u.berths.some((x) => x.id === b.id)));
-              if (!unit) return <p className="text-sm text-bad">I posti scelti sono in tratti diversi: un modulo si fa con posti di un tratto solo.</p>;
+              if (!unit) {
+                // Posti di tratti diversi: «Unisci» li riunisce prima in un tratto solo.
+                const involved = units.filter((u) => u.berths.some((x) => selected.some((b) => b.id === x.id)));
+                const labels = involved.map((u) => u.label || u.title);
+                const best = [...involved].sort((a, b) => b.berths.length - a.berths.length)[0];
+                return (
+                  <BulkModuleForm
+                    pierId={pier.id}
+                    berths={selected}
+                    layout={[]}
+                    modules={[]}
+                    onDone={endSelection}
+                    regroup={{ tratti: labels, label: (best?.label || commonPrefix(selected, pier.code)).slice(0, 20) }}
+                  />
+                );
+              }
               const groups = stripModules(unit.berths).filter((g) => g.module !== null);
               return (
                 <BulkModuleForm
