@@ -256,6 +256,12 @@ Da **Cloud Shell** (https://shell.cloud.google.com):
 cd ~/omnia-marina && git pull origin main && bash scripts/pulisci-prove.sh
 ```
 
+Oppure dal PC, in PowerShell (lo lancia in Cloud Shell; la prima volta chiede di accettare la chiave: rispondi `y`):
+
+```powershell
+gcloud cloud-shell ssh --authorize-session --command "git clone https://github.com/omniaturismoroseto/omnia-marina.git ~/omnia-marina 2>/dev/null; cd ~/omnia-marina && git pull origin main && bash scripts/pulisci-prove.sh"
+```
+
 Mostra porto per porto che cosa cancella e chiede di scrivere `ELIMINA`; prima di cancellare fa un backup del database.
 Via: contratti annullati e conclusi, scadenze e incassi di prova, prima nota e importazioni da Excel. Restano: bozze, contratti
 attivi con le loro rate e i loro incassi (anche nella prima nota), clienti, barche, posti, listini e impostazioni.
